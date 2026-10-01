@@ -145,7 +145,7 @@
       when: >-
         keycloak_deploy_native_quadlet_file.stat.exists | default(false)
         or keycloak_deploy_native_systemd_enabled.stdout | trim != 'not-found'
-        or keycloak_deploy_native_systemd_active.stdout | trim != 'unknown'
+        or keycloak_deploy_native_systemd_active.stdout | trim in ['active', 'failed']
 
     - name: Refuse unmanaged Keycloak pod; remove it first
       ansible.builtin.command:
@@ -158,74 +158,184 @@
         and keycloak_deploy_legacy_systemd_active.stdout | trim != 'active'
         and keycloak_deploy_native_systemd_active.stdout | trim != 'active')
 
-    - name: Stage the native Keycloak Quadlet before legacy shutdown
-      ansible.builtin.include_role:
-        name: lit.foundational.podman_systemd
-      vars:
-        podman_systemd_action: stopped
-        podman_systemd_unit_name: "{{ keycloak_deploy_systemd_unit_name }}"
-        podman_systemd_description: "{{ keycloak_deploy_systemd_description }}"
-        podman_systemd_manifest_path: "{{ keycloak_deploy_pod_manifest_path }}"
-        podman_systemd_scope: "{{ keycloak_deploy_systemd_scope }}"
-        podman_systemd_quadlet_dir: "{{ keycloak_deploy_quadlet_dir }}"
-        podman_systemd_enabled: false
-        podman_systemd_networks: "{{ keycloak_deploy_networks }}"
-      when: >-
-        keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
-        or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+    - name: Cut over to native Keycloak Quadlet with rollback
+      block:
+        - name: Stage the native Keycloak Quadlet before legacy shutdown
+          ansible.builtin.include_role:
+            name: lit.foundational.podman_systemd
+          vars:
+            podman_systemd_action: stopped
+            podman_systemd_unit_name: "{{ keycloak_deploy_systemd_unit_name }}"
+            podman_systemd_description: "{{ keycloak_deploy_systemd_description }}"
+            podman_systemd_manifest_path: "{{ keycloak_deploy_pod_manifest_path }}"
+            podman_systemd_scope: "{{ keycloak_deploy_systemd_scope }}"
+            podman_systemd_quadlet_dir: "{{ keycloak_deploy_quadlet_dir }}"
+            podman_systemd_enabled: false
+            podman_systemd_networks: "{{ keycloak_deploy_networks }}"
+          when: >-
+            keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
+            or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
 
-    - name: Stop and disable the exact legacy Keycloak unit before Quadlet takeover
-      ansible.builtin.systemd:
-        name: "podman-kube@{{ keycloak_deploy_legacy_systemd_name.stdout }}.service"
-        state: stopped
-        enabled: false
-      when: >-
-        keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
-        or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+        - name: Stop and disable the exact legacy Keycloak unit before Quadlet takeover
+          ansible.builtin.systemd:
+            name: "podman-kube@{{ keycloak_deploy_legacy_systemd_name.stdout }}.service"
+            state: stopped
+            enabled: false
+          when: >-
+            keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
+            or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
 
-    - name: Manage the native Keycloak Quadlet service
-      ansible.builtin.include_role:
-        name: lit.foundational.podman_systemd
-      vars:
-        podman_systemd_action: >-
-          {{
-            'restarted'
-            if (
-              keycloak_deploy_kubeplay_remove | default(false) | bool
-              or keycloak_deploy_kubeplay_run | default(false) | bool
-              or keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
-              or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
-            )
-            else 'present'
-          }}
-        podman_systemd_unit_name: "{{ keycloak_deploy_systemd_unit_name }}"
-        podman_systemd_description: "{{ keycloak_deploy_systemd_description }}"
-        podman_systemd_manifest_path: "{{ keycloak_deploy_pod_manifest_path }}"
-        podman_systemd_scope: "{{ keycloak_deploy_systemd_scope }}"
-        podman_systemd_quadlet_dir: "{{ keycloak_deploy_quadlet_dir }}"
-        podman_systemd_enabled: "{{ keycloak_deploy_systemd_enabled }}"
-        podman_systemd_networks: "{{ keycloak_deploy_networks }}"
+        - name: Manage the native Keycloak Quadlet service
+          ansible.builtin.include_role:
+            name: lit.foundational.podman_systemd
+          vars:
+            podman_systemd_action: >-
+              {{
+                'restarted'
+                if (
+                  keycloak_deploy_kubeplay_remove | default(false) | bool
+                  or keycloak_deploy_kubeplay_run | default(false) | bool
+                  or keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
+                  or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+                )
+                else 'present'
+              }}
+            podman_systemd_unit_name: "{{ keycloak_deploy_systemd_unit_name }}"
+            podman_systemd_description: "{{ keycloak_deploy_systemd_description }}"
+            podman_systemd_manifest_path: "{{ keycloak_deploy_pod_manifest_path }}"
+            podman_systemd_scope: "{{ keycloak_deploy_systemd_scope }}"
+            podman_systemd_quadlet_dir: "{{ keycloak_deploy_quadlet_dir }}"
+            podman_systemd_enabled: "{{ keycloak_deploy_systemd_enabled }}"
+            podman_systemd_networks: "{{ keycloak_deploy_networks }}"
 
-    - name: Wait until Keycloak health endpoint is reachable
-      ansible.builtin.uri:
-        url: "{{ keycloak_deploy_health_url_effective }}"
-        method: GET
-        validate_certs: "{{ keycloak_deploy_validate_certs }}"
-      register: keycloak_deploy_health
-      until: keycloak_deploy_health.status == 200
-      retries: 30
-      delay: 5
-      changed_when: false
-      failed_when: keycloak_deploy_health is failed or keycloak_deploy_health.status != 200
+        - name: Wait until Keycloak health endpoint is reachable
+          ansible.builtin.uri:
+            url: "{{ keycloak_deploy_health_url_effective }}"
+            method: GET
+            validate_certs: "{{ keycloak_deploy_validate_certs }}"
+          register: keycloak_deploy_health
+          until: keycloak_deploy_health.status == 200
+          retries: 30
+          delay: 5
+          changed_when: false
+          failed_when: keycloak_deploy_health is failed or keycloak_deploy_health.status != 200
 
-    - name: Wait until Keycloak liveness endpoint is reachable
-      ansible.builtin.uri:
-        url: "{{ keycloak_deploy_liveness_url_effective }}"
-        method: GET
-        validate_certs: "{{ keycloak_deploy_validate_certs }}"
-      register: keycloak_deploy_liveness
-      until: keycloak_deploy_liveness.status == 200
-      retries: 30
-      delay: 5
-      changed_when: false
-      failed_when: keycloak_deploy_liveness is failed or keycloak_deploy_liveness.status != 200
+        - name: Wait until Keycloak liveness endpoint is reachable
+          ansible.builtin.uri:
+            url: "{{ keycloak_deploy_liveness_url_effective }}"
+            method: GET
+            validate_certs: "{{ keycloak_deploy_validate_certs }}"
+          register: keycloak_deploy_liveness
+          until: keycloak_deploy_liveness.status == 200
+          retries: 30
+          delay: 5
+          changed_when: false
+          failed_when: keycloak_deploy_liveness is failed or keycloak_deploy_liveness.status != 200
+      rescue:
+        - name: Capture the original native Keycloak takeover failure
+          ansible.builtin.set_fact:
+            keycloak_deploy_takeover_failure_message: >-
+              {{ ansible_failed_result.msg | default('unknown takeover failure') }}
+            keycloak_deploy_cleanup_failure_message: ""
+            keycloak_deploy_native_quiescence_failure_message: ""
+            keycloak_deploy_legacy_restore_failure_message: ""
+            keycloak_deploy_native_quiescence_proven: false
+
+        - name: Attempt failed native Keycloak cleanup without blocking restoration
+          block:
+            - name: Remove the transaction-created native Keycloak Quadlet
+              ansible.builtin.include_role:
+                name: lit.foundational.podman_systemd
+              vars:
+                podman_systemd_action: absent
+                podman_systemd_unit_name: "{{ keycloak_deploy_systemd_unit_name }}"
+                podman_systemd_description: "{{ keycloak_deploy_systemd_description }}"
+                podman_systemd_manifest_path: "{{ keycloak_deploy_pod_manifest_path }}"
+                podman_systemd_scope: "{{ keycloak_deploy_systemd_scope }}"
+                podman_systemd_quadlet_dir: "{{ keycloak_deploy_quadlet_dir }}"
+                podman_systemd_enabled: false
+                podman_systemd_networks: "{{ keycloak_deploy_networks }}"
+              when: not (keycloak_deploy_native_quadlet_file.stat.exists | default(false))
+
+            - name: Restore pre-existing native Keycloak service state after failure
+              ansible.builtin.systemd:
+                name: "{{ keycloak_deploy_systemd_unit_name }}.service"
+                state: >-
+                  {{ 'started' if keycloak_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+                enabled: >-
+                  {{ keycloak_deploy_native_systemd_enabled.stdout | trim == 'enabled' }}
+                scope: "{{ keycloak_deploy_systemd_scope }}"
+              when: keycloak_deploy_native_systemd_enabled.stdout | trim in ['enabled', 'disabled']
+          rescue:
+            - name: Capture failed native Keycloak cleanup
+              ansible.builtin.set_fact:
+                keycloak_deploy_cleanup_failure_message: >-
+                  {{ ansible_failed_result.msg | default('unknown cleanup failure') }}
+
+        - name: Prove the failed native Keycloak controller is inactive
+          when: >-
+            keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
+            or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+          block:
+            - name: Inspect native Keycloak activity after failed cleanup
+              ansible.builtin.command:
+                argv: >-
+                  {{ ['systemctl']
+                     + (['--user'] if keycloak_deploy_systemd_scope == 'user' else [])
+                     + ['is-active', keycloak_deploy_systemd_unit_name ~ '.service'] }}
+              register: keycloak_deploy_native_activity_after_cleanup
+              changed_when: false
+              failed_when: false
+
+            - name: Require native Keycloak inactivity before legacy restoration
+              ansible.builtin.assert:
+                that:
+                  - keycloak_deploy_native_activity_after_cleanup.rc in [3, 4]
+                  - >-
+                    keycloak_deploy_native_activity_after_cleanup.stdout | trim
+                    in ['inactive', 'failed', 'unknown']
+                fail_msg: >-
+                  The failed native Keycloak controller is not proven inactive;
+                  refusing to start the legacy controller in parallel.
+                quiet: true
+
+            - name: Record proven native Keycloak inactivity
+              ansible.builtin.set_fact:
+                keycloak_deploy_native_quiescence_proven: true
+          rescue:
+            - name: Capture unproven native Keycloak inactivity
+              ansible.builtin.set_fact:
+                keycloak_deploy_native_quiescence_failure_message: >-
+                  {{ ansible_failed_result.msg | default('native controller inactivity is unproven') }}
+
+        - name: Attempt exact legacy Keycloak restoration after failed takeover
+          block:
+            - name: Restore the exact legacy Keycloak service state
+              ansible.builtin.systemd:
+                name: "podman-kube@{{ keycloak_deploy_legacy_systemd_name.stdout }}.service"
+                state: >-
+                  {{ 'started' if keycloak_deploy_legacy_systemd_active.stdout | trim == 'active' else 'stopped' }}
+                enabled: >-
+                  {{ keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled' }}
+              when:
+                - keycloak_deploy_native_quiescence_proven | bool
+                - >-
+                  keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
+                  or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+          rescue:
+            - name: Capture failed legacy Keycloak restoration
+              ansible.builtin.set_fact:
+                keycloak_deploy_legacy_restore_failure_message: >-
+                  {{ ansible_failed_result.msg | default('unknown legacy restoration failure') }}
+
+        - name: Report failed native Keycloak takeover after rollback
+          ansible.builtin.fail:
+            msg: >-
+              Native Keycloak Quadlet takeover failed:
+              {{ keycloak_deploy_takeover_failure_message }}.
+              Cleanup failure:
+              {{ keycloak_deploy_cleanup_failure_message | default('') | default('none', true) }}.
+              Native quiescence failure:
+              {{ keycloak_deploy_native_quiescence_failure_message | default('') | default('none', true) }}.
+              Legacy restoration failure:
+              {{ keycloak_deploy_legacy_restore_failure_message | default('') | default('none', true) }}.

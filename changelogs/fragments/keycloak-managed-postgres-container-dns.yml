@@ -8,6 +8,10 @@ security_fixes:
     Require exact native Quadlet ownership and reject unhandled legacy
     enablement states before Keycloak or PostgreSQL can accept an existing
     service or pod.
+  - >-
+    Make Keycloak and PostgreSQL legacy-to-Quadlet cutover transactional by
+    quiescing failed native controllers and restoring the exact prior service
+    state before reporting a deployment failure.
 breaking_changes:
   - >-
     Require an explicit PostgreSQL private endpoint and container port for

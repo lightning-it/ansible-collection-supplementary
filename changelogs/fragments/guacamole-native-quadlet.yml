@@ -9,3 +9,6 @@ security_fixes:
     Require exact native Quadlet ownership before accepting an existing
     Guacamole service or pod, and restore the verified legacy unit and state
     if native startup or readiness fails.
+  - >-
+    Validate the loaded legacy systemd fragment and restore the exact
+    pre-transaction Pod manifest before restarting the legacy controller.

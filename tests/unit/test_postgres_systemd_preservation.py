@@ -62,6 +62,12 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
         self.assertIn("Description=' ~ postgres_deploy_systemd_description", ownership_contract)
         self.assertIn("Yaml=' ~ postgres_deploy_pod_manifest_path", ownership_contract)
         self.assertIn("postgres_deploy_native_systemd_enabled", ownership_contract)
+        self.assertIn("['active', 'failed']", ownership["when"])
+        self.assertNotIn("!= 'unknown'", ownership["when"])
+        transaction = task_map["Cut over to native PostgreSQL Quadlet with rollback"]
+        rescue_source = "\n".join(str(task) for task in transaction["rescue"])
+        self.assertIn("Require native PostgreSQL inactivity before legacy restoration", rescue_source)
+        self.assertIn("Restore the exact legacy PostgreSQL service state", rescue_source)
 
 
 if __name__ == "__main__":

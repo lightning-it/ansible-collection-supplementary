@@ -30,6 +30,18 @@
   changed_when: false
   failed_when: false
 
+- name: Resolve the loaded legacy Guacamole unit fragment
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - --property=FragmentPath
+      - --value
+      - "{{ guacamole_deploy_legacy_systemd_unit_path | basename }}"
+  register: guacamole_deploy_legacy_fragment_path
+  changed_when: false
+  failed_when: false
+
 - name: Inspect the exact native Guacamole unit activity
   ansible.builtin.command:
     argv: >-
@@ -140,7 +152,7 @@
   when: >-
     guacamole_deploy_native_quadlet_file.stat.exists | default(false)
     or guacamole_deploy_native_systemd_enabled.stdout | trim != 'not-found'
-    or guacamole_deploy_native_systemd_active.stdout | trim != 'unknown'
+    or guacamole_deploy_native_systemd_active.stdout | trim in ['active', 'failed']
 
 - name: Refuse unmanaged Guacamole pod; remove it first
   ansible.builtin.command:
@@ -158,6 +170,27 @@
     path: "{{ guacamole_deploy_legacy_systemd_unit_path }}"
     follow: false
   register: guacamole_deploy_legacy_unit_stat
+
+- name: Refuse a legacy Guacamole unit loaded from an unexpected fragment
+  ansible.builtin.assert:
+    that:
+      - guacamole_deploy_legacy_fragment_path.rc == 0
+      - >-
+        guacamole_deploy_legacy_fragment_path.stdout | trim
+        in ['', guacamole_deploy_legacy_systemd_unit_path]
+      - >-
+        (
+          guacamole_deploy_legacy_systemd_active.stdout | trim == 'unknown'
+          and guacamole_deploy_legacy_systemd_enabled.stdout | trim == 'not-found'
+        )
+        or (
+          guacamole_deploy_legacy_fragment_path.stdout | trim
+          == guacamole_deploy_legacy_systemd_unit_path
+        )
+    fail_msg: >-
+      guacamole.service is loaded from an unverified fragment outside the
+      configured role-owned path; refusing to start a second controller.
+    quiet: true
 
 - name: Refuse an unsafe legacy Guacamole unit path before reading
   ansible.builtin.assert:
@@ -290,6 +323,7 @@
         guacamole_deploy_takeover_failure_message: >-
           {{ ansible_failed_result.msg | default('unknown takeover failure') }}
         guacamole_deploy_cleanup_failure_message: ""
+        guacamole_deploy_manifest_restore_failure_message: ""
         guacamole_deploy_native_quiescence_failure_message: ""
         guacamole_deploy_legacy_restore_failure_message: ""
         guacamole_deploy_native_quiescence_proven: false
@@ -324,6 +358,29 @@
           ansible.builtin.set_fact:
             guacamole_deploy_cleanup_failure_message: >-
               {{ ansible_failed_result.msg | default('unknown cleanup failure') }}
+
+    - name: Attempt exact Guacamole Pod manifest restoration
+      block:
+        - name: Restore the exact pre-transaction Guacamole Pod manifest
+          ansible.builtin.copy:
+            dest: "{{ guacamole_deploy_manifest_path }}"
+            content: "{{ guacamole_deploy_original_manifest_read.content | b64decode }}"
+            owner: "{{ guacamole_deploy_original_manifest_file.stat.uid }}"
+            group: "{{ guacamole_deploy_original_manifest_file.stat.gid }}"
+            mode: "{{ guacamole_deploy_original_manifest_file.stat.mode }}"
+          no_log: true
+          when: guacamole_deploy_original_manifest_file.stat.exists | default(false)
+
+        - name: Remove a transaction-created Guacamole Pod manifest
+          ansible.builtin.file:
+            path: "{{ guacamole_deploy_manifest_path }}"
+            state: absent
+          when: not (guacamole_deploy_original_manifest_file.stat.exists | default(false))
+      rescue:
+        - name: Capture failed Guacamole Pod manifest restoration
+          ansible.builtin.set_fact:
+            guacamole_deploy_manifest_restore_failure_message: >-
+              {{ ansible_failed_result.msg | default('unknown manifest restoration failure') }}
 
     - name: Prove the failed native Guacamole controller is inactive
       when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
@@ -397,6 +454,8 @@
           {{ guacamole_deploy_takeover_failure_message }}.
           Cleanup failure:
           {{ guacamole_deploy_cleanup_failure_message | default('') | default('none', true) }}.
+          Manifest restoration failure:
+          {{ guacamole_deploy_manifest_restore_failure_message | default('') | default('none', true) }}.
           Native quiescence failure:
           {{ guacamole_deploy_native_quiescence_failure_message | default('') | default('none', true) }}.
           Legacy restoration failure:

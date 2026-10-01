@@ -200,7 +200,9 @@ class KeycloakRoleContractTests(unittest.TestCase):
         systemd_tasks = yaml.safe_load(systemd_path.read_text(encoding="utf-8"))
         systemd_block = systemd_tasks[0]["block"]
         systemd_map = {task["name"]: task for task in systemd_block}
-        quadlet = next(task for task in systemd_block if task["name"] == "Manage the native Keycloak Quadlet service")
+        transaction = systemd_map["Cut over to native Keycloak Quadlet with rollback"]
+        transaction_map = {task["name"]: task for task in transaction["block"]}
+        quadlet = transaction_map["Manage the native Keycloak Quadlet service"]
         self.assertEqual(
             quadlet["ansible.builtin.include_role"]["name"],
             "lit.foundational.podman_systemd",
@@ -217,11 +219,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
             quadlet["vars"]["podman_systemd_networks"],
             "{{ keycloak_deploy_networks }}",
         )
-        stage_index = next(
-            index
-            for index, task in enumerate(systemd_block)
-            if task["name"] == "Stage the native Keycloak Quadlet before legacy shutdown"
-        )
+        stage = transaction_map["Stage the native Keycloak Quadlet before legacy shutdown"]
         validation_index = next(
             index
             for index, task in enumerate(systemd_block)
@@ -240,25 +238,26 @@ class KeycloakRoleContractTests(unittest.TestCase):
         self.assertIn("Description=' ~ keycloak_deploy_systemd_description", ownership_contract)
         self.assertIn("Yaml=' ~ keycloak_deploy_pod_manifest_path", ownership_contract)
         self.assertIn("keycloak_deploy_native_systemd_enabled", ownership_contract)
+        self.assertIn("['active', 'failed']", ownership["when"])
+        self.assertNotIn("!= 'unknown'", ownership["when"])
         lifecycle_assertions = systemd_block[validation_index]["ansible.builtin.assert"]["that"]
         lifecycle_contract = "\n".join(str(item) for item in lifecycle_assertions)
         for transient in ("activating", "reloading", "deactivating"):
             self.assertNotIn(transient, lifecycle_contract)
         for unsupported in ("static", "indirect", "transient", "linked"):
             self.assertNotIn(unsupported, lifecycle_contract)
-        legacy_stop = next(
-            task
-            for task in systemd_block
-            if task["name"] == "Stop and disable the exact legacy Keycloak unit before Quadlet takeover"
-        )
-        legacy_stop_index = systemd_block.index(legacy_stop)
-        self.assertLess(validation_index, stage_index)
+        legacy_stop = transaction_map["Stop and disable the exact legacy Keycloak unit before Quadlet takeover"]
+        transaction_index = systemd_block.index(transaction)
+        self.assertLess(validation_index, transaction_index)
         self.assertLess(validation_index, collision_index)
         self.assertLess(systemd_block.index(ownership), collision_index)
-        self.assertLess(collision_index, stage_index)
-        self.assertLess(stage_index, legacy_stop_index)
+        self.assertLess(collision_index, transaction_index)
+        self.assertLess(transaction["block"].index(stage), transaction["block"].index(legacy_stop))
         self.assertEqual(legacy_stop["ansible.builtin.systemd"]["state"], "stopped")
         self.assertIs(legacy_stop["ansible.builtin.systemd"]["enabled"], False)
+        rescue_source = "\n".join(str(task) for task in transaction["rescue"])
+        self.assertIn("Require native Keycloak inactivity before legacy restoration", rescue_source)
+        self.assertIn("Restore the exact legacy Keycloak service state", rescue_source)
 
         deploy_path = ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy.yml"
         deploy_tasks = yaml.safe_load(deploy_path.read_text(encoding="utf-8"))

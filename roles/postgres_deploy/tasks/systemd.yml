@@ -145,7 +145,7 @@
       when: >-
         postgres_deploy_native_quadlet_file.stat.exists | default(false)
         or postgres_deploy_native_systemd_enabled.stdout | trim != 'not-found'
-        or postgres_deploy_native_systemd_active.stdout | trim != 'unknown'
+        or postgres_deploy_native_systemd_active.stdout | trim in ['active', 'failed']
 
     - name: Refuse unmanaged PostgreSQL pod; remove it first
       ansible.builtin.command:
@@ -158,50 +158,160 @@
         and postgres_deploy_legacy_systemd_active.stdout | trim != 'active'
         and postgres_deploy_native_systemd_active.stdout | trim != 'active')
 
-    - name: Stage the native PostgreSQL Quadlet before legacy shutdown
-      ansible.builtin.include_role:
-        name: lit.foundational.podman_systemd
-      vars:
-        podman_systemd_action: stopped
-        podman_systemd_unit_name: "{{ postgres_deploy_systemd_unit_name }}"
-        podman_systemd_description: "{{ postgres_deploy_systemd_description }}"
-        podman_systemd_manifest_path: "{{ postgres_deploy_pod_manifest_path }}"
-        podman_systemd_scope: "{{ postgres_deploy_systemd_scope }}"
-        podman_systemd_quadlet_dir: "{{ postgres_deploy_quadlet_dir }}"
-        podman_systemd_enabled: false
-        podman_systemd_networks: "{{ postgres_deploy_networks }}"
-      when: >-
-        postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
-        or postgres_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+    - name: Cut over to native PostgreSQL Quadlet with rollback
+      block:
+        - name: Stage the native PostgreSQL Quadlet before legacy shutdown
+          ansible.builtin.include_role:
+            name: lit.foundational.podman_systemd
+          vars:
+            podman_systemd_action: stopped
+            podman_systemd_unit_name: "{{ postgres_deploy_systemd_unit_name }}"
+            podman_systemd_description: "{{ postgres_deploy_systemd_description }}"
+            podman_systemd_manifest_path: "{{ postgres_deploy_pod_manifest_path }}"
+            podman_systemd_scope: "{{ postgres_deploy_systemd_scope }}"
+            podman_systemd_quadlet_dir: "{{ postgres_deploy_quadlet_dir }}"
+            podman_systemd_enabled: false
+            podman_systemd_networks: "{{ postgres_deploy_networks }}"
+          when: >-
+            postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
+            or postgres_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
 
-    - name: Stop and disable the exact legacy PostgreSQL unit before Quadlet takeover
-      ansible.builtin.systemd:
-        name: "podman-kube@{{ postgres_deploy_legacy_systemd_name.stdout }}.service"
-        state: stopped
-        enabled: false
-      when: >-
-        postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
-        or postgres_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+        - name: Stop and disable the exact legacy PostgreSQL unit before Quadlet takeover
+          ansible.builtin.systemd:
+            name: "podman-kube@{{ postgres_deploy_legacy_systemd_name.stdout }}.service"
+            state: stopped
+            enabled: false
+          when: >-
+            postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
+            or postgres_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
 
-    - name: Manage the native PostgreSQL Quadlet service
-      ansible.builtin.include_role:
-        name: lit.foundational.podman_systemd
-      vars:
-        podman_systemd_action: >-
-          {{
-            'restarted'
-            if (
-              postgres_deploy_kubeplay_run | default(false) | bool
-              or postgres_deploy_kubeplay_remove | default(false) | bool
-              or postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
-              or postgres_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
-            )
-            else 'present'
-          }}
-        podman_systemd_unit_name: "{{ postgres_deploy_systemd_unit_name }}"
-        podman_systemd_description: "{{ postgres_deploy_systemd_description }}"
-        podman_systemd_manifest_path: "{{ postgres_deploy_pod_manifest_path }}"
-        podman_systemd_scope: "{{ postgres_deploy_systemd_scope }}"
-        podman_systemd_quadlet_dir: "{{ postgres_deploy_quadlet_dir }}"
-        podman_systemd_enabled: "{{ postgres_deploy_systemd_enabled }}"
-        podman_systemd_networks: "{{ postgres_deploy_networks }}"
+        - name: Manage the native PostgreSQL Quadlet service
+          ansible.builtin.include_role:
+            name: lit.foundational.podman_systemd
+          vars:
+            podman_systemd_action: >-
+              {{
+                'restarted'
+                if (
+                  postgres_deploy_kubeplay_run | default(false) | bool
+                  or postgres_deploy_kubeplay_remove | default(false) | bool
+                  or postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
+                  or postgres_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+                )
+                else 'present'
+              }}
+            podman_systemd_unit_name: "{{ postgres_deploy_systemd_unit_name }}"
+            podman_systemd_description: "{{ postgres_deploy_systemd_description }}"
+            podman_systemd_manifest_path: "{{ postgres_deploy_pod_manifest_path }}"
+            podman_systemd_scope: "{{ postgres_deploy_systemd_scope }}"
+            podman_systemd_quadlet_dir: "{{ postgres_deploy_quadlet_dir }}"
+            podman_systemd_enabled: "{{ postgres_deploy_systemd_enabled }}"
+            podman_systemd_networks: "{{ postgres_deploy_networks }}"
+      rescue:
+        - name: Capture the original native PostgreSQL takeover failure
+          ansible.builtin.set_fact:
+            postgres_deploy_takeover_failure_message: >-
+              {{ ansible_failed_result.msg | default('unknown takeover failure') }}
+            postgres_deploy_cleanup_failure_message: ""
+            postgres_deploy_native_quiescence_failure_message: ""
+            postgres_deploy_legacy_restore_failure_message: ""
+            postgres_deploy_native_quiescence_proven: false
+
+        - name: Attempt failed native PostgreSQL cleanup without blocking restoration
+          block:
+            - name: Remove the transaction-created native PostgreSQL Quadlet
+              ansible.builtin.include_role:
+                name: lit.foundational.podman_systemd
+              vars:
+                podman_systemd_action: absent
+                podman_systemd_unit_name: "{{ postgres_deploy_systemd_unit_name }}"
+                podman_systemd_description: "{{ postgres_deploy_systemd_description }}"
+                podman_systemd_manifest_path: "{{ postgres_deploy_pod_manifest_path }}"
+                podman_systemd_scope: "{{ postgres_deploy_systemd_scope }}"
+                podman_systemd_quadlet_dir: "{{ postgres_deploy_quadlet_dir }}"
+                podman_systemd_enabled: false
+                podman_systemd_networks: "{{ postgres_deploy_networks }}"
+              when: not (postgres_deploy_native_quadlet_file.stat.exists | default(false))
+
+            - name: Restore pre-existing native PostgreSQL service state after failure
+              ansible.builtin.systemd:
+                name: "{{ postgres_deploy_systemd_unit_name }}.service"
+                state: >-
+                  {{ 'started' if postgres_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+                enabled: >-
+                  {{ postgres_deploy_native_systemd_enabled.stdout | trim == 'enabled' }}
+                scope: "{{ postgres_deploy_systemd_scope }}"
+              when: postgres_deploy_native_systemd_enabled.stdout | trim in ['enabled', 'disabled']
+          rescue:
+            - name: Capture failed native PostgreSQL cleanup
+              ansible.builtin.set_fact:
+                postgres_deploy_cleanup_failure_message: >-
+                  {{ ansible_failed_result.msg | default('unknown cleanup failure') }}
+
+        - name: Prove the failed native PostgreSQL controller is inactive
+          when: >-
+            postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
+            or postgres_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+          block:
+            - name: Inspect native PostgreSQL activity after failed cleanup
+              ansible.builtin.command:
+                argv: >-
+                  {{ ['systemctl']
+                     + (['--user'] if postgres_deploy_systemd_scope == 'user' else [])
+                     + ['is-active', postgres_deploy_systemd_unit_name ~ '.service'] }}
+              register: postgres_deploy_native_activity_after_cleanup
+              changed_when: false
+              failed_when: false
+
+            - name: Require native PostgreSQL inactivity before legacy restoration
+              ansible.builtin.assert:
+                that:
+                  - postgres_deploy_native_activity_after_cleanup.rc in [3, 4]
+                  - >-
+                    postgres_deploy_native_activity_after_cleanup.stdout | trim
+                    in ['inactive', 'failed', 'unknown']
+                fail_msg: >-
+                  The failed native PostgreSQL controller is not proven inactive;
+                  refusing to start the legacy controller in parallel.
+                quiet: true
+
+            - name: Record proven native PostgreSQL inactivity
+              ansible.builtin.set_fact:
+                postgres_deploy_native_quiescence_proven: true
+          rescue:
+            - name: Capture unproven native PostgreSQL inactivity
+              ansible.builtin.set_fact:
+                postgres_deploy_native_quiescence_failure_message: >-
+                  {{ ansible_failed_result.msg | default('native controller inactivity is unproven') }}
+
+        - name: Attempt exact legacy PostgreSQL restoration after failed takeover
+          block:
+            - name: Restore the exact legacy PostgreSQL service state
+              ansible.builtin.systemd:
+                name: "podman-kube@{{ postgres_deploy_legacy_systemd_name.stdout }}.service"
+                state: >-
+                  {{ 'started' if postgres_deploy_legacy_systemd_active.stdout | trim == 'active' else 'stopped' }}
+                enabled: >-
+                  {{ postgres_deploy_legacy_systemd_enabled.stdout | trim == 'enabled' }}
+              when:
+                - postgres_deploy_native_quiescence_proven | bool
+                - >-
+                  postgres_deploy_legacy_systemd_active.stdout | trim == 'active'
+                  or postgres_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+          rescue:
+            - name: Capture failed legacy PostgreSQL restoration
+              ansible.builtin.set_fact:
+                postgres_deploy_legacy_restore_failure_message: >-
+                  {{ ansible_failed_result.msg | default('unknown legacy restoration failure') }}
+
+        - name: Report failed native PostgreSQL takeover after rollback
+          ansible.builtin.fail:
+            msg: >-
+              Native PostgreSQL Quadlet takeover failed:
+              {{ postgres_deploy_takeover_failure_message }}.
+              Cleanup failure:
+              {{ postgres_deploy_cleanup_failure_message | default('') | default('none', true) }}.
+              Native quiescence failure:
+              {{ postgres_deploy_native_quiescence_failure_message | default('') | default('none', true) }}.
+              Legacy restoration failure:
+              {{ postgres_deploy_legacy_restore_failure_message | default('') | default('none', true) }}.

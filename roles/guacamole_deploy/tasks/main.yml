@@ -22,6 +22,33 @@
     - {path: "{{ guacamole_deploy_base_dir }}/postgres-init", owner: root, group: root, mode: "0755"}
     - {path: "{{ guacamole_deploy_manifest_path | dirname }}", owner: root, group: root, mode: "0755"}
 
+- name: Inspect the pre-transaction Guacamole Pod manifest
+  ansible.builtin.stat:
+    path: "{{ guacamole_deploy_manifest_path }}"
+    follow: false
+  register: guacamole_deploy_original_manifest_file
+
+- name: Refuse an unsafe pre-transaction Guacamole Pod manifest
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (guacamole_deploy_original_manifest_file.stat.exists | default(false))
+        or (
+          guacamole_deploy_original_manifest_file.stat.isreg | default(false)
+          and not (guacamole_deploy_original_manifest_file.stat.islnk | default(false))
+        )
+    fail_msg: >-
+      The Guacamole Pod manifest must be absent or a regular non-symlink file
+      before a transactional Quadlet update.
+    quiet: true
+
+- name: Capture the exact pre-transaction Guacamole Pod manifest
+  ansible.builtin.slurp:
+    path: "{{ guacamole_deploy_manifest_path }}"
+  register: guacamole_deploy_original_manifest_read
+  no_log: true
+  when: guacamole_deploy_original_manifest_file.stat.exists | default(false)
+
 - name: Render the private Guacamole pod manifest
   ansible.builtin.template:
     src: guacamole-pod.yml.j2
