@@ -27,7 +27,7 @@ Key variables:
 - `nginx_deploy_systemd_unit_name`
 - `nginx_deploy_systemd_scope` (currently `system` only; `user` is rejected)
 - `nginx_deploy_quadlet_dir`
-- `nginx_deploy_systemd_enabled`
+- `nginx_deploy_systemd_enabled` (must remain `true` for generated Quadlet services)
 - `nginx_deploy_selinux_relabel`
 - `nginx_deploy_skip_runtime`
 
@@ -39,6 +39,8 @@ an administrator-managed `nginx.service`. Enabling systemd management without
 a detected systemd service manager fails during prechecks.
 Changes that would restart an already existing native Quadlet fail closed until
 transactional manifest backup and restore support is available.
+Managed-systemd mode rejects `nginx_deploy_systemd_enabled: false` because the
+generated Quadlet unit cannot converge to a durable disabled state.
 
 ## Dependencies
 

@@ -296,7 +296,9 @@
             nginx_deploy_cleanup_failure_message: ""
             nginx_deploy_manifest_restore_failure_message: ""
             nginx_deploy_native_restore_failure_message: ""
+            nginx_deploy_native_quiescence_failure_message: ""
             nginx_deploy_legacy_restore_failure_message: ""
+            nginx_deploy_native_quiescence_proven: false
 
         - name: Attempt failed native Nginx cleanup without blocking restoration
           block:
@@ -366,6 +368,43 @@
                 nginx_deploy_native_restore_failure_message: >-
                   {{ ansible_failed_result.msg | default('unknown native restoration failure') }}
 
+        - name: Prove the failed native controller is inactive before legacy restoration
+          when: >-
+            nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
+            or nginx_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+          block:
+            - name: Inspect native Nginx activity after failed cleanup
+              ansible.builtin.command:
+                argv:
+                  - systemctl
+                  - is-active
+                  - "{{ nginx_deploy_systemd_unit_name }}.service"
+              register: nginx_deploy_native_activity_after_cleanup
+              changed_when: false
+              failed_when: false
+              check_mode: false
+
+            - name: Require native Nginx inactivity before legacy restoration
+              ansible.builtin.assert:
+                that:
+                  - nginx_deploy_native_activity_after_cleanup.rc in [3, 4]
+                  - >-
+                    nginx_deploy_native_activity_after_cleanup.stdout | trim
+                    in ['inactive', 'failed', 'unknown']
+                fail_msg: >-
+                  The failed native Nginx controller is not proven inactive;
+                  refusing to start the legacy controller in parallel.
+                quiet: true
+
+            - name: Record proven native Nginx inactivity
+              ansible.builtin.set_fact:
+                nginx_deploy_native_quiescence_proven: true
+          rescue:
+            - name: Capture unproven native Nginx inactivity
+              ansible.builtin.set_fact:
+                nginx_deploy_native_quiescence_failure_message: >-
+                  {{ ansible_failed_result.msg | default('native controller inactivity is unproven') }}
+
         - name: Attempt exact legacy Nginx restoration after failed takeover
           block:
             - name: Restore the exact legacy Nginx unit after failed takeover
@@ -375,9 +414,11 @@
                   {{ 'started' if nginx_deploy_legacy_systemd_active.stdout | trim == 'active' else 'stopped' }}
                 enabled: >-
                   {{ nginx_deploy_legacy_systemd_enabled.stdout | trim == 'enabled' }}
-              when: >-
-                nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
-                or nginx_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+              when:
+                - nginx_deploy_native_quiescence_proven | bool
+                - >-
+                  nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
+                  or nginx_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
           rescue:
             - name: Capture failed legacy Nginx restoration
               ansible.builtin.set_fact:
@@ -395,5 +436,7 @@
               {{ nginx_deploy_manifest_restore_failure_message | default('') | default('none', true) }}.
               Native restoration failure:
               {{ nginx_deploy_native_restore_failure_message | default('') | default('none', true) }}.
+              Native quiescence failure:
+              {{ nginx_deploy_native_quiescence_failure_message | default('') | default('none', true) }}.
               Legacy restoration failure:
               {{ nginx_deploy_legacy_restore_failure_message | default('') | default('none', true) }}.

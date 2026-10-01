@@ -37,7 +37,10 @@
         or nginx_deploy_quadlet_dir | default('', true) | trim | length > 0
       - >-
         not (nginx_deploy_manage_systemd | bool)
-        or nginx_deploy_systemd_enabled is boolean
+        or (
+          nginx_deploy_systemd_enabled is boolean
+          and nginx_deploy_systemd_enabled | bool
+        )
       - nginx_deploy_skip_runtime is boolean
       - nginx_deploy_skip_config is boolean
       - nginx_deploy_skip_deploy is boolean

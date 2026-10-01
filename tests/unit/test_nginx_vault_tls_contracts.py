@@ -619,11 +619,27 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             native_restore_guard["rescue"][0]["name"],
             "Capture failed pre-existing native Nginx restoration",
         )
-        legacy_restore_guard = rescue["Attempt exact legacy Nginx restoration after failed takeover"]
+        quiescence_guard = rescue["Prove the failed native controller is inactive before legacy restoration"]
+        quiescence_tasks = {task["name"]: task for task in quiescence_guard["block"]}
+        activity_probe = quiescence_tasks["Inspect native Nginx activity after failed cleanup"]
+        self.assertFalse(activity_probe["check_mode"])
+        self.assertFalse(activity_probe["failed_when"])
+        quiescence_assertions = quiescence_tasks["Require native Nginx inactivity before legacy restoration"][
+            "ansible.builtin.assert"
+        ]["that"]
+        self.assertTrue(any("rc in [3, 4]" in item for item in quiescence_assertions))
+        self.assertTrue(any("['inactive', 'failed', 'unknown']" in item for item in quiescence_assertions))
         self.assertEqual(
-            legacy_restore_guard["block"][0]["name"],
+            quiescence_guard["rescue"][0]["name"],
+            "Capture unproven native Nginx inactivity",
+        )
+        legacy_restore_guard = rescue["Attempt exact legacy Nginx restoration after failed takeover"]
+        legacy_restore = legacy_restore_guard["block"][0]
+        self.assertEqual(
+            legacy_restore["name"],
             "Restore the exact legacy Nginx unit after failed takeover",
         )
+        self.assertIn("nginx_deploy_native_quiescence_proven | bool", legacy_restore["when"])
         self.assertEqual(
             legacy_restore_guard["rescue"][0]["name"],
             "Capture failed legacy Nginx restoration",
@@ -722,6 +738,23 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         )[0]["ansible.builtin.assert"]["that"]
         self.assertEqual(sum("not (nginx_deploy_manage_systemd | bool)" in item for item in deploy_asserts), 5)
         self.assertTrue(any("nginx_deploy_systemd_scope == 'system'" in item for item in deploy_asserts))
+        enabled_assertion = next(item for item in deploy_asserts if "nginx_deploy_systemd_enabled is boolean" in item)
+        for manage_systemd, enabled, valid in (
+            (False, False, True),
+            (True, True, True),
+            (True, False, False),
+        ):
+            with self.subTest(manage_systemd=manage_systemd, enabled=enabled):
+                self.assertEqual(
+                    self._evaluate(
+                        enabled_assertion,
+                        {
+                            "nginx_deploy_manage_systemd": manage_systemd,
+                            "nginx_deploy_systemd_enabled": enabled,
+                        },
+                    ),
+                    valid,
+                )
         description_assertion = next(
             item for item in deploy_asserts if "nginx_deploy_systemd_description is string" in item
         )
