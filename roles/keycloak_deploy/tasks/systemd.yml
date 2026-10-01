@@ -63,7 +63,7 @@
 
     - name: Read the desired native Keycloak Quadlet file
       ansible.builtin.slurp:
-        path: "{{ keycloak_deploy_quadlet_dir }}/{{ keycloak_deploy_systemd_unit_name }}.kube"
+        src: "{{ keycloak_deploy_quadlet_dir }}/{{ keycloak_deploy_systemd_unit_name }}.kube"
       register: keycloak_deploy_native_quadlet_read
       when:
         - keycloak_deploy_native_quadlet_file.stat.exists | default(false)
@@ -104,6 +104,7 @@
           - >-
             keycloak_deploy_legacy_systemd_active.stdout | trim
             in ['active', 'inactive', 'failed', 'unknown']
+          - keycloak_deploy_legacy_systemd_active.stdout | trim != 'failed'
           - keycloak_deploy_legacy_systemd_enabled.rc in [0, 1, 3, 4]
           - >-
             keycloak_deploy_legacy_systemd_enabled.stdout | trim
@@ -112,6 +113,7 @@
           - >-
             keycloak_deploy_native_systemd_active.stdout | trim
             in ['active', 'inactive', 'failed', 'unknown']
+          - keycloak_deploy_native_systemd_active.stdout | trim != 'failed'
           - keycloak_deploy_native_systemd_enabled.rc in [0, 1, 3, 4]
           - >-
             keycloak_deploy_native_systemd_enabled.stdout | trim

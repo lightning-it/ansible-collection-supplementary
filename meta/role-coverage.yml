@@ -2901,7 +2901,9 @@ scenarios:
     roles:
       - "keycloak_cac"
       - "keycloak_deploy"
-    exercised_dependencies: []
+    exercised_dependencies:
+      - "nginx_config"
+      - "nginx_deploy"
     junit: true
     allure: true
     evidence: true

@@ -695,7 +695,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Supported targets: ubuntu-24.04; candidate targets: rhel-9, rhel-10.
 - Profiles: Tiny `supported`, Heavy `supported`, Application Acceptance `supported`.
 - Acceptance surface: `apply_query_and_idempotently_reconcile_api_objects`.
-- Role dependencies: keycloak_deploy, community.general; exercised scenario dependencies: postgres_backup_restore, samba.
+- Role dependencies: keycloak_deploy, community.general; exercised scenario dependencies: nginx_config, nginx_deploy, postgres_backup_restore, samba.
 - External dependencies/blockers: —.
 - Required-secret policy: Use ephemeral test credentials and protected runtime secret providers; never commit secret values.
 - Local execution: `molecule test -s keycloak-application-acceptance`, `molecule test -s keycloak-heavy`, `molecule test -s keycloak-tiny`; CI matrix execution: mandatory for supported, real production scenarios on registry-supported targets.
@@ -727,7 +727,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Supported targets: ubuntu-24.04; candidate targets: rhel-9, rhel-10.
 - Profiles: Tiny `supported`, Heavy `supported`, Application Acceptance `supported`.
 - Acceptance surface: `browser_and_authenticated_oidc_api`.
-- Role dependencies: postgres_deploy, lit.foundational.kubeplay, lit.foundational.podman_systemd; exercised scenario dependencies: postgres_backup_restore, samba.
+- Role dependencies: postgres_deploy, lit.foundational.kubeplay, lit.foundational.podman_systemd; exercised scenario dependencies: nginx_config, nginx_deploy, postgres_backup_restore, samba.
 - External dependencies/blockers: —.
 - Required-secret policy: Use ephemeral test credentials and protected runtime secret providers; never commit secret values.
 - Local execution: `molecule test -s keycloak-application-acceptance`, `molecule test -s keycloak-heavy`, `molecule test -s keycloak-tiny`; CI matrix execution: mandatory for supported, real production scenarios on registry-supported targets.
@@ -1776,7 +1776,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | incus-esxi-image-basic | Tiny | experimental | partial | incus_esxi_image | — | not-applicable | — | Scenario exercises controller-side role behavior without deploying an independently versioned application. | False | False | False |
 | keycloak-application-acceptance | Application Acceptance | supported | real | keycloak_cac, keycloak_deploy | postgres_backup_restore, samba | runtime-container | — | Scenario deploys and verifies independently versioned application containers; immutable runtime digests are mandatory. | True | True | True |
 | keycloak-heavy | Heavy | supported | real | keycloak_cac, keycloak_deploy | postgres_backup_restore, samba | runtime-container | — | Scenario deploys and verifies independently versioned application containers; immutable runtime digests are mandatory. | True | True | True |
-| keycloak-tiny | Tiny | supported | real | keycloak_cac, keycloak_deploy | — | runtime-container | — | Scenario deploys and verifies independently versioned application containers; immutable runtime digests are mandatory. | True | True | True |
+| keycloak-tiny | Tiny | supported | real | keycloak_cac, keycloak_deploy | nginx_config, nginx_deploy | runtime-container | — | Scenario deploys and verifies independently versioned application containers; immutable runtime digests are mandatory. | True | True | True |
 | manage-esxi-basic | Tiny | experimental | stub | manage_esxi | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | minio-backup-restore-basic | Tiny | experimental | stub | minio_backup_restore | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | minio-bootstrap-basic | Tiny | experimental | stub | minio_bootstrap | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |

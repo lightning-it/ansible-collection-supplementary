@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -231,6 +235,241 @@ class KeycloakRoleContractTests(unittest.TestCase):
         source = pod_tasks_path.read_text(encoding="utf-8")
         self.assertNotIn("Ignore kubeplay remove failure", source)
         self.assertNotIn("Ignore kubeplay run failure", source)
+
+    def test_failed_keycloak_readiness_executes_exact_rollback(self) -> None:
+        executable = shutil.which("ansible-playbook")
+        self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
+        role = ROOT / "roles" / "keycloak_deploy"
+
+        with tempfile.TemporaryDirectory(prefix="keycloak-rollback-") as temporary:
+            root = Path(temporary)
+            collection = root / "collections/ansible_collections/lit/supplementary"
+            fixture_role = collection / "roles/keycloak_deploy"
+            fixture_role.parent.mkdir(parents=True)
+            shutil.copytree(role, fixture_role)
+            fixture_foundational_tasks = (
+                root / "collections/ansible_collections/lit/foundational/roles/podman_systemd/tasks"
+            )
+            fixture_foundational_tasks.mkdir(parents=True)
+            (fixture_foundational_tasks / "main.yml").write_text(
+                """---
+- name: Ensure fixture Quadlet directory exists
+  ansible.builtin.file:
+    path: "{{ podman_systemd_quadlet_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Materialize fixture Quadlet
+  ansible.builtin.copy:
+    dest: "{{ podman_systemd_quadlet_dir }}/{{ podman_systemd_unit_name }}.kube"
+    content: "[Kube]\nYaml={{ podman_systemd_manifest_path }}\n"
+    mode: '0644'
+  when: podman_systemd_action != 'absent'
+
+- name: Apply fixture service action
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - >-
+        {{
+          'restart'
+          if podman_systemd_action == 'restarted'
+          else ('stop' if podman_systemd_action == 'stopped' else 'start')
+        }}
+      - "{{ podman_systemd_unit_name }}.service"
+  changed_when: true
+  when: podman_systemd_action != 'absent'
+
+- name: Apply fixture enabled state
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - "{{ 'enable' if podman_systemd_enabled | bool else 'disable' }}"
+      - "{{ podman_systemd_unit_name }}.service"
+  changed_when: true
+  when: podman_systemd_action != 'absent'
+
+- name: Stop fixture service before removal
+  ansible.builtin.command:
+    argv: [systemctl, stop, "{{ podman_systemd_unit_name }}.service"]
+  changed_when: true
+  when: podman_systemd_action == 'absent'
+
+- name: Remove fixture Quadlet
+  ansible.builtin.file:
+    path: "{{ podman_systemd_quadlet_dir }}/{{ podman_systemd_unit_name }}.kube"
+    state: absent
+  when: podman_systemd_action == 'absent'
+""",
+                encoding="utf-8",
+            )
+            fixture_systemd = fixture_role / "tasks/systemd.yml"
+            production_systemd = fixture_systemd.read_text(encoding="utf-8")
+            privileged_render = """            owner: root
+            group: root
+            mode: '0600'
+"""
+            self.assertEqual(production_systemd.count(privileged_render), 1)
+            fixture_systemd.write_text(
+                production_systemd.replace(
+                    privileged_render,
+                    f"""            owner: {os.geteuid()}
+            group: {os.getegid()}
+            mode: '0600'
+""",
+                    1,
+                ).replace(
+                    "          retries: 30\n          delay: 5",
+                    "          retries: 1\n          delay: 0",
+                    2,
+                ),
+                encoding="utf-8",
+            )
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            state = root / "systemd-state"
+            state.mkdir()
+            legacy_state = "podman-kube_etc-podman-pods-keycloak_yml_service"
+            native_state = "keycloak-pod_service"
+            (state / f"{legacy_state}.active").write_text("active", encoding="utf-8")
+            (state / f"{legacy_state}.enabled").write_text("enabled", encoding="utf-8")
+            (state / f"{native_state}.active").write_text("inactive", encoding="utf-8")
+            log = root / "systemctl.log"
+            manifest = root / "keycloak.yml"
+            original = b"original-keycloak-manifest\nwith-exact-bytes\n"
+            manifest.write_bytes(original)
+            manifest.chmod(0o640)
+            quadlet_dir = root / "quadlets"
+            quadlet_dir.mkdir()
+
+            systemd_escape = fake_bin / "systemd-escape"
+            systemd_escape.write_text("#!/bin/sh\nprintf '%s\\n' 'etc-podman-pods-keycloak.yml'\n", encoding="utf-8")
+            systemd_escape.chmod(0o755)
+            systemctl = fake_bin / "systemctl"
+            systemctl.write_text(
+                """#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$FAKE_SYSTEMCTL_LOG"
+command_name="${1:-}"
+case "$command_name" in
+  --user) shift; command_name="${1:-}" ;;
+esac
+shift || true
+unit="${1:-}"
+safe_unit=$(printf '%s' "$unit" | tr '/@.' '___')
+active_file="$FAKE_SYSTEMD_STATE/$safe_unit.active"
+enabled_file="$FAKE_SYSTEMD_STATE/$safe_unit.enabled"
+case "$unit" in
+  podman-kube@*) default_active=active; default_enabled=enabled ;;
+  *) default_active=inactive; default_enabled=not-found ;;
+esac
+active=$(cat "$active_file" 2>/dev/null || printf '%s' "$default_active")
+enabled=$(cat "$enabled_file" 2>/dev/null || printf '%s' "$default_enabled")
+case "$command_name" in
+  show)
+    printf 'LoadState=loaded\nActiveState=%s\nSubState=%s\nUnitFileState=%s\n' \
+      "$active" "$active" "$enabled"
+    ;;
+  is-active)
+    printf '%s\n' "$active"
+    if [ "$active" = active ]; then exit 0; fi
+    exit 3
+    ;;
+  is-enabled)
+    printf '%s\n' "$enabled"
+    test "$enabled" = enabled
+    ;;
+  enable) printf enabled > "$enabled_file" ;;
+  disable) printf disabled > "$enabled_file" ;;
+  start|restart) printf active > "$active_file" ;;
+  stop) printf inactive > "$active_file" ;;
+  *) ;;
+esac
+""",
+                encoding="utf-8",
+            )
+            systemctl.chmod(0o755)
+            podman = fake_bin / "podman"
+            podman.write_text(
+                """#!/bin/sh
+set -eu
+if [ "${1:-}" = pod ] && [ "${2:-}" = exists ]; then
+  exit 1
+fi
+exit 0
+""",
+                encoding="utf-8",
+            )
+            podman.chmod(0o755)
+
+            playbook = root / "rollback.yml"
+            playbook.write_text(
+                yaml.safe_dump(
+                    [
+                        {
+                            "hosts": "localhost",
+                            "gather_facts": False,
+                            "vars": {
+                                "ansible_service_mgr": "systemd",
+                                "keycloak_deploy_pod_manifest_path": str(manifest),
+                                "keycloak_deploy_quadlet_dir": str(quadlet_dir),
+                                "keycloak_deploy_host_data_dir": str(root / "data"),
+                                "keycloak_deploy_db_password_effective": "OFFLINE_DB_TEST_ONLY",
+                                "keycloak_deploy_admin_password_effective": "OFFLINE_ADMIN_TEST_ONLY",
+                                "keycloak_deploy_health_url_effective": "http://127.0.0.1:9/health/ready",
+                                "keycloak_deploy_liveness_url_effective": "http://127.0.0.1:9/health/live",
+                            },
+                            "tasks": [
+                                {
+                                    "name": "Execute the real Keycloak systemd transaction",
+                                    "ansible.builtin.include_role": {
+                                        "name": "lit.supplementary.keycloak_deploy",
+                                        "tasks_from": "systemd",
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            config = root / "ansible.cfg"
+            config.write_text("[defaults]\nstdout_callback=default\n", encoding="utf-8")
+            environment = {
+                **os.environ,
+                "ANSIBLE_CONFIG": str(config),
+                "ANSIBLE_COLLECTIONS_PATH": f"{root / 'collections'}:/usr/share/ansible/collections",
+                "ANSIBLE_LOCAL_TEMP": str(root / "ansible-tmp"),
+                "ANSIBLE_NOCOLOR": "1",
+                "FAKE_SYSTEMCTL_LOG": str(log),
+                "FAKE_SYSTEMD_STATE": str(state),
+                "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            }
+            result = subprocess.run(  # noqa: S603
+                [executable, "-i", "localhost,", "-c", "local", str(playbook)],
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+            )
+
+            output = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, output)
+            self.assertIn("Native Keycloak Quadlet takeover failed", output)
+            self.assertNotIn("OFFLINE_DB_TEST_ONLY", output)
+            self.assertNotIn("OFFLINE_ADMIN_TEST_ONLY", output)
+            self.assertEqual(manifest.read_bytes(), original)
+            self.assertEqual(manifest.stat().st_mode & 0o777, 0o640)
+            self.assertEqual((manifest.stat().st_uid, manifest.stat().st_gid), (os.geteuid(), os.getegid()))
+            self.assertFalse((quadlet_dir / "keycloak-pod.kube").exists())
+            service_log = log.read_text(encoding="utf-8")
+            self.assertEqual((state / f"{legacy_state}.active").read_text(encoding="utf-8"), "active")
+            self.assertEqual((state / f"{legacy_state}.enabled").read_text(encoding="utf-8"), "enabled")
+            self.assertEqual((state / f"{native_state}.active").read_text(encoding="utf-8"), "inactive")
+            self.assertIn("stop keycloak-pod.service", service_log)
+            self.assertIn("start podman-kube@etc-podman-pods-keycloak.yml.service", service_log)
 
     def test_edge_proxy_contract_restricts_forwarded_identity(self) -> None:
         defaults = self._role_defaults("keycloak_deploy")
