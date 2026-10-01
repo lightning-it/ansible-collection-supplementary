@@ -130,6 +130,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
                 {"guacamole_deploy_manifest_path": "/srv/guacamole.yml\rNetwork=host"},
                 {"guacamole_deploy_systemd_enabled": False},
                 {"guacamole_deploy_systemd_unit_name": "guacamole"},
+                {"guacamole_deploy_skip_runtime": "false"},
             )
             for index, overrides in enumerate(cases):
                 playbook = root / f"reject-{index}.yml"
@@ -237,6 +238,10 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("name: lit.foundational.podman_systemd", systemd_tasks)
         self.assertIn(
             "guacamole_deploy_manage_systemd | bool or guacamole_deploy_skip_runtime | bool",
+            ASSERTS.read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "guacamole_deploy_skip_runtime is boolean",
             ASSERTS.read_text(encoding="utf-8"),
         )
         self.assertLess(
