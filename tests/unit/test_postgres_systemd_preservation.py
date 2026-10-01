@@ -80,7 +80,7 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
         self.assertEqual(manifest_render["ansible.builtin.template"]["group"], "root")
         self.assertEqual(manifest_render["ansible.builtin.template"]["mode"], "0600")
 
-    def test_failed_readiness_executes_exact_manifest_and_service_rollback(self) -> None:
+    def test_failed_fresh_cleanup_detects_a_running_native_pod(self) -> None:
         executable = shutil.which("ansible-playbook")
         self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
 
@@ -136,6 +136,7 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
   ansible.builtin.command:
     argv: [systemctl, stop, "{{ podman_systemd_unit_name }}.service"]
   changed_when: true
+  failed_when: false
   when: podman_systemd_action == 'absent'
 
 - name: Remove fixture Quadlet
@@ -176,6 +177,8 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
             fake_bin.mkdir()
             state = root / "systemd-state"
             state.mkdir()
+            native_state = "postgres-pod_service"
+            (state / f"{native_state}.active").write_text("inactive", encoding="utf-8")
             log = root / "systemctl.log"
             manifest = root / "postgres.yml"
             original = b"original-postgres-manifest\nwith-exact-bytes\n"
@@ -203,7 +206,7 @@ safe_unit=$(printf '%s' "$unit" | tr '/@.' '___')
 active_file="$FAKE_SYSTEMD_STATE/$safe_unit.active"
 enabled_file="$FAKE_SYSTEMD_STATE/$safe_unit.enabled"
 case "$unit" in
-  podman-kube@*) default_active=active; default_enabled=enabled ;;
+  podman-kube@*) default_active=unknown; default_enabled=not-found ;;
   *) default_active=inactive; default_enabled=not-found ;;
 esac
 active=$(cat "$active_file" 2>/dev/null || printf '%s' "$default_active")
@@ -236,6 +239,7 @@ case "$command_name" in
     printf active > "$active_file"
     ;;
   stop)
+    if [ "$unit" = postgres-pod.service ] && [ "$active" = active ]; then exit 42; fi
     printf inactive > "$active_file"
     ;;
   daemon-reload)
@@ -256,6 +260,7 @@ esac
                 """#!/bin/sh
 set -eu
 if [ "${1:-}" = pod ] && [ "${2:-}" = exists ]; then
+  [ "$(cat "$FAKE_NATIVE_ACTIVE_FILE" 2>/dev/null || true)" = active ] && exit 0
   exit 1
 fi
 if [ "${1:-}" = exec ]; then
@@ -308,6 +313,7 @@ exit 0
                 "ANSIBLE_NOCOLOR": "1",
                 "FAKE_SYSTEMCTL_LOG": str(log),
                 "FAKE_SYSTEMD_STATE": str(state),
+                "FAKE_NATIVE_ACTIVE_FILE": str(state / f"{native_state}.active"),
                 "PATH": f"{fake_bin}:{os.environ['PATH']}",
             }
             result = subprocess.run(  # noqa: S603
@@ -327,17 +333,10 @@ exit 0
             self.assertFalse((quadlet_dir / "postgres-pod.kube").exists())
             service_log = log.read_text(encoding="utf-8")
             evidence = f"{output}\nSYSTEMCTL LOG:\n{service_log}"
-            self.assertIn("stop podman-kube@etc-podman-pods-postgres.yml.service", service_log, evidence)
-            self.assertIn("disable podman-kube@etc-podman-pods-postgres.yml.service", service_log, evidence)
             self.assertIn("start postgres-pod.service", service_log, evidence)
             self.assertIn("stop postgres-pod.service", service_log, evidence)
-            self.assertIn("enable podman-kube@etc-podman-pods-postgres.yml.service", service_log, evidence)
-            self.assertIn("start podman-kube@etc-podman-pods-postgres.yml.service", service_log, evidence)
-            legacy_state = "podman-kube_etc-podman-pods-postgres_yml_service"
-            native_state = "postgres-pod_service"
-            self.assertEqual((state / f"{legacy_state}.active").read_text(encoding="utf-8"), "active")
-            self.assertEqual((state / f"{legacy_state}.enabled").read_text(encoding="utf-8"), "enabled")
-            self.assertEqual((state / f"{native_state}.active").read_text(encoding="utf-8"), "inactive")
+            self.assertIn("Native quiescence failure", output)
+            self.assertEqual((state / f"{native_state}.active").read_text(encoding="utf-8"), "active")
 
     def test_active_native_rollback_restarts_the_restored_manifest(self) -> None:
         tasks = yaml.safe_load((ROLE / "tasks/systemd.yml").read_text(encoding="utf-8"))[0]["block"]

@@ -165,6 +165,12 @@
       - keycloak_deploy_quadlet_dir is string
       - keycloak_deploy_quadlet_dir == '/etc/containers/systemd'
       - keycloak_deploy_systemd_enabled is boolean
+      - >-
+        not (
+          keycloak_deploy_manage_postgres | bool
+          and keycloak_deploy_manage_systemd | bool
+        )
+        or keycloak_deploy_systemd_enabled | bool
       - keycloak_deploy_skip_runtime is boolean
       - keycloak_deploy_skip_deploy is boolean
       - keycloak_deploy_generate_secrets is boolean

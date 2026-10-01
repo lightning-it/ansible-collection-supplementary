@@ -485,6 +485,7 @@
           when: >-
             keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
             or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+            or not (keycloak_deploy_native_quadlet_file.stat.exists | default(false))
           block:
             - name: Inspect native Keycloak activity after failed cleanup
               ansible.builtin.command:
@@ -496,6 +497,13 @@
               changed_when: false
               failed_when: false
 
+            - name: Inspect native Keycloak pod presence after failed cleanup
+              ansible.builtin.command:
+                argv: [podman, pod, exists, "{{ keycloak_deploy_pod_name }}"]
+              register: keycloak_deploy_native_pod_after_cleanup
+              changed_when: false
+              failed_when: false
+
             - name: Require native Keycloak inactivity before legacy restoration
               ansible.builtin.assert:
                 that:
@@ -503,6 +511,7 @@
                   - >-
                     keycloak_deploy_native_activity_after_cleanup.stdout | trim
                     in ['inactive', 'failed', 'unknown']
+                  - keycloak_deploy_native_pod_after_cleanup.rc == 1
                 fail_msg: >-
                   The failed native Keycloak controller is not proven inactive;
                   refusing to start the legacy controller in parallel.
