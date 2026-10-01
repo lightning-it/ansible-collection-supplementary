@@ -158,6 +158,7 @@ class GuacamoleUsernameClaimTests(unittest.TestCase):
             )
         )
         containers = {item["name"]: item for item in pod["spec"]["containers"]}
+        containers.update({item["name"]: item for item in pod["spec"]["initContainers"]})
         application_env = {item["name"]: item["value"] for item in containers["guacamole"]["env"]}
         self.assertEqual(
             application_env["JAVA_TOOL_OPTIONS"],
@@ -166,10 +167,25 @@ class GuacamoleUsernameClaimTests(unittest.TestCase):
             "-Dhttp.nonProxyHosts=localhost|127.0.0.1|keycloak",
         )
         self.assertEqual(application_env["HTTPS_PROXY"], "http://10.89.0.1:3128")
-        for name in ("postgres", "guacd"):
-            names = {item["name"] for item in containers[name].get("env", [])}
-            self.assertNotIn("JAVA_TOOL_OPTIONS", names)
-            self.assertNotIn("HTTPS_PROXY", names)
+        self.assertEqual(application_env["NO_PROXY"], "localhost,127.0.0.1,keycloak")
+        self.assertEqual(application_env["ALL_PROXY"], "")
+        for name in ("schema", "postgres", "guacd"):
+            environment = {item["name"]: item["value"] for item in containers[name].get("env", [])}
+            self.assertNotIn("JAVA_TOOL_OPTIONS", environment)
+            for proxy_name in (
+                "http_proxy",
+                "HTTP_PROXY",
+                "https_proxy",
+                "HTTPS_PROXY",
+                "all_proxy",
+                "ALL_PROXY",
+                "ftp_proxy",
+                "FTP_PROXY",
+                "no_proxy",
+                "NO_PROXY",
+            ):
+                self.assertIn(proxy_name, environment)
+                self.assertEqual(environment[proxy_name], "")
 
 
 def load_tests(loader, tests, pattern):  # noqa: ARG001

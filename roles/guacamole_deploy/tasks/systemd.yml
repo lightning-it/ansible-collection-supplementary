@@ -428,7 +428,7 @@
           ansible.builtin.systemd:
             name: "{{ guacamole_deploy_systemd_unit_name }}.service"
             state: >-
-              {{ 'started' if guacamole_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+              {{ 'restarted' if guacamole_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
             enabled: >-
               {{ guacamole_deploy_native_systemd_enabled.stdout | trim == 'enabled' }}
             scope: "{{ guacamole_deploy_systemd_scope }}"
@@ -438,7 +438,7 @@
           ansible.builtin.systemd:
             name: "{{ guacamole_deploy_systemd_unit_name }}.service"
             state: >-
-              {{ 'started' if guacamole_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+              {{ 'restarted' if guacamole_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
             scope: "{{ guacamole_deploy_systemd_scope }}"
           when: guacamole_deploy_native_systemd_enabled.stdout | trim == 'generated'
       rescue:

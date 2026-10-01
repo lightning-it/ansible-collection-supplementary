@@ -2,4 +2,4 @@
 - name: Reload systemd after verified legacy Guacamole unit removal
   ansible.builtin.systemd_service:
     daemon_reload: true
-    scope: "{{ guacamole_deploy_systemd_scope }}"
+    scope: system

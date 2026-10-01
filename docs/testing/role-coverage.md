@@ -67,7 +67,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | keycloak_preflight | keycloak | validator | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | not-applicable | parent_component_validation | — | — | No direct scenario coverage. | — |
 | keycloak_upgrade | keycloak | infrastructure | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | supported_upgrade_and_post_upgrade_workflow | keycloak_backup_restore, keycloak_deploy, keycloak_validate | — | No direct scenario coverage. | — |
 | keycloak_validate | keycloak | validator | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | not-applicable | parent_component_validation | — | — | Canonical scenarios validate directly instead of invoking this role. | — |
-| loki_deploy | observability | logging_service | experimental | — | ubuntu-22.04, ubuntu-24.04, rhel-9 | experimental | experimental | experimental | generate_transport_ingest_and_query_logs | lit.foundational.kubeplay | — | Current Incus scenario verifies service and port state only. | atlas-observability-incus_heavy, wunderbox-monitoring-logging-basic |
+| loki_deploy | observability | logging_service | experimental | — | ubuntu-22.04, ubuntu-24.04, rhel-9 | experimental | experimental | experimental | generate_transport_ingest_and_query_logs | lit.foundational.kubeplay, lit.foundational.podman_systemd | — | Current Incus scenario verifies service and port state only. | atlas-observability-incus_heavy, wunderbox-monitoring-logging-basic |
 | manage_esxi | esxi | infrastructure | experimental | — | rhel-9 | experimental | blocked-external-infrastructure | blocked-external-infrastructure | perform_and_verify_a_safe_esxi_operation | — | Licensed vCenter and ESXi integration lab | Current scenario is a syntax stub. | manage-esxi-basic |
 | minio_backup_restore | minio | backup_component | experimental | — | rhel-9 | experimental | experimental | experimental | create_backup_modify_state_restore_and_verify | minio_validate, lit.foundational.kubeplay | — | Current root scenario is a syntax stub. | minio-backup-restore-basic |
 | minio_bootstrap | minio | configuration_as_code | experimental | — | rhel-9 | experimental | experimental | experimental | create_bucket_write_object_and_query_state | minio_foundational | — | Current root scenario is a syntax stub. | minio-bootstrap-basic |
@@ -88,7 +88,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | postgres | postgres | orchestrator | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | real_client_transaction_permissions_persistence_and_restore | postgres_preflight, postgres_deploy, postgres_config, postgres_validate, postgres_ops, postgres_backup_restore, postgres_upgrade, postgres_destroy | — | Orchestrator is not directly exercised. | — |
 | postgres_backup_restore | postgres | backup_component | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | create_backup_modify_state_restore_and_verify | — | — | Keycloak Heavy proves exact restoration of an isolated probe table, not whole-database disaster recovery. | — |
 | postgres_config | postgres | configuration_as_code | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | apply_query_reconcile_and_delete_configuration | — | — | Implementation only sets and reports override facts. | — |
-| postgres_deploy | postgres | database | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | real_client_transaction_permissions_persistence_and_restore | lit.foundational.kubeplay, lit.foundational.podman_systemd | — | Root scenario is a syntax stub; Keycloak exercises deployment only indirectly., Systemd fallback branches have isolated Ansible regression coverage, not full service lifecycle acceptance. | postgres-deploy-basic |
+| postgres_deploy | postgres | database | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | real_client_transaction_permissions_persistence_and_restore | lit.foundational.kubeplay | — | Root scenario is a syntax stub; Keycloak exercises deployment only indirectly., Systemd fallback branches have isolated Ansible regression coverage, not full service lifecycle acceptance. | postgres-deploy-basic |
 | postgres_destroy | postgres | infrastructure | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | safe_teardown_and_absence | lit.foundational.kubeplay | — | No direct scenario coverage. | — |
 | postgres_ops | postgres | infrastructure | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | restart_recovery_and_query | — | — | No direct scenario coverage. | — |
 | postgres_preflight | postgres | validator | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | not-applicable | parent_component_validation | — | — | No direct scenario coverage. | — |
@@ -823,7 +823,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Supported targets: —; candidate targets: ubuntu-22.04, ubuntu-24.04, rhel-9.
 - Profiles: Tiny `experimental`, Heavy `experimental`, Application Acceptance `experimental`.
 - Acceptance surface: `generate_transport_ingest_and_query_logs`.
-- Role dependencies: lit.foundational.kubeplay; exercised scenario dependencies: —.
+- Role dependencies: lit.foundational.kubeplay, lit.foundational.podman_systemd; exercised scenario dependencies: —.
 - External dependencies/blockers: —.
 - Required-secret policy: Use ephemeral test credentials and protected runtime secret providers; never commit secret values.
 - Local execution: `molecule test -s atlas-observability-incus_heavy`, `molecule test -s wunderbox-monitoring-logging-basic`; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
@@ -1159,7 +1159,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Supported targets: —; candidate targets: rhel-9, ubuntu-22.04, ubuntu-24.04.
 - Profiles: Tiny `experimental`, Heavy `experimental`, Application Acceptance `experimental`.
 - Acceptance surface: `real_client_transaction_permissions_persistence_and_restore`.
-- Role dependencies: lit.foundational.kubeplay, lit.foundational.podman_systemd; exercised scenario dependencies: —.
+- Role dependencies: lit.foundational.kubeplay; exercised scenario dependencies: —.
 - External dependencies/blockers: —.
 - Required-secret policy: Use ephemeral test credentials and protected runtime secret providers; never commit secret values.
 - Local execution: `molecule test -s postgres-deploy-basic`; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.

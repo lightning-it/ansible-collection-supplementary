@@ -1163,6 +1163,7 @@ roles:
     acceptance_surface: "generate_transport_ingest_and_query_logs"
     dependencies:
       - "lit.foundational.kubeplay"
+      - "lit.foundational.podman_systemd"
     external_dependencies: []
     known_limitations:
       - "Current Incus scenario verifies service and port state only."
@@ -1643,7 +1644,6 @@ roles:
     acceptance_surface: "real_client_transaction_permissions_persistence_and_restore"
     dependencies:
       - "lit.foundational.kubeplay"
-      - "lit.foundational.podman_systemd"
     external_dependencies: []
     known_limitations:
       - "Root scenario is a syntax stub; Keycloak exercises deployment only indirectly."

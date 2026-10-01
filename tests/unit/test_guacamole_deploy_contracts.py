@@ -104,9 +104,19 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn(") <= 65535", asserts)
         self.assertIn("guacamole_deploy_no_proxy | join(',') | to_json", pod)
         non_application_containers = pod.split("    - name: guacamole", 1)[0]
-        self.assertNotIn("http_proxy", non_application_containers)
-        self.assertNotIn("HTTP_PROXY", non_application_containers)
-        self.assertNotIn("HTTPS_PROXY", non_application_containers)
+        for proxy_name in (
+            "http_proxy",
+            "HTTP_PROXY",
+            "https_proxy",
+            "HTTPS_PROXY",
+            "all_proxy",
+            "ALL_PROXY",
+            "ftp_proxy",
+            "FTP_PROXY",
+            "no_proxy",
+            "NO_PROXY",
+        ):
+            self.assertIn(f'name: {proxy_name}, value: ""', non_application_containers)
         self.assertNotIn("JAVA_TOOL_OPTIONS", non_application_containers)
 
     def test_persistent_lifecycle_uses_only_native_quadlet(self) -> None:
@@ -170,7 +180,13 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("Render the transactional Guacamole Pod manifest", systemd_tasks)
         self.assertIn("guacamole_deploy_legacy_unit_stat.stat.exists | bool", systemd_tasks)
         self.assertIn("Reload systemd after verified legacy Guacamole unit removal", handlers)
+        self.assertIn("scope: system", handlers)
+        self.assertNotIn('scope: "{{ guacamole_deploy_systemd_scope }}"', handlers)
         self.assertIn("notify: Reload systemd after verified legacy Guacamole unit removal", systemd_tasks)
+        self.assertIn(
+            "'restarted' if guacamole_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped'",
+            systemd_tasks,
+        )
         self.assertLess(
             systemd_tasks.index("Remove the verified legacy Guacamole systemd unit"),
             systemd_tasks.index("Flush systemd reload after verified legacy Guacamole unit removal"),
