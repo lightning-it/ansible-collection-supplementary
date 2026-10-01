@@ -283,6 +283,18 @@ class GuacamoleDeployContractTests(unittest.TestCase):
             systemd_tasks.index("Remove the verified legacy Guacamole systemd unit"),
         )
         self.assertLess(
+            systemd_tasks.index("Preview transactional Guacamole Pod manifest drift"),
+            systemd_tasks.index("Stop and disable the exact legacy Guacamole unit before removal"),
+        )
+        self.assertLess(
+            systemd_tasks.index("Stop and disable the exact legacy Guacamole unit before removal"),
+            systemd_tasks.index("Render the transactional Guacamole Pod manifest"),
+        )
+        self.assertLess(
+            systemd_tasks.index("Stop the exact active native Guacamole unit before manifest replacement"),
+            systemd_tasks.index("Render the transactional Guacamole Pod manifest"),
+        )
+        self.assertLess(
             systemd_tasks.index("Wait for Guacamole readiness before committing legacy removal"),
             systemd_tasks.index("Remove the verified legacy Guacamole systemd unit"),
         )
@@ -330,6 +342,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         )
         transaction = task_map["Cut over to native Guacamole Quadlet with rollback"]
         transaction_map = {task["name"]: task for task in transaction["block"]}
+        manifest_preview = transaction_map["Preview transactional Guacamole Pod manifest drift"]
         staged_contract = "\n".join(
             transaction_map["Require the staged native Guacamole Quadlet provenance boundary"][
                 "ansible.builtin.assert"
@@ -340,6 +353,16 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("guacamole_deploy_native_drop_in_paths.stdout | trim == ''", native_contract)
         self.assertIn("guacamole_deploy_legacy_drop_in_paths.stdout | trim == ''", legacy_contract)
         self.assertIn("guacamole_deploy_staged_drop_in_paths.stdout | trim == ''", staged_contract)
+        self.assertTrue(manifest_preview["check_mode"])
+        self.assertFalse(manifest_preview["diff"])
+        self.assertTrue(manifest_preview["no_log"])
+        native_stop = transaction_map[
+            "Stop the exact active native Guacamole unit before manifest replacement"
+        ]
+        self.assertIn(
+            "guacamole_deploy_manifest_preview.changed | default(false) | bool",
+            native_stop["when"],
+        )
         for name in (
             "Stage native Guacamole Quadlet before lifecycle mutation",
             "Reinspect the staged native Guacamole Quadlet",
@@ -441,7 +464,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         group: root
         mode: "0600"
 """
-            self.assertEqual(production_systemd.count(privileged_render), 1)
+            self.assertEqual(production_systemd.count(privileged_render), 2)
             fixture_systemd.write_text(
                 production_systemd.replace(
                     privileged_render,
@@ -449,7 +472,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         group: {os.getegid()}
         mode: "0600"
 """,
-                    1,
+                    2,
                 )
                 .replace(
                     "guacamole_deploy_staged_quadlet_file.stat.pw_name | default('') == 'root'",
@@ -485,7 +508,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
             state.mkdir()
             log = root / "systemctl.log"
             manifest = root / "guacamole.yml"
-            original = b"original-guacamole-manifest\nwith-exact-bytes\n"
+            original = b"apiVersion: v1\nkind: Pod\nmetadata:\n  name: old-guacamole\n"
             manifest.write_bytes(original)
             manifest.chmod(0o640)
             quadlet_dir = root / "quadlets"
@@ -585,7 +608,13 @@ case "$command_name" in
   enable) printf enabled > "$enabled_file" ;;
   disable) printf disabled > "$enabled_file" ;;
   start|restart) printf active > "$active_file" ;;
-  stop) printf inactive > "$active_file" ;;
+  stop)
+    if [ "$unit" = guacamole.service ]; then
+      grep -q 'name: old-guacamole' "$FAKE_MANIFEST"
+      printf '%s\\n' legacy-stop-used-original-manifest >> "$FAKE_SYSTEMCTL_LOG"
+    fi
+    printf inactive > "$active_file"
+    ;;
   daemon-reload)
     if [ ! -e "$FAKE_LEGACY_UNIT" ] && [ ! -e "$FAKE_RELOAD_FAILURE_USED" ]; then
       : > "$FAKE_RELOAD_FAILURE_USED"
@@ -652,6 +681,7 @@ esac
                 "FAKE_SYSTEMD_STATE": str(state),
                 "FAKE_LEGACY_UNIT": str(legacy_unit),
                 "FAKE_NATIVE_QUADLET": str(native_quadlet),
+                "FAKE_MANIFEST": str(manifest),
                 "FAKE_RELOAD_FAILURE_USED": str(reload_failure_used),
                 "PATH": f"{fake_bin}:{os.environ['PATH']}",
             }
@@ -699,6 +729,7 @@ esac
             service_log = log.read_text(encoding="utf-8")
             evidence = f"{output}\nSYSTEMCTL LOG:\n{service_log}"
             self.assertIn("stop guacamole.service", service_log, evidence)
+            self.assertIn("legacy-stop-used-original-manifest", service_log, evidence)
             self.assertIn("disable guacamole.service", service_log, evidence)
             self.assertIn("restart guacamole-pod.service", service_log, evidence)
             self.assertIn("stop guacamole-pod.service", service_log, evidence)

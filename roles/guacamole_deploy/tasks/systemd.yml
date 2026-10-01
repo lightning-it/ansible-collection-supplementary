@@ -362,15 +362,17 @@
 
 - name: Cut over to native Guacamole Quadlet with rollback
   block:
-    - name: Render the transactional Guacamole Pod manifest
+    - name: Preview transactional Guacamole Pod manifest drift
       ansible.builtin.template:
         src: guacamole-pod.yml.j2
         dest: "{{ guacamole_deploy_manifest_path }}"
         owner: root
         group: root
         mode: "0600"
+      check_mode: true
+      diff: false
       no_log: true
-      register: guacamole_deploy_manifest_render
+      register: guacamole_deploy_manifest_preview
 
     - name: Stage native Guacamole Quadlet before lifecycle mutation
       ansible.builtin.include_role:
@@ -450,6 +452,25 @@
         state: stopped
         enabled: false
       when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
+    - name: Stop the exact active native Guacamole unit before manifest replacement
+      ansible.builtin.systemd_service:
+        name: "{{ guacamole_deploy_systemd_unit_name }}.service"
+        state: stopped
+        scope: "{{ guacamole_deploy_systemd_scope }}"
+      when:
+        - guacamole_deploy_native_systemd_active.stdout | trim == 'active'
+        - guacamole_deploy_manifest_preview.changed | default(false) | bool
+
+    - name: Render the transactional Guacamole Pod manifest
+      ansible.builtin.template:
+        src: guacamole-pod.yml.j2
+        dest: "{{ guacamole_deploy_manifest_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+      register: guacamole_deploy_manifest_render
 
     - name: Manage native Guacamole Quadlet service
       ansible.builtin.include_role:
