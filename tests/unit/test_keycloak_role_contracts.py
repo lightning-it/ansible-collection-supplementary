@@ -506,6 +506,21 @@ exit 0
             with self.subTest(role=role):
                 self.assertIn("ansible_facts.get('service_mgr', '')", assertions)
 
+    def test_managed_quadlet_interfaces_reject_injection_and_user_scope(self) -> None:
+        for role in ("keycloak_deploy", "postgres_deploy"):
+            tasks = yaml.safe_load((ROOT / "roles" / role / "tasks" / "assert.yml").read_text(encoding="utf-8"))
+            contract = "\n".join(tasks[0]["ansible.builtin.assert"]["that"])
+            prefix = role
+            with self.subTest(role=role):
+                self.assertIn(f"{prefix}_systemd_unit_name is string", contract)
+                self.assertIn("^[A-Za-z0-9][A-Za-z0-9_.-]*$", contract)
+                self.assertIn(f"'\\n' not in {prefix}_systemd_description", contract)
+                self.assertIn(f"'\\r' not in {prefix}_systemd_description", contract)
+                self.assertIn(f"{prefix}_systemd_scope == 'system'", contract)
+
+        keycloak_options = self._role_options("keycloak_deploy")
+        self.assertEqual(keycloak_options["keycloak_deploy_systemd_scope"]["choices"], ["system"])
+
     def test_managed_bridge_database_requires_a_shared_normalized_network(self) -> None:
         assertions = (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
         defaults = self._role_defaults("keycloak_deploy")

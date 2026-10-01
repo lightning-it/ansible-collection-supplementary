@@ -127,9 +127,25 @@
           ansible_service_mgr
           | default(ansible_facts.get('service_mgr', ''), true)
         ) == 'systemd'
-      - keycloak_deploy_systemd_unit_name | default('', true) | trim | length > 0
-      - keycloak_deploy_systemd_description | default('', true) | trim | length > 0
-      - keycloak_deploy_systemd_scope in ['system', 'user']
+      - >-
+        not (keycloak_deploy_manage_systemd | bool)
+        or (
+          keycloak_deploy_systemd_unit_name is string
+          and keycloak_deploy_systemd_unit_name | length <= 240
+          and keycloak_deploy_systemd_unit_name
+          is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+        )
+      - >-
+        not (keycloak_deploy_manage_systemd | bool)
+        or (
+          keycloak_deploy_systemd_description is string
+          and keycloak_deploy_systemd_description | trim | length > 0
+          and '\n' not in keycloak_deploy_systemd_description
+          and '\r' not in keycloak_deploy_systemd_description
+        )
+      - >-
+        not (keycloak_deploy_manage_systemd | bool)
+        or keycloak_deploy_systemd_scope == 'system'
       - keycloak_deploy_quadlet_dir | default('', true) | trim | length > 0
       - keycloak_deploy_systemd_enabled is boolean
       - keycloak_deploy_skip_runtime is boolean

@@ -289,11 +289,10 @@ argument_specs:
         description: Description written to the native Keycloak Quadlet unit.
         type: str
       keycloak_deploy_systemd_scope:
-        description: Systemd scope used by the native Keycloak Quadlet unit.
+        description: System systemd scope used by the native Keycloak Quadlet unit.
         type: str
         choices:
           - system
-          - user
       keycloak_deploy_quadlet_dir:
         description: Directory containing the native Keycloak .kube Quadlet unit.
         type: path

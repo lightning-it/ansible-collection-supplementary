@@ -30,6 +30,7 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
             self.assertIn(contract, lifecycle_contract)
         for unsupported in ("activating", "static", "indirect", "transient", "linked"):
             self.assertNotIn(unsupported, lifecycle_contract)
+        self.assertIn("postgres_deploy_legacy_systemd_active.stdout | trim != 'failed'", validation)
         ownership = task_map["Refuse unproven drift in an existing native PostgreSQL Quadlet"]
         ownership_contract = "\n".join(str(item) for item in ownership["ansible.builtin.assert"]["that"])
         for contract in ("isreg", "islnk", "Description=", "Yaml=", "native_systemd_enabled"):
@@ -316,6 +317,11 @@ exit 0
             self.assertIn("'restarted'", state_expression)
             self.assertIn("'active'", state_expression)
             self.assertIn("'stopped'", state_expression)
+
+    def test_existing_quadlet_is_read_with_supported_slurp_argument(self) -> None:
+        block = yaml.safe_load((ROLE / "tasks/systemd.yml").read_text(encoding="utf-8"))[0]["block"]
+        task = next(task for task in block if task["name"] == "Read the desired native PostgreSQL Quadlet file")
+        self.assertEqual(set(task["ansible.builtin.slurp"]), {"src"})
 
 
 if __name__ == "__main__":
