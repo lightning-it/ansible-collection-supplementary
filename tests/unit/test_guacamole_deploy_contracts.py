@@ -106,6 +106,14 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("'\\n' not in guacamole_deploy_manifest_path", contract)
         self.assertIn("'\\r' not in guacamole_deploy_manifest_path", contract)
         self.assertIn("guacamole_deploy_systemd_enabled | bool", contract)
+        self.assertIn(
+            "guacamole_deploy_systemd_unit_name ~ '.service'",
+            contract,
+        )
+        self.assertIn(
+            "!= guacamole_deploy_legacy_systemd_unit_path | basename",
+            contract,
+        )
 
     def test_quadlet_interface_executably_rejects_manifest_injection_and_disabled_state(self) -> None:
         executable = shutil.which("ansible-playbook")
@@ -122,6 +130,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
                 {"guacamole_deploy_manifest_path": "/srv/guacamole.yml\n[Install]"},
                 {"guacamole_deploy_manifest_path": "/srv/guacamole.yml\rNetwork=host"},
                 {"guacamole_deploy_systemd_enabled": False},
+                {"guacamole_deploy_systemd_unit_name": "guacamole"},
             )
             for index, overrides in enumerate(cases):
                 playbook = root / f"reject-{index}.yml"
