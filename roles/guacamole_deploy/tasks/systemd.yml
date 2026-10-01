@@ -139,17 +139,32 @@
         guacamole_deploy_legacy_systemd_active.stdout | trim
         in ['active', 'inactive', 'failed', 'unknown']
       - >-
-        not (guacamole_deploy_legacy_unit_stat.stat.exists | default(false))
-        or guacamole_deploy_legacy_systemd_active.stdout | trim
-        in ['active', 'inactive']
+        (
+          guacamole_deploy_legacy_unit_stat.stat.exists | default(false)
+          and guacamole_deploy_legacy_systemd_active.stdout | trim
+          in ['active', 'inactive']
+        )
+        or (
+          not (guacamole_deploy_legacy_unit_stat.stat.exists | default(false))
+          and guacamole_deploy_legacy_systemd_active.stdout | trim
+          in ['inactive', 'unknown']
+          and guacamole_deploy_legacy_systemd_enabled.stdout | trim == 'not-found'
+          and guacamole_deploy_legacy_fragment_path.stdout | trim == ''
+        )
       - guacamole_deploy_legacy_systemd_enabled.rc in [0, 1, 3, 4]
       - >-
         guacamole_deploy_legacy_systemd_enabled.stdout | trim
         in ['enabled', 'disabled', 'not-found']
       - >-
-        not (guacamole_deploy_legacy_unit_stat.stat.exists | default(false))
-        or guacamole_deploy_legacy_systemd_enabled.stdout | trim
-        in ['enabled', 'disabled']
+        (
+          guacamole_deploy_legacy_unit_stat.stat.exists | default(false)
+          and guacamole_deploy_legacy_systemd_enabled.stdout | trim
+          in ['enabled', 'disabled']
+        )
+        or (
+          not (guacamole_deploy_legacy_unit_stat.stat.exists | default(false))
+          and guacamole_deploy_legacy_systemd_enabled.stdout | trim == 'not-found'
+        )
       - guacamole_deploy_native_systemd_active.rc in [0, 3, 4]
       - >-
         guacamole_deploy_native_systemd_active.stdout | trim
@@ -274,8 +289,10 @@
         in ['', guacamole_deploy_legacy_systemd_unit_path]
       - >-
         (
-          guacamole_deploy_legacy_systemd_active.stdout | trim == 'unknown'
+          guacamole_deploy_legacy_systemd_active.stdout | trim
+          in ['inactive', 'unknown']
           and guacamole_deploy_legacy_systemd_enabled.stdout | trim == 'not-found'
+          and guacamole_deploy_legacy_fragment_path.stdout | trim == ''
         )
         or (
           guacamole_deploy_legacy_fragment_path.stdout | trim
@@ -284,7 +301,8 @@
       - >-
         guacamole_deploy_legacy_unit_stat.stat.exists | bool
         or (
-          guacamole_deploy_legacy_systemd_active.stdout | trim == 'unknown'
+          guacamole_deploy_legacy_systemd_active.stdout | trim
+          in ['inactive', 'unknown']
           and guacamole_deploy_legacy_systemd_enabled.stdout | trim == 'not-found'
           and guacamole_deploy_legacy_fragment_path.stdout | trim == ''
         )
@@ -509,11 +527,16 @@
       ansible.builtin.file:
         path: "{{ guacamole_deploy_legacy_systemd_unit_path }}"
         state: absent
-      notify: Reload systemd after verified legacy Guacamole unit removal
+      register: guacamole_deploy_legacy_unit_removal
       when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
 
-    - name: Flush systemd reload after verified legacy Guacamole unit removal
-      ansible.builtin.meta: flush_handlers
+    # This reload is part of the takeover transaction. A handler would require
+    # a play-global flush and could execute unrelated handlers before commit.
+    - name: Reload systemd after verified legacy Guacamole unit removal  # noqa: no-handler
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+        scope: system
+      when: guacamole_deploy_legacy_unit_removal.changed | default(false)
   rescue:
     - name: Capture the original native Guacamole takeover failure
       ansible.builtin.set_fact:

@@ -2,9 +2,9 @@
 breaking_changes:
   - >-
     guacamole_deploy - The Guacamole application container now explicitly
-    clears inherited HTTP_PROXY, HTTPS_PROXY, NO_PROXY, and lowercase variants
-    by default. Deployments that previously relied on Podman host-proxy
-    injection must set guacamole_deploy_proxy_url to their credential-free
+    clears inherited HTTP_PROXY, HTTPS_PROXY, NO_PROXY, ALL_PROXY, FTP_PROXY,
+    and all lowercase variants by default. Deployments that previously relied
+    on Podman host-proxy injection must set guacamole_deploy_proxy_url to their credential-free
     RFC1918 HTTP proxy URL before upgrading and set guacamole_deploy_no_proxy
     only for explicitly approved direct destinations. PostgreSQL and guacd
     remain free of the configured proxy variables; host routing and firewall

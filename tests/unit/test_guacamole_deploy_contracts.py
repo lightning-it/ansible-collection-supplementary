@@ -20,7 +20,6 @@ ASSERTS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "assert.yml"
 DEFAULTS = ROOT / "roles" / "guacamole_deploy" / "defaults" / "main.yml"
 POD = ROOT / "roles" / "guacamole_deploy" / "templates" / "guacamole-pod.yml.j2"
 SYSTEMD_TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "systemd.yml"
-HANDLERS = ROOT / "roles" / "guacamole_deploy" / "handlers" / "main.yml"
 LEGACY_SERVICE = ROOT / "roles" / "guacamole_deploy" / "templates" / "guacamole.service.j2"
 OIDC_GROUP_TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "reconcile_oidc_groups.yml"
 
@@ -230,7 +229,6 @@ class GuacamoleDeployContractTests(unittest.TestCase):
     def test_persistent_lifecycle_uses_only_native_quadlet(self) -> None:
         tasks = TASKS.read_text(encoding="utf-8")
         systemd_tasks = SYSTEMD_TASKS.read_text(encoding="utf-8")
-        handlers = HANDLERS.read_text(encoding="utf-8")
         defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
 
         self.assertFalse(LEGACY_SERVICE.exists())
@@ -314,15 +312,18 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("Capture the exact pre-transaction Guacamole Pod manifest", systemd_tasks)
         self.assertIn("Render the transactional Guacamole Pod manifest", systemd_tasks)
         self.assertIn("guacamole_deploy_legacy_unit_stat.stat.exists | bool", systemd_tasks)
-        self.assertIn("Reload systemd after verified legacy Guacamole unit removal", handlers)
-        self.assertIn("scope: system", handlers)
-        self.assertNotIn('scope: "{{ guacamole_deploy_systemd_scope }}"', handlers)
-        self.assertIn("notify: Reload systemd after verified legacy Guacamole unit removal", systemd_tasks)
+        self.assertNotIn("flush_handlers", systemd_tasks)
+        self.assertNotIn("notify: Reload systemd after verified legacy Guacamole unit removal", systemd_tasks)
+        self.assertIn("register: guacamole_deploy_legacy_unit_removal", systemd_tasks)
+        self.assertIn("Reload systemd after verified legacy Guacamole unit removal", systemd_tasks)
+        self.assertIn("# noqa: no-handler", systemd_tasks)
+        self.assertIn("guacamole_deploy_legacy_unit_removal.changed | default(false)", systemd_tasks)
+        self.assertIn("scope: system", systemd_tasks)
         self.assertIn("'started'", systemd_tasks)
         self.assertIn("guacamole_deploy_manifest_render.changed", systemd_tasks)
         self.assertLess(
             systemd_tasks.index("Remove the verified legacy Guacamole systemd unit"),
-            systemd_tasks.index("Flush systemd reload after verified legacy Guacamole unit removal"),
+            systemd_tasks.index("Reload systemd after verified legacy Guacamole unit removal"),
         )
         self.assertNotIn("- name: Wait for Guacamole readiness\n", tasks)
         self.assertNotIn("podman kube play", tasks)
@@ -908,6 +909,60 @@ esac
         self.assertIn("guacamole_deploy_native_systemd_active.stdout | trim != 'failed'", contract)
         self.assertIn("guacamole_deploy_systemd_scope == 'system'", ASSERTS.read_text(encoding="utf-8"))
         self.assertIn("guacamole_deploy_quadlet_dir == '/etc/containers/systemd'", ASSERTS.read_text(encoding="utf-8"))
+
+    def test_clean_first_install_accepts_inactive_not_found_legacy_unit(self) -> None:
+        tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
+        task_map = {task["name"]: task for task in tasks}
+        executable = shutil.which("ansible-playbook")
+        self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
+
+        with tempfile.TemporaryDirectory(prefix="guacamole-clean-first-install-") as temporary:
+            temporary_path = Path(temporary)
+            playbook = temporary_path / "first-install.yml"
+            playbook.write_text(
+                yaml.safe_dump(
+                    [
+                        {
+                            "hosts": "localhost",
+                            "gather_facts": False,
+                            "vars": {
+                                "guacamole_deploy_legacy_unit_stat": {"stat": {"exists": False}},
+                                "guacamole_deploy_legacy_systemd_active": {"rc": 3, "stdout": "inactive"},
+                                "guacamole_deploy_legacy_systemd_enabled": {"rc": 1, "stdout": "not-found"},
+                                "guacamole_deploy_legacy_fragment_path": {"rc": 0, "stdout": ""},
+                                "guacamole_deploy_legacy_drop_in_paths": {"rc": 0, "stdout": ""},
+                                "guacamole_deploy_legacy_systemd_unit_path": "/etc/systemd/system/guacamole.service",
+                                "guacamole_deploy_native_systemd_active": {"rc": 4, "stdout": "unknown"},
+                                "guacamole_deploy_native_systemd_enabled": {"rc": 1, "stdout": "not-found"},
+                            },
+                            "tasks": [
+                                task_map["Refuse unknown Guacamole lifecycle states"],
+                                task_map["Refuse a legacy Guacamole unit loaded from an unexpected fragment"],
+                            ],
+                        }
+                    ],
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            config = temporary_path / "ansible.cfg"
+            config.write_text("[defaults]\nstdout_callback=default\n", encoding="utf-8")
+            result = subprocess.run(  # noqa: S603
+                [executable, "-i", "localhost,", "-c", "local", str(playbook)],
+                env={
+                    **os.environ,
+                    "ANSIBLE_CONFIG": str(config),
+                    "ANSIBLE_NOCOLOR": "1",
+                    "ANSIBLE_STDOUT_CALLBACK": "default",
+                    "ANSIBLE_LOCAL_TEMP": str(temporary_path / "ansible"),
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_no_legacy_rollback_fails_closed_when_native_quiescence_is_unproven(self) -> None:
         tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
