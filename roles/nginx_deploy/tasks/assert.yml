@@ -23,7 +23,12 @@
         )
       - >-
         not (nginx_deploy_manage_systemd | bool)
-        or nginx_deploy_systemd_description | default('', true) | trim | length > 0
+        or (
+          nginx_deploy_systemd_description is string
+          and nginx_deploy_systemd_description | trim | length > 0
+          and '\n' not in nginx_deploy_systemd_description
+          and '\r' not in nginx_deploy_systemd_description
+        )
       - >-
         not (nginx_deploy_manage_systemd | bool)
         or nginx_deploy_systemd_scope == 'system'

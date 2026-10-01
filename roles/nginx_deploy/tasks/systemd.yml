@@ -236,52 +236,86 @@
           changed_when: false
           failed_when: nginx_deploy_health is failed or nginx_deploy_health.status != 200
       rescue:
-        - name: Remove the failed native Nginx Quadlet runtime
-          ansible.builtin.include_role:
-            name: lit.foundational.podman_systemd
-          vars:
-            podman_systemd_action: absent
-            podman_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name }}"
-            podman_systemd_description: "{{ nginx_deploy_systemd_description }}"
-            podman_systemd_manifest_path: "{{ nginx_deploy_pod_manifest_path }}"
-            podman_systemd_scope: "{{ nginx_deploy_systemd_scope }}"
-            podman_systemd_quadlet_dir: "{{ nginx_deploy_quadlet_dir }}"
-            podman_systemd_enabled: false
-            podman_systemd_networks: "{{ nginx_deploy_networks }}"
-          when: not (nginx_deploy_native_quadlet_file.stat.exists | default(false))
+        - name: Capture the original native Nginx takeover failure
+          ansible.builtin.set_fact:
+            nginx_deploy_takeover_failure_message: >-
+              {{ ansible_failed_result.msg | default('unknown takeover failure') }}
+            nginx_deploy_cleanup_failure_message: ""
+            nginx_deploy_native_restore_failure_message: ""
+            nginx_deploy_legacy_restore_failure_message: ""
 
-        - name: Restore pre-existing enabled or disabled native Nginx service state after failure
-          ansible.builtin.systemd:
-            name: "{{ nginx_deploy_systemd_unit_name }}.service"
-            state: >-
-              {{ 'started' if nginx_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
-            enabled: >-
-              {{ nginx_deploy_native_systemd_enabled.stdout | trim == 'enabled' }}
-            scope: "{{ nginx_deploy_systemd_scope }}"
-          when: nginx_deploy_native_systemd_enabled.stdout | trim in ['enabled', 'disabled']
+        - name: Attempt failed native Nginx cleanup without blocking restoration
+          block:
+            - name: Remove the failed native Nginx Quadlet runtime
+              ansible.builtin.include_role:
+                name: lit.foundational.podman_systemd
+              vars:
+                podman_systemd_action: absent
+                podman_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name }}"
+                podman_systemd_description: "{{ nginx_deploy_systemd_description }}"
+                podman_systemd_manifest_path: "{{ nginx_deploy_pod_manifest_path }}"
+                podman_systemd_scope: "{{ nginx_deploy_systemd_scope }}"
+                podman_systemd_quadlet_dir: "{{ nginx_deploy_quadlet_dir }}"
+                podman_systemd_enabled: false
+                podman_systemd_networks: "{{ nginx_deploy_networks }}"
+              when: not (nginx_deploy_native_quadlet_file.stat.exists | default(false))
+          rescue:
+            - name: Capture failed native Nginx cleanup
+              ansible.builtin.set_fact:
+                nginx_deploy_cleanup_failure_message: >-
+                  {{ ansible_failed_result.msg | default('unknown cleanup failure') }}
 
-        - name: Restore pre-existing generated native Nginx service state after failure
-          ansible.builtin.systemd:
-            name: "{{ nginx_deploy_systemd_unit_name }}.service"
-            state: >-
-              {{ 'started' if nginx_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
-            scope: "{{ nginx_deploy_systemd_scope }}"
-          when: nginx_deploy_native_systemd_enabled.stdout | trim == 'generated'
+        - name: Attempt pre-existing native Nginx restoration without blocking legacy restoration
+          block:
+            - name: Restore pre-existing enabled or disabled native Nginx service state after failure
+              ansible.builtin.systemd:
+                name: "{{ nginx_deploy_systemd_unit_name }}.service"
+                state: >-
+                  {{ 'started' if nginx_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+                enabled: >-
+                  {{ nginx_deploy_native_systemd_enabled.stdout | trim == 'enabled' }}
+                scope: "{{ nginx_deploy_systemd_scope }}"
+              when: nginx_deploy_native_systemd_enabled.stdout | trim in ['enabled', 'disabled']
 
-        - name: Restore the exact legacy Nginx unit after failed takeover
-          ansible.builtin.systemd:
-            name: "podman-kube@{{ nginx_deploy_legacy_systemd_name.stdout }}.service"
-            state: >-
-              {{ 'started' if nginx_deploy_legacy_systemd_active.stdout | trim == 'active' else 'stopped' }}
-            enabled: >-
-              {{ nginx_deploy_legacy_systemd_enabled.stdout | trim == 'enabled' }}
-          when: >-
-            nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
-            or nginx_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+            - name: Restore pre-existing generated native Nginx service state after failure
+              ansible.builtin.systemd:
+                name: "{{ nginx_deploy_systemd_unit_name }}.service"
+                state: >-
+                  {{ 'started' if nginx_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+                scope: "{{ nginx_deploy_systemd_scope }}"
+              when: nginx_deploy_native_systemd_enabled.stdout | trim == 'generated'
+          rescue:
+            - name: Capture failed pre-existing native Nginx restoration
+              ansible.builtin.set_fact:
+                nginx_deploy_native_restore_failure_message: >-
+                  {{ ansible_failed_result.msg | default('unknown native restoration failure') }}
+
+        - name: Attempt exact legacy Nginx restoration after failed takeover
+          block:
+            - name: Restore the exact legacy Nginx unit after failed takeover
+              ansible.builtin.systemd:
+                name: "podman-kube@{{ nginx_deploy_legacy_systemd_name.stdout }}.service"
+                state: >-
+                  {{ 'started' if nginx_deploy_legacy_systemd_active.stdout | trim == 'active' else 'stopped' }}
+                enabled: >-
+                  {{ nginx_deploy_legacy_systemd_enabled.stdout | trim == 'enabled' }}
+              when: >-
+                nginx_deploy_legacy_systemd_active.stdout | trim == 'active'
+                or nginx_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
+          rescue:
+            - name: Capture failed legacy Nginx restoration
+              ansible.builtin.set_fact:
+                nginx_deploy_legacy_restore_failure_message: >-
+                  {{ ansible_failed_result.msg | default('unknown legacy restoration failure') }}
 
         - name: Report failed native Nginx takeover after rollback
           ansible.builtin.fail:
             msg: >-
-              Native Nginx Quadlet takeover failed. The failed native runtime
-              was removed only when newly introduced; a pre-existing native
-              service was preserved, or the exact supported legacy state was restored.
+              Native Nginx Quadlet takeover failed:
+              {{ nginx_deploy_takeover_failure_message }}.
+              Cleanup failure:
+              {{ nginx_deploy_cleanup_failure_message | default('') | default('none', true) }}.
+              Native restoration failure:
+              {{ nginx_deploy_native_restore_failure_message | default('') | default('none', true) }}.
+              Legacy restoration failure:
+              {{ nginx_deploy_legacy_restore_failure_message | default('') | default('none', true) }}.

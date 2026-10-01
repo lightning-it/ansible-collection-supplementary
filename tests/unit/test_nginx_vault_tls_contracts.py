@@ -524,24 +524,48 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         self.assertLess(collision, stage)
         self.assertLess(stage, takeover)
         rescue = {task["name"]: task for task in cutover["rescue"]}
-        cleanup = rescue["Remove the failed native Nginx Quadlet runtime"]
+        self.assertIn("Capture the original native Nginx takeover failure", rescue)
+        cleanup_guard = rescue["Attempt failed native Nginx cleanup without blocking restoration"]
+        cleanup = cleanup_guard["block"][0]
         self.assertEqual(cleanup["vars"]["podman_systemd_action"], "absent")
         self.assertIn("native_quadlet_file.stat.exists", cleanup["when"])
-        restore_enablement = rescue["Restore pre-existing enabled or disabled native Nginx service state after failure"]
+        self.assertEqual(
+            cleanup_guard["rescue"][0]["name"],
+            "Capture failed native Nginx cleanup",
+        )
+        native_restore_guard = rescue[
+            "Attempt pre-existing native Nginx restoration without blocking legacy restoration"
+        ]
+        native_restore = {task["name"]: task for task in native_restore_guard["block"]}
+        restore_enablement = native_restore[
+            "Restore pre-existing enabled or disabled native Nginx service state after failure"
+        ]
         self.assertIn("['enabled', 'disabled']", restore_enablement["when"])
         self.assertIn("== 'enabled'", restore_enablement["ansible.builtin.systemd"]["enabled"])
         self.assertEqual(
             restore_enablement["ansible.builtin.systemd"]["scope"],
             "{{ nginx_deploy_systemd_scope }}",
         )
-        restore_generated = rescue["Restore pre-existing generated native Nginx service state after failure"]
+        restore_generated = native_restore["Restore pre-existing generated native Nginx service state after failure"]
         self.assertIn("== 'generated'", restore_generated["when"])
         self.assertNotIn("enabled", restore_generated["ansible.builtin.systemd"])
         self.assertEqual(
             restore_generated["ansible.builtin.systemd"]["scope"],
             "{{ nginx_deploy_systemd_scope }}",
         )
-        self.assertIn("Restore the exact legacy Nginx unit after failed takeover", rescue)
+        self.assertEqual(
+            native_restore_guard["rescue"][0]["name"],
+            "Capture failed pre-existing native Nginx restoration",
+        )
+        legacy_restore_guard = rescue["Attempt exact legacy Nginx restoration after failed takeover"]
+        self.assertEqual(
+            legacy_restore_guard["block"][0]["name"],
+            "Restore the exact legacy Nginx unit after failed takeover",
+        )
+        self.assertEqual(
+            legacy_restore_guard["rescue"][0]["name"],
+            "Capture failed legacy Nginx restoration",
+        )
         self.assertIn("Report failed native Nginx takeover after rollback", rescue)
 
         update_guard = next(
@@ -637,6 +661,25 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         )[0]["ansible.builtin.assert"]["that"]
         self.assertEqual(sum("not (nginx_deploy_manage_systemd | bool)" in item for item in deploy_asserts), 5)
         self.assertTrue(any("nginx_deploy_systemd_scope == 'system'" in item for item in deploy_asserts))
+        description_assertion = next(
+            item for item in deploy_asserts if "nginx_deploy_systemd_description is string" in item
+        )
+        for description, valid in (
+            ("Nginx container service", True),
+            ("Nginx\nAfter=network-online.target", False),
+            ("Nginx\rWantedBy=multi-user.target", False),
+        ):
+            with self.subTest(description=description):
+                self.assertEqual(
+                    self._evaluate(
+                        description_assertion,
+                        {
+                            "nginx_deploy_manage_systemd": True,
+                            "nginx_deploy_systemd_description": description,
+                        },
+                    ),
+                    valid,
+                )
         unit_assertion = next(item for item in deploy_asserts if "nginx_deploy_systemd_unit_name is string" in item)
         for unit_name, valid in (
             ("nginx", True),
