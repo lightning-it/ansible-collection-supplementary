@@ -24,9 +24,11 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
 
     def test_real_lifecycle_tasks_cover_accepted_and_rejected_states(self) -> None:
         block = yaml.safe_load((ROLE / "tasks/systemd.yml").read_text(encoding="utf-8"))[0]["block"]
-        validation = block[4]["ansible.builtin.assert"]["that"]
-        collision = block[5]["failed_when"]
-        self.assertEqual(block[5]["ansible.builtin.command"]["argv"][:3], ["podman", "pod", "exists"])
+        task_map = {task["name"]: task for task in block}
+        validation = task_map["Refuse unknown PostgreSQL lifecycle states"]["ansible.builtin.assert"]["that"]
+        collision_task = task_map["Refuse unmanaged PostgreSQL pod; remove it first"]
+        collision = collision_task["failed_when"]
+        self.assertEqual(collision_task["ansible.builtin.command"]["argv"][:3], ["podman", "pod", "exists"])
         self.assertIn("postgres_deploy_native_systemd_active", collision)
         self.assertFalse((ROLE / "templates/podman-kube@.service.j2").exists())
         cases = (
@@ -42,11 +44,24 @@ class PostgresSystemdPreservationTests(unittest.TestCase):
                 "postgres_deploy_legacy_systemd_active": {"rc": legacy_rc, "stdout": legacy},
                 "postgres_deploy_legacy_systemd_enabled": {"rc": 1, "stdout": "disabled"},
                 "postgres_deploy_native_systemd_active": {"rc": native_rc, "stdout": native},
+                "postgres_deploy_native_systemd_enabled": {"rc": 1, "stdout": "disabled"},
                 "postgres_deploy_existing_pod": {"rc": pod_rc},
             }
             valid = all(self._evaluate(check, variables) for check in validation)
             actual = (valid, self._evaluate(collision, variables))
             self.assertEqual(actual, expected)
+
+        lifecycle_contract = "\n".join(str(item) for item in validation)
+        for unsupported in ("static", "indirect", "transient", "linked"):
+            self.assertNotIn(unsupported, lifecycle_contract)
+
+        ownership = task_map["Refuse unproven drift in an existing native PostgreSQL Quadlet"]
+        ownership_contract = "\n".join(str(item) for item in ownership["ansible.builtin.assert"]["that"])
+        self.assertIn("postgres_deploy_native_quadlet_file.stat.isreg", ownership_contract)
+        self.assertIn("postgres_deploy_native_quadlet_file.stat.islnk", ownership_contract)
+        self.assertIn("Description=' ~ postgres_deploy_systemd_description", ownership_contract)
+        self.assertIn("Yaml=' ~ postgres_deploy_pod_manifest_path", ownership_contract)
+        self.assertIn("postgres_deploy_native_systemd_enabled", ownership_contract)
 
 
 if __name__ == "__main__":

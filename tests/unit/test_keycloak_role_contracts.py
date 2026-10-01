@@ -199,6 +199,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
         systemd_path = ROOT / "roles" / "keycloak_deploy" / "tasks" / "systemd.yml"
         systemd_tasks = yaml.safe_load(systemd_path.read_text(encoding="utf-8"))
         systemd_block = systemd_tasks[0]["block"]
+        systemd_map = {task["name"]: task for task in systemd_block}
         quadlet = next(task for task in systemd_block if task["name"] == "Manage the native Keycloak Quadlet service")
         self.assertEqual(
             quadlet["ansible.builtin.include_role"]["name"],
@@ -232,10 +233,19 @@ class KeycloakRoleContractTests(unittest.TestCase):
         collision = systemd_block[collision_index]
         self.assertEqual(collision["ansible.builtin.command"]["argv"][:3], ["podman", "pod", "exists"])
         self.assertIn("keycloak_deploy_native_systemd_active", collision["failed_when"])
+        ownership = systemd_map["Refuse unproven drift in an existing native Keycloak Quadlet"]
+        ownership_contract = "\n".join(str(item) for item in ownership["ansible.builtin.assert"]["that"])
+        self.assertIn("keycloak_deploy_native_quadlet_file.stat.isreg", ownership_contract)
+        self.assertIn("keycloak_deploy_native_quadlet_file.stat.islnk", ownership_contract)
+        self.assertIn("Description=' ~ keycloak_deploy_systemd_description", ownership_contract)
+        self.assertIn("Yaml=' ~ keycloak_deploy_pod_manifest_path", ownership_contract)
+        self.assertIn("keycloak_deploy_native_systemd_enabled", ownership_contract)
         lifecycle_assertions = systemd_block[validation_index]["ansible.builtin.assert"]["that"]
         lifecycle_contract = "\n".join(str(item) for item in lifecycle_assertions)
         for transient in ("activating", "reloading", "deactivating"):
             self.assertNotIn(transient, lifecycle_contract)
+        for unsupported in ("static", "indirect", "transient", "linked"):
+            self.assertNotIn(unsupported, lifecycle_contract)
         legacy_stop = next(
             task
             for task in systemd_block
@@ -244,6 +254,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
         legacy_stop_index = systemd_block.index(legacy_stop)
         self.assertLess(validation_index, stage_index)
         self.assertLess(validation_index, collision_index)
+        self.assertLess(systemd_block.index(ownership), collision_index)
         self.assertLess(collision_index, stage_index)
         self.assertLess(stage_index, legacy_stop_index)
         self.assertEqual(legacy_stop["ansible.builtin.systemd"]["state"], "stopped")

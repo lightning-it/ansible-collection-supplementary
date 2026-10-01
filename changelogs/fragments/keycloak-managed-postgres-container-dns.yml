@@ -3,6 +3,11 @@ bugfixes:
   - >-
     Restrict the generated PostgreSQL Pod manifest to its owner because the
     runtime manifest contains the effective database password.
+security_fixes:
+  - >-
+    Require exact native Quadlet ownership and reject unhandled legacy
+    enablement states before Keycloak or PostgreSQL can accept an existing
+    service or pod.
 breaking_changes:
   - >-
     Require an explicit PostgreSQL private endpoint and container port for

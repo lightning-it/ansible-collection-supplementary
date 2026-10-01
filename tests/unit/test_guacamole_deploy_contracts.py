@@ -128,6 +128,10 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("guacamole_deploy_legacy_unit_stat.stat.isreg", systemd_tasks)
         self.assertIn("no_log: true", systemd_tasks)
         self.assertIn("Refuse to replace an unknown Guacamole systemd unit", systemd_tasks)
+        self.assertIn("Refuse unproven drift in an existing native Guacamole Quadlet", systemd_tasks)
+        self.assertIn("guacamole_deploy_native_quadlet_file.stat.isreg", systemd_tasks)
+        self.assertIn("not (guacamole_deploy_native_quadlet_file.stat.islnk", systemd_tasks)
+        self.assertIn("Refuse unmanaged Guacamole pod; remove it first", systemd_tasks)
         self.assertIn("not (guacamole_deploy_legacy_unit_stat.stat.islnk", systemd_tasks)
         self.assertIn(
             "Stop and disable the exact legacy Guacamole unit before removal",
@@ -141,6 +145,14 @@ class GuacamoleDeployContractTests(unittest.TestCase):
             systemd_tasks.index("Stop and disable the exact legacy Guacamole unit before removal"),
             systemd_tasks.index("Remove the verified legacy Guacamole systemd unit"),
         )
+        self.assertLess(
+            systemd_tasks.index("Wait for Guacamole readiness before committing legacy removal"),
+            systemd_tasks.index("Remove the verified legacy Guacamole systemd unit"),
+        )
+        self.assertIn("Attempt exact legacy Guacamole restoration after failed takeover", systemd_tasks)
+        self.assertIn("Require native Guacamole inactivity before legacy restoration", systemd_tasks)
+        self.assertIn("guacamole_deploy_legacy_unit_raw.content | b64decode", systemd_tasks)
+        self.assertNotIn("- name: Wait for Guacamole readiness\n", tasks)
         self.assertNotIn("podman kube play", tasks)
         self.assertNotIn("podman kube down", tasks)
         self.assertIn(
@@ -166,14 +178,13 @@ class GuacamoleDeployContractTests(unittest.TestCase):
             validate["ansible.builtin.assert"]["that"],
             ["guacamole_deploy_legacy_unit_actual_lines == guacamole_deploy_legacy_unit_expected_lines"],
         )
+        transaction = task_map["Cut over to native Guacamole Quadlet with rollback"]
+        transaction_names = [task["name"] for task in transaction["block"]]
         self.assertLess(tasks.index(normalize), tasks.index(validate))
-        self.assertLess(
-            tasks.index(validate),
-            next(
-                index
-                for index, task in enumerate(tasks)
-                if task["name"] == "Stop and disable the exact legacy Guacamole unit before removal"
-            ),
+        self.assertLess(tasks.index(validate), tasks.index(transaction))
+        self.assertIn(
+            "Stop and disable the exact legacy Guacamole unit before removal",
+            transaction_names,
         )
 
     def test_oidc_group_claim_and_exact_connection_permissions_are_explicit(

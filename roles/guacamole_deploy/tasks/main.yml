@@ -39,19 +39,6 @@
     - not ansible_check_mode
     - not guacamole_deploy_skip_runtime | bool
 
-- name: Wait for Guacamole readiness
-  ansible.builtin.uri:
-    url: "{{ guacamole_deploy_health_url }}"
-    method: GET
-    status_code: 200
-    validate_certs: "{{ guacamole_deploy_validate_certs }}"
-  register: guacamole_deploy_health
-  until: guacamole_deploy_health.status == 200
-  retries: 40
-  delay: 5
-  changed_when: false
-  when: not ansible_check_mode and not guacamole_deploy_skip_runtime | bool
-
 - name: Derive the Guacamole break-glass password hash
   delegate_to: localhost
   become: false

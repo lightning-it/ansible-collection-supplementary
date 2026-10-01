@@ -45,6 +45,31 @@
       changed_when: false
       failed_when: false
 
+    - name: Inspect the exact native Keycloak unit enablement
+      ansible.builtin.command:
+        argv: >-
+          {{ ['systemctl']
+             + (['--user'] if keycloak_deploy_systemd_scope == 'user' else [])
+             + ['is-enabled', keycloak_deploy_systemd_unit_name ~ '.service'] }}
+      register: keycloak_deploy_native_systemd_enabled
+      changed_when: false
+      failed_when: false
+
+    - name: Inspect the desired native Keycloak Quadlet file
+      ansible.builtin.stat:
+        path: "{{ keycloak_deploy_quadlet_dir }}/{{ keycloak_deploy_systemd_unit_name }}.kube"
+        follow: false
+      register: keycloak_deploy_native_quadlet_file
+
+    - name: Read the desired native Keycloak Quadlet file
+      ansible.builtin.slurp:
+        path: "{{ keycloak_deploy_quadlet_dir }}/{{ keycloak_deploy_systemd_unit_name }}.kube"
+      register: keycloak_deploy_native_quadlet_read
+      when:
+        - keycloak_deploy_native_quadlet_file.stat.exists | default(false)
+        - keycloak_deploy_native_quadlet_file.stat.isreg | default(false)
+        - not (keycloak_deploy_native_quadlet_file.stat.islnk | default(false))
+
     - name: Refuse unknown Keycloak lifecycle states
       ansible.builtin.assert:
         that:
@@ -55,19 +80,72 @@
           - keycloak_deploy_legacy_systemd_enabled.rc in [0, 1, 3, 4]
           - >-
             keycloak_deploy_legacy_systemd_enabled.stdout | trim
-            in [
-              'enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias',
-              'disabled', 'static', 'indirect', 'generated', 'transient',
-              'masked', 'masked-runtime', 'not-found'
-            ]
+            in ['enabled', 'disabled', 'not-found']
           - keycloak_deploy_native_systemd_active.rc in [0, 3, 4]
           - >-
             keycloak_deploy_native_systemd_active.stdout | trim
             in ['active', 'inactive', 'failed', 'unknown']
+          - keycloak_deploy_native_systemd_enabled.rc in [0, 1, 3, 4]
+          - >-
+            keycloak_deploy_native_systemd_enabled.stdout | trim
+            in ['enabled', 'disabled', 'generated', 'not-found']
+          - >-
+            not (
+              keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
+              and keycloak_deploy_native_systemd_active.stdout | trim == 'active'
+            )
         fail_msg: >-
           Unable to prove the exact Keycloak legacy/native lifecycle state;
           refusing Quadlet takeover.
         quiet: true
+
+    - name: Refuse unproven drift in an existing native Keycloak Quadlet
+      ansible.builtin.assert:
+        that:
+          - keycloak_deploy_native_quadlet_file.stat.exists | default(false)
+          - keycloak_deploy_native_quadlet_file.stat.isreg | default(false)
+          - not (keycloak_deploy_native_quadlet_file.stat.islnk | default(false))
+          - keycloak_deploy_native_quadlet_read.content | default('') | length > 0
+          - >-
+            (
+              keycloak_deploy_native_quadlet_read.content
+              | default('') | b64decode
+            ).splitlines()
+            | reject('equalto', '') | list
+            == (
+              [
+                '[Unit]',
+                'Description=' ~ keycloak_deploy_systemd_description,
+                'After=network-online.target',
+                'Wants=network-online.target',
+                '[Kube]',
+                'Yaml=' ~ keycloak_deploy_pod_manifest_path
+              ]
+              + (
+                keycloak_deploy_networks
+                | map('regex_replace', '^(.*)$', 'Network=\\1') | list
+              )
+              + ['[Install]', 'WantedBy=multi-user.target']
+            )
+          - >-
+            (
+              keycloak_deploy_systemd_enabled | bool
+              and keycloak_deploy_native_systemd_enabled.stdout | trim
+              in ['enabled', 'generated']
+            )
+            or (
+              not (keycloak_deploy_systemd_enabled | bool)
+              and keycloak_deploy_native_systemd_enabled.stdout | trim == 'disabled'
+            )
+        fail_msg: >-
+          The existing native Keycloak Quadlet cannot be proven role-owned
+          with the requested manifest, networks, description, and enablement.
+          Refusing to collide with or take over an administrator-owned unit.
+        quiet: true
+      when: >-
+        keycloak_deploy_native_quadlet_file.stat.exists | default(false)
+        or keycloak_deploy_native_systemd_enabled.stdout | trim != 'not-found'
+        or keycloak_deploy_native_systemd_active.stdout | trim != 'unknown'
 
     - name: Refuse unmanaged Keycloak pod; remove it first
       ansible.builtin.command:
@@ -94,8 +172,7 @@
         podman_systemd_networks: "{{ keycloak_deploy_networks }}"
       when: >-
         keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
-        or keycloak_deploy_legacy_systemd_enabled.stdout | trim
-        in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
+        or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
 
     - name: Stop and disable the exact legacy Keycloak unit before Quadlet takeover
       ansible.builtin.systemd:
@@ -104,8 +181,7 @@
         enabled: false
       when: >-
         keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
-        or keycloak_deploy_legacy_systemd_enabled.stdout | trim
-        in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
+        or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
 
     - name: Manage the native Keycloak Quadlet service
       ansible.builtin.include_role:
@@ -118,8 +194,7 @@
               keycloak_deploy_kubeplay_remove | default(false) | bool
               or keycloak_deploy_kubeplay_run | default(false) | bool
               or keycloak_deploy_legacy_systemd_active.stdout | trim == 'active'
-              or keycloak_deploy_legacy_systemd_enabled.stdout | trim
-                in ['enabled', 'enabled-runtime', 'linked', 'linked-runtime', 'alias']
+              or keycloak_deploy_legacy_systemd_enabled.stdout | trim == 'enabled'
             )
             else 'present'
           }}
