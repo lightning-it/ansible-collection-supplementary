@@ -3,7 +3,7 @@ galaxy_info:
   role_name: keycloak_deploy
   namespace: lit
   author: Lightning IT
-  description: Deploy Keycloak with PostgreSQL in a Podman pod.
+  description: Deploy Keycloak with PostgreSQL from kube manifests through Podman Quadlet.
   company: Lightning IT
   license: MIT
   min_ansible_version: "2.18"
@@ -15,6 +15,7 @@ galaxy_info:
     - modulix
     - keycloak
     - podman
+    - quadlet
     - automation
     - devops
 

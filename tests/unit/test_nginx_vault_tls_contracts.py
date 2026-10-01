@@ -6,6 +6,7 @@ import base64
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -733,9 +734,10 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             valid = all(self._evaluate(check, variables) for check in lifecycle_assertions)
             self.assertEqual((valid, self._evaluate(collision_condition, variables)), expected)
 
-        deploy_asserts = yaml.safe_load(
+        deploy_tasks = yaml.safe_load(
             (ROOT / "roles" / "nginx_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
-        )[0]["ansible.builtin.assert"]["that"]
+        )
+        deploy_asserts = deploy_tasks[0]["ansible.builtin.assert"]["that"]
         self.assertEqual(sum("not (nginx_deploy_manage_systemd | bool)" in item for item in deploy_asserts), 5)
         self.assertTrue(any("nginx_deploy_systemd_scope == 'system'" in item for item in deploy_asserts))
         enabled_assertion = next(item for item in deploy_asserts if "nginx_deploy_systemd_enabled is boolean" in item)
@@ -795,9 +797,12 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         for network, valid in (
             ("lit-private", True),
             ("podman.network_01", True),
+            ("keycloak-tiny-access.network:ip=10.89.40.4", True),
             ("lit private", False),
             ("lit-private\nAfter=network-online.target", False),
             ("lit-private\rWantedBy=multi-user.target", False),
+            ("lit-private:ip=10.0.0.1;Network=other", False),
+            ("lit-private:ip=not-an-address", False),
             ("-leading-dash", False),
         ):
             with self.subTest(network=network):
@@ -805,6 +810,14 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                     self._evaluate(network_assertion, {"nginx_deploy_networks": [network]}),
                     valid,
                 )
+
+        static_ip_task = next(task for task in deploy_tasks if task["name"].startswith("Validate static IPv4"))
+        validator = static_ip_task["ansible.builtin.command"]["argv"][2]
+        results = [
+            subprocess.run([sys.executable, "-c", validator, address], check=False).returncode  # noqa: S603
+            for address in ("10.89.40.4", "999.1.1.1")
+        ]
+        self.assertEqual(results, [0, 1])
 
     def test_foundational_dependency_floor_supports_quadlet_networks(self) -> None:
         galaxy = yaml.safe_load((ROOT / "galaxy.yml").read_text(encoding="utf-8"))

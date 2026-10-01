@@ -61,6 +61,16 @@ argument_specs:
       keycloak_deploy_host_network:
         description: Run the Keycloak pod in the host network namespace.
         type: bool
+      keycloak_deploy_networks:
+        description: Native Quadlet network entries used by the persistent Keycloak pod.
+        type: list
+        elements: str
+      keycloak_deploy_postgres_networks:
+        description: >-
+          Native Quadlet network entries used by managed PostgreSQL; defaults
+          to the Keycloak networks without per-container options.
+        type: list
+        elements: str
       keycloak_deploy_postgres_host_ip:
         description: Host address on which the dedicated PostgreSQL port is published.
         type: str
@@ -120,6 +130,14 @@ argument_specs:
       keycloak_deploy_proxy_headers:
         description: Optional Keycloak proxy-header handling mode.
         type: str
+        choices:
+          - ""
+          - forwarded
+          - xforwarded
+      keycloak_deploy_proxy_trusted_addresses:
+        description: Exact proxy IP addresses or CIDRs trusted to supply proxy headers.
+        type: list
+        elements: str
       keycloak_deploy_http_relative_path:
         description: Optional relative path under which Keycloak serves HTTP requests.
         type: str
@@ -146,6 +164,11 @@ argument_specs:
       keycloak_deploy_postgres_port:
         description: Host port published by the dedicated PostgreSQL service.
         type: int
+      keycloak_deploy_postgres_container_port:
+        description: Container port used by the dedicated PostgreSQL service.
+        type: int
+        choices:
+          - 5432
       keycloak_deploy_db_wait_port:
         description: PostgreSQL port used by the pre-start availability check.
         type: int
@@ -260,5 +283,19 @@ argument_specs:
         description: Internal handler flag requesting execution of the rendered Podman kube workload.
         type: bool
       keycloak_deploy_systemd_unit_name:
-        description: Systemd unit name used to manage the Keycloak Podman kube workload.
+        description: Base name of the native Quadlet-generated Keycloak systemd service.
         type: str
+      keycloak_deploy_systemd_description:
+        description: Description written to the native Keycloak Quadlet unit.
+        type: str
+      keycloak_deploy_systemd_scope:
+        description: System systemd scope used by the native Keycloak Quadlet unit.
+        type: str
+        choices:
+          - system
+      keycloak_deploy_quadlet_dir:
+        description: Directory containing the native Keycloak .kube Quadlet unit.
+        type: path
+      keycloak_deploy_systemd_enabled:
+        description: Whether the native Quadlet-generated Keycloak service is enabled.
+        type: bool

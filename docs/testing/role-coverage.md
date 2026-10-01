@@ -61,8 +61,8 @@ promotion input only and never satisfy the release-required supported-target mat
 | keycloak_backup_restore | keycloak | backup_component | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | create_backup_modify_state_restore_and_verify | — | — | Canonical Heavy creates a PostgreSQL backup but does not execute this realm backup/restore role. | — |
 | keycloak_cac | keycloak | configuration_as_code | production | ubuntu-24.04 | rhel-9, rhel-10 | supported | supported | supported | apply_query_and_idempotently_reconcile_api_objects | keycloak_deploy, community.general | — | Tiny exercises real flow, provider, required-action and deferred-binding API lifecycle and idempotency; a complete upstream broker login remains unproven., Current scenarios do not prove deletion reconciliation for every managed object type., RHEL 9 and RHEL 10 remain candidate targets until the complete exact-commit matrix passes on approved images. | keycloak-application-acceptance, keycloak-heavy, keycloak-tiny |
 | keycloak_config | keycloak | configuration_as_code | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | apply_query_and_reconcile_runtime_configuration | keycloak_deploy | — | No direct scenario coverage. | — |
-| keycloak_deploy | keycloak | web_application | production | ubuntu-24.04 | rhel-9, rhel-10 | supported | supported | supported | browser_and_authenticated_oidc_api | postgres_deploy, lit.foundational.kubeplay | — | Heavy scopes its destructive PostgreSQL restore drill to an isolated probe table; whole-database disaster recovery is not claimed., No supported-version upgrade path is currently claimed by this deployment role., Heavy proves LDAP CA and hostname validation with an independent client; Keycloak JVM truststore enforcement is not separately claimed., RHEL 9 and RHEL 10 remain candidate targets until the complete exact-commit matrix passes on approved images. | keycloak-application-acceptance, keycloak-heavy, keycloak-tiny |
-| keycloak_destroy | keycloak | infrastructure | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | safe_teardown_and_absence | lit.foundational.kubeplay | — | No direct scenario coverage. | — |
+| keycloak_deploy | keycloak | web_application | production | ubuntu-24.04 | rhel-9, rhel-10 | supported | supported | supported | browser_and_authenticated_oidc_api | postgres_deploy, lit.foundational.kubeplay, lit.foundational.podman_systemd | — | Heavy scopes its destructive PostgreSQL restore drill to an isolated probe table; whole-database disaster recovery is not claimed., No supported-version upgrade path is currently claimed by this deployment role., Heavy proves LDAP CA and hostname validation with an independent client; Keycloak JVM truststore enforcement is not separately claimed., RHEL 9 and RHEL 10 remain candidate targets until the complete exact-commit matrix passes on approved images. | keycloak-application-acceptance, keycloak-heavy, keycloak-tiny |
+| keycloak_destroy | keycloak | infrastructure | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | safe_teardown_and_absence | lit.foundational.kubeplay | — | No direct scenario coverage., Quadlet teardown is unsupported. | — |
 | keycloak_ops | keycloak | infrastructure | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | restart_recovery_and_health | — | — | Canonical Heavy restarts the container directly rather than through this role. | — |
 | keycloak_preflight | keycloak | validator | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | not-applicable | parent_component_validation | — | — | No direct scenario coverage. | — |
 | keycloak_upgrade | keycloak | infrastructure | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | supported_upgrade_and_post_upgrade_workflow | keycloak_backup_restore, keycloak_deploy, keycloak_validate | — | No direct scenario coverage. | — |
@@ -88,8 +88,8 @@ promotion input only and never satisfy the release-required supported-target mat
 | postgres | postgres | orchestrator | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | real_client_transaction_permissions_persistence_and_restore | postgres_preflight, postgres_deploy, postgres_config, postgres_validate, postgres_ops, postgres_backup_restore, postgres_upgrade, postgres_destroy | — | Orchestrator is not directly exercised. | — |
 | postgres_backup_restore | postgres | backup_component | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | create_backup_modify_state_restore_and_verify | — | — | Keycloak Heavy proves exact restoration of an isolated probe table, not whole-database disaster recovery. | — |
 | postgres_config | postgres | configuration_as_code | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | apply_query_reconcile_and_delete_configuration | — | — | Implementation only sets and reports override facts. | — |
-| postgres_deploy | postgres | database | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | real_client_transaction_permissions_persistence_and_restore | lit.foundational.kubeplay | — | Root scenario is a syntax stub; Keycloak exercises deployment only indirectly., Systemd fallback branches have isolated Ansible regression coverage, not full service lifecycle acceptance. | postgres-deploy-basic |
-| postgres_destroy | postgres | infrastructure | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | safe_teardown_and_absence | lit.foundational.kubeplay | — | No direct scenario coverage. | — |
+| postgres_deploy | postgres | database | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | real_client_transaction_permissions_persistence_and_restore | lit.foundational.kubeplay, lit.foundational.podman_systemd | — | Root scenario is a syntax stub; Keycloak exercises deployment only indirectly., Native Quadlet lifecycle is covered indirectly by the Keycloak Heavy scenario. | postgres-deploy-basic |
+| postgres_destroy | postgres | infrastructure | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | safe_teardown_and_absence | lit.foundational.kubeplay | — | No direct scenario coverage., Quadlet teardown is unsupported. | — |
 | postgres_ops | postgres | infrastructure | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | restart_recovery_and_query | — | — | No direct scenario coverage. | — |
 | postgres_preflight | postgres | validator | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | not-applicable | parent_component_validation | — | — | No direct scenario coverage. | — |
 | postgres_upgrade | postgres | infrastructure | experimental | — | rhel-9, ubuntu-22.04, ubuntu-24.04 | experimental | experimental | experimental | supported_upgrade_and_post_upgrade_query | postgres_backup_restore, postgres_deploy, postgres_validate | — | No direct scenario coverage. | — |
@@ -695,7 +695,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Supported targets: ubuntu-24.04; candidate targets: rhel-9, rhel-10.
 - Profiles: Tiny `supported`, Heavy `supported`, Application Acceptance `supported`.
 - Acceptance surface: `apply_query_and_idempotently_reconcile_api_objects`.
-- Role dependencies: keycloak_deploy, community.general; exercised scenario dependencies: postgres_backup_restore, samba.
+- Role dependencies: keycloak_deploy, community.general; exercised scenario dependencies: nginx_config, nginx_deploy, postgres_backup_restore, samba.
 - External dependencies/blockers: —.
 - Required-secret policy: Use ephemeral test credentials and protected runtime secret providers; never commit secret values.
 - Local execution: `molecule test -s keycloak-application-acceptance`, `molecule test -s keycloak-heavy`, `molecule test -s keycloak-tiny`; CI matrix execution: mandatory for supported, real production scenarios on registry-supported targets.
@@ -727,7 +727,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Supported targets: ubuntu-24.04; candidate targets: rhel-9, rhel-10.
 - Profiles: Tiny `supported`, Heavy `supported`, Application Acceptance `supported`.
 - Acceptance surface: `browser_and_authenticated_oidc_api`.
-- Role dependencies: postgres_deploy, lit.foundational.kubeplay; exercised scenario dependencies: postgres_backup_restore, samba.
+- Role dependencies: postgres_deploy, lit.foundational.kubeplay, lit.foundational.podman_systemd; exercised scenario dependencies: nginx_config, nginx_deploy, postgres_backup_restore, samba.
 - External dependencies/blockers: —.
 - Required-secret policy: Use ephemeral test credentials and protected runtime secret providers; never commit secret values.
 - Local execution: `molecule test -s keycloak-application-acceptance`, `molecule test -s keycloak-heavy`, `molecule test -s keycloak-tiny`; CI matrix execution: mandatory for supported, real production scenarios on registry-supported targets.
@@ -750,7 +750,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Candidate-target execution: no runnable candidate matrix is currently declared.
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
-- Known limitations: No direct scenario coverage.
+- Known limitations: No direct scenario coverage., Quadlet teardown is unsupported.
 
 ### `keycloak_ops`
 
@@ -1159,14 +1159,14 @@ promotion input only and never satisfy the release-required supported-target mat
 - Supported targets: —; candidate targets: rhel-9, ubuntu-22.04, ubuntu-24.04.
 - Profiles: Tiny `experimental`, Heavy `experimental`, Application Acceptance `experimental`.
 - Acceptance surface: `real_client_transaction_permissions_persistence_and_restore`.
-- Role dependencies: lit.foundational.kubeplay; exercised scenario dependencies: —.
+- Role dependencies: lit.foundational.kubeplay, lit.foundational.podman_systemd; exercised scenario dependencies: —.
 - External dependencies/blockers: —.
 - Required-secret policy: Use ephemeral test credentials and protected runtime secret providers; never commit secret values.
 - Local execution: `molecule test -s postgres-deploy-basic`; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
 - Candidate-target execution: no runnable candidate matrix is currently declared.
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
-- Known limitations: Root scenario is a syntax stub; Keycloak exercises deployment only indirectly., Systemd fallback branches have isolated Ansible regression coverage, not full service lifecycle acceptance.
+- Known limitations: Root scenario is a syntax stub; Keycloak exercises deployment only indirectly., Native Quadlet lifecycle is covered indirectly by the Keycloak Heavy scenario.
 
 ### `postgres_destroy`
 
@@ -1182,7 +1182,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Candidate-target execution: no runnable candidate matrix is currently declared.
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
-- Known limitations: No direct scenario coverage.
+- Known limitations: No direct scenario coverage., Quadlet teardown is unsupported.
 
 ### `postgres_ops`
 
@@ -1776,7 +1776,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | incus-esxi-image-basic | Tiny | experimental | partial | incus_esxi_image | — | not-applicable | — | Scenario exercises controller-side role behavior without deploying an independently versioned application. | False | False | False |
 | keycloak-application-acceptance | Application Acceptance | supported | real | keycloak_cac, keycloak_deploy | postgres_backup_restore, samba | runtime-container | — | Scenario deploys and verifies independently versioned application containers; immutable runtime digests are mandatory. | True | True | True |
 | keycloak-heavy | Heavy | supported | real | keycloak_cac, keycloak_deploy | postgres_backup_restore, samba | runtime-container | — | Scenario deploys and verifies independently versioned application containers; immutable runtime digests are mandatory. | True | True | True |
-| keycloak-tiny | Tiny | supported | real | keycloak_cac, keycloak_deploy | — | runtime-container | — | Scenario deploys and verifies independently versioned application containers; immutable runtime digests are mandatory. | True | True | True |
+| keycloak-tiny | Tiny | supported | real | keycloak_cac, keycloak_deploy | nginx_config, nginx_deploy | runtime-container | — | Scenario deploys and verifies independently versioned application containers; immutable runtime digests are mandatory. | True | True | True |
 | manage-esxi-basic | Tiny | experimental | stub | manage_esxi | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | minio-backup-restore-basic | Tiny | experimental | stub | minio_backup_restore | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |
 | minio-bootstrap-basic | Tiny | experimental | stub | minio_bootstrap | — | not-applicable | — | Scenario is a role contract or assertion stub and does not deploy an independently versioned application. | False | False | False |

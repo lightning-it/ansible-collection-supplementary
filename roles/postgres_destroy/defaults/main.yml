@@ -1,5 +1,6 @@
 ---
 postgres_destroy_execute: false
+postgres_destroy_manage_systemd: "{{ postgres_deploy_manage_systemd | default(true) }}"
 postgres_destroy_pod_name: "{{ postgres_deploy_pod_name | default('postgres', true) }}"
 postgres_destroy_pod_manifest_path: >-
   {{
