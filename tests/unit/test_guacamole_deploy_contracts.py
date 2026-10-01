@@ -237,6 +237,9 @@ class GuacamoleDeployContractTests(unittest.TestCase):
             systemd_tasks.index("Read the exact legacy Guacamole unit before takeover"),
         )
         self.assertIn("guacamole_deploy_legacy_unit_stat.stat.isreg", systemd_tasks)
+        self.assertIn("guacamole_deploy_legacy_unit_stat.stat.mode | default('') == '0644'", systemd_tasks)
+        self.assertIn("guacamole_deploy_legacy_unit_stat.stat.pw_name | default('') == 'root'", systemd_tasks)
+        self.assertIn("guacamole_deploy_legacy_unit_stat.stat.gr_name | default('') == 'root'", systemd_tasks)
         self.assertIn("no_log: true", systemd_tasks)
         self.assertIn("Refuse to replace an unknown Guacamole systemd unit", systemd_tasks)
         self.assertIn("Resolve the loaded legacy Guacamole unit fragment", systemd_tasks)
@@ -455,6 +458,14 @@ class GuacamoleDeployContractTests(unittest.TestCase):
                     "guacamole_deploy_native_quadlet_file.stat.gr_name | default('') == 'root'",
                     f"guacamole_deploy_native_quadlet_file.stat.gid | int == {os.getegid()}",
                 )
+                .replace(
+                    "guacamole_deploy_legacy_unit_stat.stat.pw_name | default('') == 'root'",
+                    f"guacamole_deploy_legacy_unit_stat.stat.uid | int == {os.geteuid()}",
+                )
+                .replace(
+                    "guacamole_deploy_legacy_unit_stat.stat.gr_name | default('') == 'root'",
+                    f"guacamole_deploy_legacy_unit_stat.stat.gid | int == {os.getegid()}",
+                )
                 .replace("      retries: 40\n      delay: 5\n", "      retries: 1\n      delay: 0\n", 1),
                 encoding="utf-8",
             )
@@ -635,6 +646,22 @@ esac
                 "FAKE_RELOAD_FAILURE_USED": str(reload_failure_used),
                 "PATH": f"{fake_bin}:{os.environ['PATH']}",
             }
+            legacy_unit.chmod(0o666)
+            insecure_result = subprocess.run(  # noqa: S603
+                [executable, "-i", "localhost,", "-c", "local", str(playbook)],
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+            )
+            insecure_output = insecure_result.stdout + insecure_result.stderr
+            self.assertNotEqual(insecure_result.returncode, 0, insecure_output)
+            self.assertIn("root-owned regular file with mode 0644", insecure_output)
+            self.assertEqual(manifest.read_bytes(), original)
+            self.assertNotIn("stop guacamole.service", log.read_text(encoding="utf-8"))
+            legacy_unit.chmod(0o644)
+            log.unlink(missing_ok=True)
             try:
                 result = subprocess.run(  # noqa: S603
                     [executable, "-i", "localhost,", "-c", "local", str(playbook)],

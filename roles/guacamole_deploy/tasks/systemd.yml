@@ -298,9 +298,12 @@
     that:
       - not (guacamole_deploy_legacy_unit_stat.stat.islnk | default(false) | bool)
       - guacamole_deploy_legacy_unit_stat.stat.isreg | default(false) | bool
+      - guacamole_deploy_legacy_unit_stat.stat.mode | default('') == '0644'
+      - guacamole_deploy_legacy_unit_stat.stat.pw_name | default('') == 'root'
+      - guacamole_deploy_legacy_unit_stat.stat.gr_name | default('') == 'root'
     fail_msg: >-
-      The exact Guacamole service path exists but is not a regular file.
-      Refusing to follow or replace it.
+      The exact Guacamole service path exists but is not a root-owned regular
+      file with mode 0644. Refusing to read, follow, or replace it.
     quiet: true
   when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
 
