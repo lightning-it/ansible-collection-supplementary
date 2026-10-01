@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import http.server
 import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -21,6 +23,15 @@ SYSTEMD_TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "systemd.yml"
 HANDLERS = ROOT / "roles" / "guacamole_deploy" / "handlers" / "main.yml"
 LEGACY_SERVICE = ROOT / "roles" / "guacamole_deploy" / "templates" / "guacamole.service.j2"
 OIDC_GROUP_TASKS = ROOT / "roles" / "guacamole_deploy" / "tasks" / "reconcile_oidc_groups.yml"
+
+
+class _HealthyHandler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self) -> None:  # noqa: N802
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
 
 
 class GuacamoleDeployContractTests(unittest.TestCase):
@@ -212,10 +223,8 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("scope: system", handlers)
         self.assertNotIn('scope: "{{ guacamole_deploy_systemd_scope }}"', handlers)
         self.assertIn("notify: Reload systemd after verified legacy Guacamole unit removal", systemd_tasks)
-        self.assertIn(
-            "'restarted' if guacamole_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped'",
-            systemd_tasks,
-        )
+        self.assertIn("'started'", systemd_tasks)
+        self.assertIn("guacamole_deploy_manifest_render.changed", systemd_tasks)
         self.assertLess(
             systemd_tasks.index("Remove the verified legacy Guacamole systemd unit"),
             systemd_tasks.index("Flush systemd reload after verified legacy Guacamole unit removal"),
@@ -259,8 +268,20 @@ class GuacamoleDeployContractTests(unittest.TestCase):
             "Require the staged native Guacamole Quadlet provenance boundary",
         ):
             self.assertEqual(transaction_map[name]["when"], staging_condition)
+        manage_action = transaction_map["Manage native Guacamole Quadlet service"]["vars"]["podman_systemd_action"]
+        self.assertIn("guacamole_deploy_native_systemd_active.stdout | trim != 'active'", manage_action)
+        self.assertNotIn("guacamole_deploy_legacy_unit_stat.stat.exists", manage_action)
+        native_restoration = next(
+            task
+            for task in transaction["rescue"]
+            if task["name"] == "Attempt pre-existing native Guacamole service-state restoration"
+        )
+        for task in native_restoration["block"]:
+            state = task["ansible.builtin.systemd"]["state"]
+            self.assertIn("'started'", state)
+            self.assertIn("guacamole_deploy_manifest_render.changed", state)
 
-    def test_failed_readiness_executes_exact_manifest_and_service_rollback(self) -> None:
+    def test_post_removal_reload_failure_executes_exact_manifest_and_service_rollback(self) -> None:
         executable = shutil.which("ansible-playbook")
         self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
 
@@ -397,6 +418,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
                 encoding="utf-8",
             )
             legacy_unit.chmod(0o644)
+            legacy_original = legacy_unit.read_bytes()
             native_quadlet = quadlet_dir / "guacamole-pod.kube"
 
             systemctl = fake_bin / "systemctl"
@@ -454,7 +476,11 @@ case "$command_name" in
   disable) printf disabled > "$enabled_file" ;;
   start|restart) printf active > "$active_file" ;;
   stop) printf inactive > "$active_file" ;;
-  daemon-reload) ;;
+  daemon-reload)
+    if [ ! -e "$FAKE_LEGACY_UNIT" ]; then
+      exit 42
+    fi
+    ;;
   list-unit-files) printf '%s %s\\n' "$unit" "$enabled" ;;
 esac
 """,
@@ -468,6 +494,9 @@ esac
             )
             podman.chmod(0o755)
 
+            health_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _HealthyHandler)
+            health_thread = threading.Thread(target=health_server.serve_forever, daemon=True)
+            health_thread.start()
             playbook = root / "rollback.yml"
             playbook.write_text(
                 yaml.safe_dump(
@@ -480,7 +509,9 @@ esac
                                 "guacamole_deploy_manifest_path": str(manifest),
                                 "guacamole_deploy_quadlet_dir": str(quadlet_dir),
                                 "guacamole_deploy_legacy_systemd_unit_path": str(legacy_unit),
-                                "guacamole_deploy_health_url": "http://127.0.0.1:9/guacamole/",
+                                "guacamole_deploy_health_url": (
+                                    f"http://127.0.0.1:{health_server.server_port}/guacamole/"
+                                ),
                                 "guacamole_deploy_secrets": {"db_password": "OFFLINE_TEST_ONLY"},
                             },
                             "tasks": [
@@ -512,14 +543,19 @@ esac
                 "FAKE_NATIVE_QUADLET": str(native_quadlet),
                 "PATH": f"{fake_bin}:{os.environ['PATH']}",
             }
-            result = subprocess.run(  # noqa: S603
-                [executable, "-i", "localhost,", "-c", "local", str(playbook)],
-                env=environment,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=60,
-            )
+            try:
+                result = subprocess.run(  # noqa: S603
+                    [executable, "-i", "localhost,", "-c", "local", str(playbook)],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=60,
+                )
+            finally:
+                health_server.shutdown()
+                health_server.server_close()
+                health_thread.join(timeout=5)
 
             output = result.stdout + result.stderr
             self.assertNotEqual(result.returncode, 0, output)
@@ -527,6 +563,8 @@ esac
             self.assertEqual(manifest.read_bytes(), original)
             self.assertEqual(manifest.stat().st_mode & 0o777, 0o640)
             self.assertTrue(legacy_unit.exists())
+            self.assertEqual(legacy_unit.read_bytes(), legacy_original)
+            self.assertEqual(legacy_unit.stat().st_mode & 0o777, 0o644)
             self.assertFalse(native_quadlet.exists())
             service_log = log.read_text(encoding="utf-8")
             evidence = f"{output}\nSYSTEMCTL LOG:\n{service_log}"
@@ -536,6 +574,7 @@ esac
             self.assertIn("stop guacamole-pod.service", service_log, evidence)
             self.assertIn("enable guacamole.service", service_log, evidence)
             self.assertIn("start guacamole.service", service_log, evidence)
+            self.assertGreaterEqual(service_log.count("daemon-reload"), 2, evidence)
             legacy_state = "guacamole_service"
             native_state = "guacamole-pod_service"
             self.assertEqual((state / f"{legacy_state}.active").read_text(encoding="utf-8"), "active")

@@ -457,7 +457,7 @@
             'restarted'
             if (
               guacamole_deploy_manifest_render.changed | default(false) | bool
-              or guacamole_deploy_legacy_unit_stat.stat.exists | default(false) | bool
+              or guacamole_deploy_native_systemd_active.stdout | trim != 'active'
             )
             else 'present'
           }}
@@ -553,7 +553,18 @@
           ansible.builtin.systemd:
             name: "{{ guacamole_deploy_systemd_unit_name }}.service"
             state: >-
-              {{ 'restarted' if guacamole_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+              {{
+                'restarted'
+                if (
+                  guacamole_deploy_native_systemd_active.stdout | trim == 'active'
+                  and guacamole_deploy_manifest_render.changed | default(false) | bool
+                )
+                else (
+                  'started'
+                  if guacamole_deploy_native_systemd_active.stdout | trim == 'active'
+                  else 'stopped'
+                )
+              }}
             enabled: >-
               {{ guacamole_deploy_native_systemd_enabled.stdout | trim == 'enabled' }}
             scope: "{{ guacamole_deploy_systemd_scope }}"
@@ -563,7 +574,18 @@
           ansible.builtin.systemd:
             name: "{{ guacamole_deploy_systemd_unit_name }}.service"
             state: >-
-              {{ 'restarted' if guacamole_deploy_native_systemd_active.stdout | trim == 'active' else 'stopped' }}
+              {{
+                'restarted'
+                if (
+                  guacamole_deploy_native_systemd_active.stdout | trim == 'active'
+                  and guacamole_deploy_manifest_render.changed | default(false) | bool
+                )
+                else (
+                  'started'
+                  if guacamole_deploy_native_systemd_active.stdout | trim == 'active'
+                  else 'stopped'
+                )
+              }}
             scope: "{{ guacamole_deploy_systemd_scope }}"
           when: guacamole_deploy_native_systemd_enabled.stdout | trim == 'generated'
       rescue:
