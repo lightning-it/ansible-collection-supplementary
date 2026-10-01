@@ -10,17 +10,21 @@
       quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
     keycloak_deploy_start_command: start
     keycloak_deploy_manage_postgres: true
-    keycloak_deploy_manage_systemd: false
+    keycloak_deploy_manage_systemd: true
     keycloak_deploy_install_packages: true
     keycloak_deploy_generate_secrets: false
     keycloak_deploy_store_generated_secrets: false
     keycloak_deploy_db_password: "{{ keycloak_tiny_db_password }}"
     keycloak_deploy_admin_password: "{{ keycloak_tiny_admin_password }}"
     keycloak_deploy_host_ip: 127.0.0.1
-    keycloak_deploy_postgres_host_ip: 0.0.0.0
-    keycloak_deploy_host_network: true
-    keycloak_deploy_postgres_host_network: true
-    keycloak_deploy_db_host: 127.0.0.1
+    keycloak_deploy_postgres_host_ip: 127.0.0.1
+    keycloak_deploy_host_network: false
+    keycloak_deploy_postgres_host_network: false
+    keycloak_deploy_networks:
+      - keycloak-tiny-access.network:ip=10.89.40.2
+    keycloak_deploy_postgres_networks:
+      - keycloak-tiny-access.network:ip=10.89.40.3
+    keycloak_deploy_db_host: 10.89.40.3
     keycloak_deploy_db_port: 5432
     keycloak_deploy_db_wait_host: 127.0.0.1
     keycloak_deploy_db_wait_port: 5432
@@ -33,8 +37,10 @@
     keycloak_deploy_env_extra:
       KC_HTTP_PORT: "18080"
       KC_HTTP_MANAGEMENT_PORT: "19000"
-      KC_HTTP_ENABLED: "true"
       KC_HOSTNAME_STRICT: "false"
+    keycloak_deploy_proxy_headers: xforwarded
+    keycloak_deploy_proxy_trusted_addresses:
+      - 10.89.40.4/32
     keycloak_deploy_pod_name: keycloak-tiny
     keycloak_deploy_postgres_pod_name: keycloak-tiny-postgres
     keycloak_deploy_pod_manifest_path: /etc/podman/pods/keycloak-tiny.yml
@@ -42,6 +48,23 @@
     keycloak_deploy_host_data_dir: /srv/keycloak-tiny/data
     keycloak_deploy_postgres_data_dir: /srv/keycloak-tiny/postgres
     keycloak_deploy_config_dir: /srv/keycloak-tiny/config
+    nginx_deploy_pod_name: keycloak-tiny-edge
+    nginx_deploy_host_ip: 127.0.0.1
+    nginx_deploy_host_port: 18081
+    nginx_deploy_tls_host_port: 18443
+    nginx_deploy_health_url: https://127.0.0.1:18443/realms/master/.well-known/openid-configuration
+    nginx_deploy_validate_certs: false
+    nginx_deploy_manage_default_site: false
+    nginx_deploy_networks:
+      - keycloak-tiny-access.network:ip=10.89.40.4
+    nginx_config_tls_source: selfsigned
+    nginx_config_tls_common_name: keycloak-tiny.example.invalid
+    nginx_config_remove_default: true
+    nginx_config_vhosts:
+      - name: keycloak-tiny-edge
+        server_name: keycloak-tiny.example.invalid
+        upstream_url: http://10.89.40.2:18080
+        force_https: true
     keycloak_cac_skip_apply: false
     keycloak_cac_url: http://127.0.0.1:18080
     keycloak_cac_validate_certs: true
@@ -147,10 +170,47 @@
           Set KEYCLOAK_TEST_DB_PASSWORD and KEYCLOAK_TEST_ADMIN_PASSWORD to
           ephemeral values of at least 16 characters.
       no_log: true
+
+    - name: Ensure the Tiny Quadlet network directory exists
+      ansible.builtin.file:
+        path: /etc/containers/systemd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the explicit Tiny Quadlet network
+      ansible.builtin.copy:
+        dest: /etc/containers/systemd/keycloak-tiny-access.network
+        owner: root
+        group: root
+        mode: "0644"
+        content: |-
+          [Unit]
+          Description=Keycloak Tiny isolated acceptance network
+
+          [Network]
+          NetworkName=keycloak-tiny-access
+          Subnet=10.89.40.0/29
+          Gateway=10.89.40.1
+
+    - name: Reload systemd for the Tiny Quadlet network
+      ansible.builtin.systemd_service:
+        daemon_reload: true
   tasks:
     - name: Deploy the real Keycloak Tiny runtime
       ansible.builtin.include_role:
         name: lit.supplementary.keycloak_deploy
+
+    - name: Stage the isolated Keycloak Tiny NGINX edge configuration
+      ansible.builtin.include_role:
+        name: lit.supplementary.nginx_config
+      vars:
+        nginx_config_test: false
+
+    - name: Deploy the isolated Keycloak Tiny NGINX edge
+      ansible.builtin.include_role:
+        name: lit.supplementary.nginx_deploy
 
     - name: Inspect one-time broker lifecycle seed
       ansible.builtin.stat:

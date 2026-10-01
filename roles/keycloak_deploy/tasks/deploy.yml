@@ -35,6 +35,39 @@
       tags:
         - systemd
 
+    - name: Inspect the effective Keycloak environment
+      ansible.builtin.command:
+        argv:
+          - podman
+          - container
+          - inspect
+          - "{{ keycloak_deploy_pod_name }}-{{ keycloak_deploy_container_name }}"
+          - --format
+          - "{{ '{{json .Config.Env}}' }}"
+      register: keycloak_deploy_runtime_environment
+      changed_when: false
+      no_log: true
+      when: not keycloak_deploy_manage_systemd | bool
+      tags:
+        - deployment
+
+    - name: Require the desired database endpoint in the active Keycloak pod
+      ansible.builtin.assert:
+        that:
+          - >-
+            ('KC_DB_URL_HOST=' ~ keycloak_deploy_db_host)
+            in (keycloak_deploy_runtime_environment.stdout | from_json)
+          - >-
+            ('KC_DB_URL_PORT=' ~ keycloak_deploy_db_port | string)
+            in (keycloak_deploy_runtime_environment.stdout | from_json)
+        fail_msg: >-
+          The active Keycloak pod did not consume the desired database endpoint.
+        quiet: true
+      no_log: true
+      when: not keycloak_deploy_manage_systemd | bool
+      tags:
+        - deployment
+
     - name: Wait until Keycloak health endpoint is reachable (non-systemd)
       ansible.builtin.uri:
         url: "{{ keycloak_deploy_health_url_effective }}"

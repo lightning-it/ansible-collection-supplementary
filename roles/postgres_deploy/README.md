@@ -10,13 +10,20 @@ None.
 
 See `roles/postgres_deploy/defaults/main.yml`.
 
-With systemd management enabled, an existing effective Podman kube unit is
-preserved, including a distribution-provided template shared by other services.
-The role installs its fallback template only when systemd reports `not-found`;
-it never replaces an existing local template. Masked, erroneous, or unreadable
-unit states stop deployment rather than replacing the administrator's policy.
-Only the selected PostgreSQL unit is enabled or restarted. Existing overrides
-from older deployments are not automatically removed or migrated.
+Exactly one lifecycle controller owns the PostgreSQL pod. The container
+configuration is rendered as Kubernetes YAML. With systemd management enabled,
+the role hands that manifest to a native `.kube` Quadlet managed through
+`lit.foundational.podman_systemd`; direct kubeplay mutation is disabled.
+Without systemd management, the role uses one fail-closed kubeplay recreation.
+An exact legacy `podman-kube@<escaped-manifest>.service` instance is stopped and
+disabled once before native Quadlet takeover. A shared legacy template is not
+removed because other services may still depend on it.
+The default native unit is `<pod-name>-pod.service`, avoiding collisions with
+an administrator-managed `postgres.service`. Enabling systemd management
+without a detected systemd service manager fails during prechecks.
+
+The generated Pod manifest is restricted to the owner (`0600`) because it
+contains the effective PostgreSQL password required by the container runtime.
 
 Key variables:
 - `postgres_deploy_image`
@@ -24,11 +31,14 @@ Key variables:
 - `postgres_deploy_host_data_dir`
 - `postgres_deploy_port`
 - `postgres_deploy_host_ip`
+- `postgres_deploy_networks`
 - `postgres_deploy_db_name`
 - `postgres_deploy_db_user`
 - `postgres_deploy_db_password`
 - `postgres_deploy_generate_password`
 - `postgres_deploy_manage_systemd`
+- `postgres_deploy_readiness_retries`
+- `postgres_deploy_readiness_delay`
 - `postgres_deploy_skip_runtime`
 
 ## Dependencies

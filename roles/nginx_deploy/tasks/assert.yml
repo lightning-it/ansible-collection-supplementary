@@ -58,9 +58,30 @@
         == nginx_deploy_networks | length
       - >-
         nginx_deploy_networks
-        | select('match', '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$')
+        | select(
+            'match',
+            '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}'
+            ~ '(?::ip=[0-9]{1,3}(?:[.][0-9]{1,3}){3})?$'
+          )
         | list | length == nginx_deploy_networks | length
     fail_msg: "Nginx core variables are missing or invalid."
+  tags: always
+
+- name: Validate static IPv4 addresses in Nginx Quadlet network entries
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_facts.get('python', {}).get('executable', '/usr/bin/python3') }}"
+      - -c
+      - >-
+        import ipaddress,sys; address=ipaddress.ip_address(sys.argv[1]);
+        sys.exit(0 if address.version == 4 else 1)
+      - "{{ item.split(':ip=', 1)[1] }}"
+  loop: "{{ nginx_deploy_networks }}"
+  loop_control:
+    label: "{{ item.split(':ip=', 1)[0] }}"
+  changed_when: false
+  check_mode: false
+  when: "':ip=' in item"
   tags: always
 
 - name: Ensure default site variables are set when managed

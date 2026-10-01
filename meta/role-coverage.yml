@@ -1013,6 +1013,7 @@ roles:
     dependencies:
       - "postgres_deploy"
       - "lit.foundational.kubeplay"
+      - "lit.foundational.podman_systemd"
     external_dependencies: []
     known_limitations:
       - >-
@@ -1049,6 +1050,7 @@ roles:
     external_dependencies: []
     known_limitations:
       - "No direct scenario coverage."
+      - "Quadlet teardown is unsupported."
     deprecation_state: "active"
     scenario_support:
       tiny: []
@@ -1641,10 +1643,11 @@ roles:
     acceptance_surface: "real_client_transaction_permissions_persistence_and_restore"
     dependencies:
       - "lit.foundational.kubeplay"
+      - "lit.foundational.podman_systemd"
     external_dependencies: []
     known_limitations:
       - "Root scenario is a syntax stub; Keycloak exercises deployment only indirectly."
-      - "Systemd fallback branches have isolated Ansible regression coverage, not full service lifecycle acceptance."
+      - "Native Quadlet lifecycle is covered indirectly by the Keycloak Heavy scenario."
     deprecation_state: "active"
     scenario_support:
       tiny:
@@ -1669,6 +1672,7 @@ roles:
     external_dependencies: []
     known_limitations:
       - "No direct scenario coverage."
+      - "Quadlet teardown is unsupported."
     deprecation_state: "active"
     scenario_support:
       tiny: []
@@ -2897,7 +2901,9 @@ scenarios:
     roles:
       - "keycloak_cac"
       - "keycloak_deploy"
-    exercised_dependencies: []
+    exercised_dependencies:
+      - "nginx_config"
+      - "nginx_deploy"
     junit: true
     allure: true
     evidence: true
