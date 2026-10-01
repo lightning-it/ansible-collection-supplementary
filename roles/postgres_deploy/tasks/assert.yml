@@ -13,11 +13,40 @@
       - postgres_deploy_db_name | default('', true) | trim | length > 0
       - postgres_deploy_db_user | default('', true) | trim | length > 0
       - postgres_deploy_port | int > 0
-      - postgres_deploy_container_port | int > 0
+      - postgres_deploy_container_port | int == 5432
       - postgres_deploy_host_ip | default('', true) | trim | length > 0
       - postgres_deploy_host_network is boolean
+      - postgres_deploy_networks is sequence
+      - postgres_deploy_networks is not string
+      - >-
+        postgres_deploy_networks | select('string') | list | length
+        == postgres_deploy_networks | length
+      - >-
+        postgres_deploy_networks | map('trim') | reject('equalto', '') | list | length
+        == postgres_deploy_networks | length
       - postgres_deploy_install_packages is boolean
       - postgres_deploy_manage_systemd is boolean
+      - >-
+        not postgres_deploy_manage_systemd | bool
+        or postgres_deploy_skip_runtime | bool
+        or postgres_deploy_skip_deploy | bool
+        or (
+          ansible_service_mgr
+          | default(ansible_facts.get('service_mgr', ''), true)
+        ) == 'systemd'
+      - postgres_deploy_systemd_unit_name | default('', true) | trim | length > 0
+      - postgres_deploy_systemd_description | default('', true) | trim | length > 0
+      - postgres_deploy_systemd_scope in ['system', 'user']
+      - postgres_deploy_quadlet_dir | default('', true) | trim | length > 0
+      - postgres_deploy_systemd_enabled is boolean
+      - postgres_deploy_readiness_retries is integer
+      - postgres_deploy_readiness_retries is not boolean
+      - postgres_deploy_readiness_retries >= 1
+      - postgres_deploy_readiness_retries <= 60
+      - postgres_deploy_readiness_delay is integer
+      - postgres_deploy_readiness_delay is not boolean
+      - postgres_deploy_readiness_delay >= 0
+      - postgres_deploy_readiness_delay <= 30
       - postgres_deploy_skip_runtime is boolean
       - postgres_deploy_skip_deploy is boolean
       - postgres_deploy_generate_password is boolean

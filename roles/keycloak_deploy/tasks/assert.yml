@@ -20,9 +20,17 @@
       - keycloak_deploy_db_name | default('', true) | trim | length > 0
       - keycloak_deploy_db_user | default('', true) | trim | length > 0
       - keycloak_deploy_db_host | default('', true) | trim | length > 0
+      - >-
+        keycloak_deploy_host_network | bool or
+        keycloak_deploy_db_host | trim not in ['127.0.0.1', '::1', 'localhost']
       - keycloak_deploy_db_wait_host | default('', true) | trim | length > 0
       - keycloak_deploy_db_port | int > 0
       - keycloak_deploy_postgres_port | int > 0
+      - keycloak_deploy_postgres_container_port | int > 0
+      - keycloak_deploy_postgres_container_port | int <= 65535
+      - >-
+        not keycloak_deploy_manage_postgres | bool
+        or keycloak_deploy_postgres_container_port | int == 5432
       - keycloak_deploy_db_wait_port | int > 0
       - keycloak_deploy_postgres_wait_timeout | int > 0
       - keycloak_deploy_postgres_wait_delay | int >= 0
@@ -32,6 +40,43 @@
       - keycloak_deploy_management_port | int != keycloak_deploy_port | int
       - keycloak_deploy_host_ip | default('', true) | trim | length > 0
       - keycloak_deploy_host_network is boolean
+      - keycloak_deploy_networks is sequence
+      - keycloak_deploy_networks is not string
+      - >-
+        keycloak_deploy_networks | select('string') | list | length
+        == keycloak_deploy_networks | length
+      - >-
+        keycloak_deploy_networks | map('trim') | reject('equalto', '') | list | length
+        == keycloak_deploy_networks | length
+      - keycloak_deploy_postgres_networks is sequence
+      - keycloak_deploy_postgres_networks is not string
+      - >-
+        keycloak_deploy_postgres_networks | select('string') | list | length
+        == keycloak_deploy_postgres_networks | length
+      - >-
+        keycloak_deploy_postgres_networks | map('trim') | reject('equalto', '') | list | length
+        == keycloak_deploy_postgres_networks | length
+      - >-
+        not keycloak_deploy_manage_postgres | bool
+        or keycloak_deploy_postgres_host_network | bool
+        or keycloak_deploy_host_network | bool
+        or (
+          (
+            keycloak_deploy_networks | length == 0
+            and keycloak_deploy_postgres_networks | length == 0
+          )
+          or (
+            keycloak_deploy_networks
+            | map('regex_replace', ':.*$', '')
+            | list
+            | intersect(
+                keycloak_deploy_postgres_networks
+                | map('regex_replace', ':.*$', '')
+                | list
+              )
+            | length > 0
+          )
+        )
       - keycloak_deploy_postgres_host_ip | default('', true) | trim | length > 0
       - keycloak_deploy_postgres_host_network is boolean
       - keycloak_deploy_admin_user | default('', true) | trim | length > 0
@@ -40,8 +85,48 @@
       - keycloak_deploy_run_user_gid | default('', true) | trim | length > 0
       - keycloak_deploy_extra_start_args is sequence
       - keycloak_deploy_extra_start_args is not string
+      - keycloak_deploy_proxy_headers in ['', 'forwarded', 'xforwarded']
+      - >-
+        keycloak_deploy_proxy_headers | trim | length == 0
+        or keycloak_deploy_manage_systemd | bool
+      - >-
+        keycloak_deploy_proxy_headers | trim | length == 0
+        or (
+          not (keycloak_deploy_host_network | bool)
+          and
+          keycloak_deploy_host_ip | trim in ['127.0.0.1', '::1']
+          and keycloak_deploy_networks | length > 0
+        )
+      - keycloak_deploy_proxy_trusted_addresses is sequence
+      - keycloak_deploy_proxy_trusted_addresses is not string
+      - >-
+        keycloak_deploy_proxy_trusted_addresses | select('string') | list | length
+        == keycloak_deploy_proxy_trusted_addresses | length
+      - >-
+        keycloak_deploy_proxy_headers | trim | length == 0 or
+        keycloak_deploy_proxy_trusted_addresses | length > 0
+      - >-
+        keycloak_deploy_proxy_trusted_addresses
+        | map('trim')
+        | reject('equalto', '')
+        | list
+        | length
+        == keycloak_deploy_proxy_trusted_addresses | length
       - keycloak_deploy_install_packages is boolean
       - keycloak_deploy_manage_systemd is boolean
+      - >-
+        not keycloak_deploy_manage_systemd | bool
+        or keycloak_deploy_skip_runtime | bool
+        or keycloak_deploy_skip_deploy | bool
+        or (
+          ansible_service_mgr
+          | default(ansible_facts.get('service_mgr', ''), true)
+        ) == 'systemd'
+      - keycloak_deploy_systemd_unit_name | default('', true) | trim | length > 0
+      - keycloak_deploy_systemd_description | default('', true) | trim | length > 0
+      - keycloak_deploy_systemd_scope in ['system', 'user']
+      - keycloak_deploy_quadlet_dir | default('', true) | trim | length > 0
+      - keycloak_deploy_systemd_enabled is boolean
       - keycloak_deploy_skip_runtime is boolean
       - keycloak_deploy_skip_deploy is boolean
       - keycloak_deploy_generate_secrets is boolean
@@ -50,5 +135,47 @@
       - keycloak_deploy_generated_db_password_length | int >= 16
       - keycloak_deploy_generated_admin_password_length | int >= 16
       - keycloak_deploy_env_extra is mapping
+      - >-
+        keycloak_deploy_env_extra.keys()
+        | select(
+            'match',
+            '^(KC_DB($|_)|KC_PROXY_|KEYCLOAK_ADMIN|KC_(HEALTH_ENABLED|HTTP_(ENABLED|RELATIVE_PATH)|HOSTNAME)$)'
+          )
+        | list | length == 0
     fail_msg: "Keycloak deploy variables are missing or invalid."
+  tags: always
+
+- name: Validate the managed private PostgreSQL endpoint
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_facts.get('python', {}).get('executable', '/usr/bin/python3') }}"
+      - -c
+      - >-
+        import ipaddress,json,sys; host=ipaddress.ip_address(sys.argv[1]);
+        keycloak={spec.split(':',1)[0] for spec in json.loads(sys.argv[2])};
+        postgres=json.loads(sys.argv[3]); sys.exit(not(host.is_private and any(spec.split(':',1)[0]
+        in keycloak and f':ip={host},' in spec+',' for spec in postgres)))
+      - "{{ keycloak_deploy_db_host }}"
+      - "{{ keycloak_deploy_networks | to_json }}"
+      - "{{ keycloak_deploy_postgres_networks | to_json }}"
+  changed_when: false
+  check_mode: false
+  when:
+    - keycloak_deploy_manage_postgres | bool
+    - not keycloak_deploy_host_network | bool
+    - not keycloak_deploy_postgres_host_network | bool
+  tags: always
+
+- name: Validate trusted Keycloak proxy address syntax
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_facts.get('python', {}).get('executable', '/usr/bin/python3') }}"
+      - -c
+      - "import ipaddress, sys; ipaddress.ip_network(sys.argv[1], strict=False)"
+      - "{{ item }}"
+  loop: "{{ keycloak_deploy_proxy_trusted_addresses }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: false
+  check_mode: false
   tags: always

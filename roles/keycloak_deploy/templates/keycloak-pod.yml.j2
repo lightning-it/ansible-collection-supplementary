@@ -56,6 +56,8 @@ spec:
 {% if keycloak_deploy_proxy_headers | default('', true) | trim | length > 0 %}
         - name: KC_PROXY_HEADERS
           value: "{{ keycloak_deploy_proxy_headers | trim }}"
+        - name: KC_PROXY_TRUSTED_ADDRESSES
+          value: "{{ keycloak_deploy_proxy_trusted_addresses | join(',') }}"
 {% endif %}
 {% if keycloak_deploy_http_relative_path | default('', true) | trim | length > 0 %}
         - name: KC_HTTP_RELATIVE_PATH
