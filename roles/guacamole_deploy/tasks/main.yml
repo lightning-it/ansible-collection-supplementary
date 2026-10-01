@@ -22,7 +22,7 @@
     - {path: "{{ guacamole_deploy_base_dir }}/postgres-init", owner: root, group: root, mode: "0755"}
     - {path: "{{ guacamole_deploy_manifest_path | dirname }}", owner: root, group: root, mode: "0755"}
 
-- name: Render the private Guacamole pod manifest
+- name: Render the private Guacamole pod manifest outside managed runtime
   ansible.builtin.template:
     src: guacamole-pod.yml.j2
     dest: "{{ guacamole_deploy_manifest_path }}"
@@ -30,45 +30,18 @@
     group: root
     mode: "0600"
   no_log: true
-  notify: Restart Guacamole
+  register: guacamole_deploy_manifest_render
+  when: >-
+    not (guacamole_deploy_manage_systemd | bool)
+    or ansible_check_mode
+    or guacamole_deploy_skip_runtime | bool
 
-- name: Install Guacamole systemd unit
-  ansible.builtin.template:
-    src: guacamole.service.j2
-    dest: /etc/systemd/system/guacamole.service
-    owner: root
-    group: root
-    mode: "0644"
-  notify: Restart Guacamole
-  when: guacamole_deploy_manage_systemd | bool
-
-- name: Apply pending Guacamole runtime changes
-  ansible.builtin.meta: flush_handlers
-  when: not ansible_check_mode and not guacamole_deploy_skip_runtime | bool
-
-- name: Ensure Guacamole is enabled and started
-  ansible.builtin.systemd:
-    name: guacamole.service
-    enabled: true
-    state: started
-    daemon_reload: true
+- name: Manage Guacamole through native Podman Quadlet
+  ansible.builtin.include_tasks: systemd.yml
   when:
     - guacamole_deploy_manage_systemd | bool
     - not ansible_check_mode
     - not guacamole_deploy_skip_runtime | bool
-
-- name: Wait for Guacamole readiness
-  ansible.builtin.uri:
-    url: "{{ guacamole_deploy_health_url }}"
-    method: GET
-    status_code: 200
-    validate_certs: "{{ guacamole_deploy_validate_certs }}"
-  register: guacamole_deploy_health
-  until: guacamole_deploy_health.status == 200
-  retries: 40
-  delay: 5
-  changed_when: false
-  when: not ansible_check_mode and not guacamole_deploy_skip_runtime | bool
 
 - name: Derive the Guacamole break-glass password hash
   delegate_to: localhost
