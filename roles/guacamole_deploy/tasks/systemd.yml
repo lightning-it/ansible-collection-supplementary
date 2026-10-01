@@ -457,7 +457,12 @@
               {{ ansible_failed_result.msg | default('unknown native restoration failure') }}
 
     - name: Prove the failed native Guacamole controller is inactive
-      when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+      when: >-
+        (
+          guacamole_deploy_legacy_unit_stat.stat.exists | bool
+          and guacamole_deploy_legacy_systemd_active.stdout | trim == 'active'
+        )
+        or not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
       block:
         - name: Inspect native Guacamole activity after failed cleanup
           ansible.builtin.command:
@@ -478,7 +483,8 @@
                 in ['inactive', 'failed', 'unknown']
             fail_msg: >-
               The failed native Guacamole controller is not proven inactive;
-              refusing to start the legacy controller in parallel.
+              refusing to complete rollback or start the legacy controller in
+              parallel.
             quiet: true
 
         - name: Record proven native Guacamole inactivity
@@ -500,9 +506,7 @@
             group: "{{ guacamole_deploy_legacy_unit_stat.stat.gid }}"
             mode: "{{ guacamole_deploy_legacy_unit_stat.stat.mode }}"
           no_log: true
-          when:
-            - guacamole_deploy_legacy_unit_stat.stat.exists | bool
-            - guacamole_deploy_native_quiescence_proven | bool
+          when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
 
         - name: Restore the exact legacy Guacamole service state
           ansible.builtin.systemd_service:
@@ -514,7 +518,9 @@
             daemon_reload: true
           when:
             - guacamole_deploy_legacy_unit_stat.stat.exists | bool
-            - guacamole_deploy_native_quiescence_proven | bool
+            - >-
+              guacamole_deploy_legacy_systemd_active.stdout | trim != 'active'
+              or guacamole_deploy_native_quiescence_proven | bool
       rescue:
         - name: Capture failed legacy Guacamole restoration
           ansible.builtin.set_fact:

@@ -75,6 +75,21 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("guacamole_deploy_port <= 65535", asserts)
         self.assertNotIn("guacamole_deploy_port | int", asserts)
 
+    def test_quadlet_interface_rejects_type_path_and_directive_injection(self) -> None:
+        tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
+        contract = "\n".join(tasks[0]["ansible.builtin.assert"]["that"])
+
+        for value in (
+            "guacamole_deploy_systemd_unit_name",
+            "guacamole_deploy_systemd_description",
+            "guacamole_deploy_quadlet_dir",
+            "guacamole_deploy_legacy_systemd_unit_path",
+        ):
+            self.assertIn(f"{value} is string", contract)
+        self.assertIn("^[A-Za-z0-9][A-Za-z0-9_.-]*$", contract)
+        self.assertIn("'\\n' not in guacamole_deploy_systemd_description", contract)
+        self.assertIn("'\\r' not in guacamole_deploy_systemd_description", contract)
+
     def test_static_network_and_proxy_bypass_are_exact_and_default_off(self) -> None:
         defaults = DEFAULTS.read_text(encoding="utf-8")
         asserts = ASSERTS.read_text(encoding="utf-8")
@@ -270,6 +285,101 @@ class GuacamoleDeployContractTests(unittest.TestCase):
         self.assertIn("in ['active', 'inactive']", contract)
         self.assertIn("in ['enabled', 'disabled']", contract)
         self.assertIn("guacamole_deploy_native_systemd_active.stdout | trim != 'failed'", contract)
+
+    def test_no_legacy_rollback_proves_transaction_created_native_is_inactive(self) -> None:
+        tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
+        transaction = next(
+            task for task in tasks if task["name"] == "Cut over to native Guacamole Quadlet with rollback"
+        )
+        proof = next(
+            task
+            for task in transaction["rescue"]
+            if task["name"] == "Prove the failed native Guacamole controller is inactive"
+        )
+        condition = str(proof["when"])
+        self.assertIn("guacamole_deploy_legacy_systemd_active", condition)
+        self.assertIn("guacamole_deploy_native_quadlet_file", condition)
+
+        executable = shutil.which("ansible-playbook")
+        self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
+        with tempfile.TemporaryDirectory(prefix="guacamole-no-legacy-rollback-") as temporary:
+            temporary_path = Path(temporary)
+            fake_bin = temporary_path / "bin"
+            fake_bin.mkdir()
+            systemctl = fake_bin / "systemctl"
+            systemctl.write_text(
+                "#!/bin/sh\nprintf '%s\\n' active\nexit 0\n",
+                encoding="utf-8",
+            )
+            systemctl.chmod(0o755)
+            playbook = temporary_path / "proof.yml"
+            playbook.write_text(
+                yaml.safe_dump(
+                    [
+                        {
+                            "hosts": "localhost",
+                            "gather_facts": False,
+                            "vars": {
+                                "guacamole_deploy_legacy_unit_stat": {"stat": {"exists": False}},
+                                "guacamole_deploy_legacy_systemd_active": {"stdout": "unknown"},
+                                "guacamole_deploy_native_quadlet_file": {"stat": {"exists": False}},
+                                "guacamole_deploy_systemd_scope": "system",
+                                "guacamole_deploy_systemd_unit_name": "guacamole-pod",
+                            },
+                            "tasks": [
+                                proof,
+                                {
+                                    "name": "Require fail-closed inactivity evidence",
+                                    "ansible.builtin.assert": {
+                                        "that": [
+                                            "guacamole_deploy_native_quiescence_failure_message | length > 0",
+                                            "not guacamole_deploy_native_quiescence_proven | default(false) | bool",
+                                        ]
+                                    },
+                                },
+                            ],
+                        }
+                    ],
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            config = temporary_path / "ansible.cfg"
+            config.write_text("[defaults]\nstdout_callback=default\n", encoding="utf-8")
+            result = subprocess.run(  # noqa: S603
+                [executable, "-i", "localhost,", "-c", "local", str(playbook)],
+                env={
+                    **os.environ,
+                    "ANSIBLE_CONFIG": str(config),
+                    "ANSIBLE_NOCOLOR": "1",
+                    "ANSIBLE_LOCAL_TEMP": str(temporary_path / "ansible"),
+                    "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_legacy_file_restoration_does_not_require_native_quiescence(self) -> None:
+        tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
+        transaction = next(
+            task for task in tasks if task["name"] == "Cut over to native Guacamole Quadlet with rollback"
+        )
+        restoration = next(
+            task
+            for task in transaction["rescue"]
+            if task["name"] == "Attempt exact legacy Guacamole restoration after failed takeover"
+        )
+        restore_file, restore_state = restoration["block"]
+        self.assertEqual(
+            restore_file["when"],
+            "guacamole_deploy_legacy_unit_stat.stat.exists | bool",
+        )
+        self.assertIn("guacamole_deploy_native_quiescence_proven", "\n".join(restore_state["when"]))
+        self.assertIn("!= 'active'", "\n".join(restore_state["when"]))
 
     def test_legacy_takeover_requires_the_exact_ordered_unit_contract(self) -> None:
         tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
