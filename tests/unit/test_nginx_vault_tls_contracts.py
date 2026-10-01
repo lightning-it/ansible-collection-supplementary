@@ -529,17 +529,32 @@ class NginxVaultTlsContractTests(unittest.TestCase):
         systemd_tasks = yaml.safe_load(
             (ROOT / "roles" / "nginx_deploy" / "tasks" / "systemd.yml").read_text(encoding="utf-8")
         )
-        self.assertIn("not ansible_check_mode", systemd_tasks[0]["when"])
+        self.assertNotIn("not ansible_check_mode", systemd_tasks[0]["when"])
         systemd_block = systemd_tasks[0]["block"]
         cutover = next(
             task for task in systemd_block if task["name"] == "Cut over to native Nginx Quadlet with rollback"
         )
         quadlet = next(task for task in cutover["block"] if task["name"] == "Manage the native Nginx Quadlet service")
         self.assertEqual(quadlet["ansible.builtin.include_role"]["name"], "lit.foundational.podman_systemd")
+        self.assertEqual(cutover["when"], "not ansible_check_mode")
+        read_only_commands = {
+            "Resolve the exact legacy Podman kube unit identity",
+            "Inspect the exact legacy Nginx unit activity",
+            "Inspect the exact legacy Nginx unit enablement",
+            "Inspect the exact native Nginx unit activity",
+            "Inspect the exact native Nginx unit enablement",
+            "Refuse unmanaged Nginx pod; remove it first",
+        }
+        for task in systemd_block:
+            if task["name"] in read_only_commands:
+                self.assertFalse(task["check_mode"], task["name"])
         names = [task["name"] for task in systemd_block]
         validation = names.index("Refuse unknown Nginx lifecycle states")
         manifest_inspection = names.index("Inspect the pre-transaction Nginx Pod manifest")
         manifest_probe = names.index("Probe the desired Nginx Pod manifest without mutation")
+        check_report = systemd_block[names.index("Report a planned managed-systemd Nginx manifest change")]
+        self.assertEqual(check_report["when"], "ansible_check_mode")
+        self.assertIn("nginx_deploy_manifest_probe.changed", check_report["changed_when"])
         collision = names.index("Refuse unmanaged Nginx pod; remove it first")
         drift = names.index("Refuse unproven drift in an existing native Nginx Quadlet")
         self.assertIn("nginx_deploy_native_systemd_active", systemd_block[collision]["failed_when"])
@@ -741,6 +756,20 @@ class NginxVaultTlsContractTests(unittest.TestCase):
                         unit_assertion,
                         {"nginx_deploy_manage_systemd": True, "nginx_deploy_systemd_unit_name": unit_name},
                     ),
+                    valid,
+                )
+        network_assertion = next(item for item in deploy_asserts if "{0,127}" in item)
+        for network, valid in (
+            ("lit-private", True),
+            ("podman.network_01", True),
+            ("lit private", False),
+            ("lit-private\nAfter=network-online.target", False),
+            ("lit-private\rWantedBy=multi-user.target", False),
+            ("-leading-dash", False),
+        ):
+            with self.subTest(network=network):
+                self.assertEqual(
+                    self._evaluate(network_assertion, {"nginx_deploy_networks": [network]}),
                     valid,
                 )
 

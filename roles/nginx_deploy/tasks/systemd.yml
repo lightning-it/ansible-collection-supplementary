@@ -2,7 +2,6 @@
 - name: Manage Nginx native Quadlet service
   when:
     - nginx_deploy_manage_systemd | bool
-    - not ansible_check_mode
   tags:
     - systemd
   block:
@@ -13,6 +12,7 @@
           - "{{ nginx_deploy_pod_manifest_path }}"
       register: nginx_deploy_legacy_systemd_name
       changed_when: false
+      check_mode: false
 
     - name: Inspect the exact legacy Nginx unit activity
       ansible.builtin.command:
@@ -23,6 +23,7 @@
       register: nginx_deploy_legacy_systemd_active
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Inspect the exact legacy Nginx unit enablement
       ansible.builtin.command:
@@ -33,6 +34,7 @@
       register: nginx_deploy_legacy_systemd_enabled
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Inspect the exact native Nginx unit activity
       ansible.builtin.command:
@@ -43,6 +45,7 @@
       register: nginx_deploy_native_systemd_active
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Inspect the exact native Nginx unit enablement
       ansible.builtin.command:
@@ -53,6 +56,7 @@
       register: nginx_deploy_native_systemd_enabled
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Refuse unknown Nginx lifecycle states
       ansible.builtin.assert:
@@ -127,6 +131,14 @@
       check_mode: true
       register: nginx_deploy_manifest_probe
 
+    - name: Report a planned managed-systemd Nginx manifest change
+      ansible.builtin.debug:
+        msg: >-
+          The managed-systemd Nginx manifest would change; no runtime or file
+          mutation is performed in check mode.
+      changed_when: nginx_deploy_manifest_probe.changed | default(false) | bool
+      when: ansible_check_mode
+
     - name: Refuse unproven drift in an existing native Nginx Quadlet
       ansible.builtin.assert:
         that:
@@ -179,6 +191,7 @@
         argv: [podman, pod, exists, "{{ nginx_deploy_pod_name }}"]
       register: nginx_deploy_existing_pod
       changed_when: false
+      check_mode: false
       failed_when: >-
         nginx_deploy_existing_pod.rc not in [0, 1]
         or (nginx_deploy_existing_pod.rc == 0
@@ -203,6 +216,7 @@
         quiet: true
 
     - name: Cut over to native Nginx Quadlet with rollback
+      when: not ansible_check_mode
       block:
         - name: Render the desired Nginx Pod manifest transactionally
           ansible.builtin.template:

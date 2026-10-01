@@ -53,6 +53,10 @@
       - >-
         nginx_deploy_networks | map('trim') | reject('equalto', '') | list | length
         == nginx_deploy_networks | length
+      - >-
+        nginx_deploy_networks
+        | select('match', '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$')
+        | list | length == nginx_deploy_networks | length
     fail_msg: "Nginx core variables are missing or invalid."
   tags: always
 
