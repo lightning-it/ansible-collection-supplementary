@@ -209,6 +209,24 @@ class PromotionReleaseStateGuardTests(unittest.TestCase):
                 self.assertNotEqual(self.run_case({path: content}).returncode, 0)
                 self.assertNotEqual(self.run_case({}, {path: content}).returncode, 0)
 
+    def test_all_existing_security_records_are_immutable(self) -> None:
+        historical = {path.replace("4.0.0", "3.2.2"): content for path, content in SECURITY_FILES.items()}
+        for security_base in (
+            {},
+            {**SECURITY_FILES, "changelogs/release-preparation.json": json.dumps(SECURITY_RECEIPT)},
+        ):
+            base = {**historical, **security_base}
+            for path in historical:
+                for content in (None, "rewritten historical record\n"):
+                    with self.subTest(path=path, content=content, security=bool(security_base)):
+                        self.assertNotEqual(self.run_case({path: content}, base).returncode, 0)
+
+    def test_future_security_records_do_not_change_existing_history(self) -> None:
+        historical = {path.replace("4.0.0", "3.2.2"): content for path, content in SECURITY_FILES.items()}
+        future = {path.replace("4.0.0", "4.0.1"): content for path, content in SECURITY_FILES.items()}
+        result = self.run_case(future, historical)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

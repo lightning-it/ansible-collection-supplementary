@@ -152,6 +152,12 @@ jobs:
           # An ancestry-only merge does not import release-generated state.
           # Normal promotions must preserve that state, including failed pre-tag
           # preparations. Only the governed release/back-sync paths advance it.
+          # Preserve every existing Security record, not just this release.
+          # New records may enter through the separately reviewed intake path.
+          security_history_changes="$(git -C repository diff --name-only --no-renames \
+            --no-ext-diff --no-textconv --diff-filter=CDMRTUXB \
+            "$expected_base" "$expected_head" -- .lit/security-releases .lit/security-release-intakes)"
+          test -z "$security_history_changes"
           base_version="$(git -C repository show "${expected_base}:galaxy.yml" | sed -n 's/^version: //p')"
           head_version="$(git -C repository show "${expected_head}:galaxy.yml" | sed -n 's/^version: //p')"
           stable_version='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
