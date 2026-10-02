@@ -68,6 +68,8 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    promoter MUST publish the canonical `lit-protected-promotion:v2` binding at PR creation; missing or stale
    coverage fails closed. No other deterministic Release-App exception is permitted, and Release-App PRs MUST
    NOT claim or fall back to GitHub Copilot review.
+   Supplementary retains its `main`-only `ansible-collection-release-prepare` environment for this promoter;
+   `develop` and scheduled events may only relay to that protected-main workflow without receiving App credentials.
 5. Lightning IT automation MAY automatically request a paid Copilot review only for the exact personal account
    `litroc`. External contributors must supply valid current-head evidence using their own entitlement; Lightning IT
    MUST NOT request or fund their AI usage.

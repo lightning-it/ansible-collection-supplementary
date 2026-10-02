@@ -21,12 +21,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  dispatch:
+    name: Dispatch promotion from protected main
+    if: >-
+      github.repository == 'lightning-it/ansible-collection-supplementary' &&
+      (github.event_name == 'schedule' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch the trusted main-ref promotion job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_RUN_ATTEMPT}" -eq 1
+          gh workflow run promote-develop-to-main.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main
+
   promote:
     # This protected source is bound only to itself. Every downstream copy is
     # rendered to exactly one inventory-authorized target before installation.
-    if: github.repository == 'lightning-it/ansible-collection-supplementary'
+    if: >-
+      github.repository == 'lightning-it/ansible-collection-supplementary' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: ansible-collection-release-prepare
 
     steps:
       - name: Reject reruns before credential minting
