@@ -404,15 +404,15 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("uses: ./.github/workflows/current-revision-rerun.yml", develop_handoff)
         self.assertIn(
             "uses: lightning-it/ansible-collection-supplementary/.github/workflows/"
-            "current-revision-rerun.yml@6b40cf5dbc1c84d6e681689196f5b5dd20ba946d",
+            "current-revision-rerun.yml@eb1b0e7437a2a4caf50e2fec058abeddca5cf088",
             main_handoff,
         )
         self.assertIn(
-            "github.event.pull_request.base.sha == '6b40cf5dbc1c84d6e681689196f5b5dd20ba946d'",
+            "github.event.pull_request.base.sha == 'eb1b0e7437a2a4caf50e2fec058abeddca5cf088'",
             main_handoff,
         )
         self.assertIn(
-            "PINNED_MAIN_HELPER: 6b40cf5dbc1c84d6e681689196f5b5dd20ba946d",
+            "PINNED_MAIN_HELPER: eb1b0e7437a2a4caf50e2fec058abeddca5cf088",
             main_guard,
         )
         self.assertIn('live_main="$(gh api "repos/${REPOSITORY}/branches/main")"', main_guard)
