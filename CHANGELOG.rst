@@ -4,6 +4,17 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v4.0.1
+======
+
+Bugfixes
+--------
+
+- Bind the normal main-promotion review handoff to the current protected main revision while retaining exact-base checks and the SHA-pinned reusable helper.
+- Give Keycloak and PostgreSQL manifest-permission assertions distinct Tiny testcase names so the unchanged release-evidence verifier can match their Allure reports one-to-one.
+- Protected promotions now require the current main release version, generated metadata and preparation receipt to be preserved, and reject restored consumed fragments. An ancestry-only merge cannot substitute for release-state back-sync.
+- Release promotion now uses the canonical protected aggregation contract, reusing exact accepted develop evidence instead of requesting another cumulative AI review.
+
 v4.0.0
 ======
 

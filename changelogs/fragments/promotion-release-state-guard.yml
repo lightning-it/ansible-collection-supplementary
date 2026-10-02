@@ -1,6 +1,0 @@
----
-bugfixes:
-  - >-
-    Protected promotions now require the current main release version, generated
-    metadata and preparation receipt to be preserved, and reject restored consumed
-    fragments. An ancestry-only merge cannot substitute for release-state back-sync.
