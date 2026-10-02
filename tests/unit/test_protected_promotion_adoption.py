@@ -4,6 +4,7 @@ Source: lightning-it/shared-assets-lit@b3c96a1e8164caaa7313d05998677a883f00e2e1
 Path: .github/workflows/promote-develop-to-main.yml
 The canonical mutation code is unchanged. Rendering retains the repo's
 protected-main relay and approval environment, plus its exact identity binding.
+A repository-local pre-mutation guard requires completed release-state back-sync.
 """
 
 from __future__ import annotations
@@ -35,10 +36,15 @@ class ProtectedPromotionAdoptionTests(unittest.TestCase):
 
     def test_adoption_preserves_canonical_mutation_code(self) -> None:
         self.assertEqual(self.text.count(MAIN_CONDITION), 1)
-        relay_start = self.text.index("  dispatch:\n")
-        relay_end = self.text.index("  promote:\n", relay_start)
+        guard_start = self.text.index("          # LI-139 release-state guard:start\n")
+        guard_end = self.text.index("          # LI-139 release-state guard:end\n") + len(
+            "          # LI-139 release-state guard:end\n"
+        )
+        rendered = self.text[:guard_start] + self.text[guard_end:]
+        relay_start = rendered.index("  dispatch:\n")
+        relay_end = rendered.index("  promote:\n", relay_start)
         canonical = (
-            (self.text[:relay_start] + self.text[relay_end:])
+            (rendered[:relay_start] + rendered[relay_end:])
             .replace(
                 "# Repository-local adoption from lightning-it/shared-assets-lit.",
                 "# Managed by lightning-it/shared-assets-lit.",

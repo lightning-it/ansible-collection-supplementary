@@ -148,6 +148,44 @@ jobs:
             fetch --quiet --no-tags origin main develop
           test "$(git -C repository rev-parse origin/main)" = "${expected_base}"
           test "$(git -C repository rev-parse origin/develop)" = "${expected_head}"
+          # LI-139 release-state guard:start
+          # An ancestry-only merge does not import release-generated state.
+          # Normal promotions must preserve that state, including failed pre-tag
+          # preparations. Only the governed release/back-sync paths advance it.
+          base_version="$(git -C repository show "${expected_base}:galaxy.yml" | sed -n 's/^version: //p')"
+          head_version="$(git -C repository show "${expected_head}:galaxy.yml" | sed -n 's/^version: //p')"
+          stable_version='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          [[ "$base_version" =~ $stable_version ]]
+          [[ "$head_version" =~ $stable_version ]]
+          if [ "$head_version" != "$base_version" ]; then
+            echo '::error::Back-sync protected-main release metadata before promoting develop.'
+            exit 1
+          fi
+          for release_path in CHANGELOG.rst changelogs/.plugin-cache.yaml \
+              changelogs/changelog.yaml changelogs/release-preparation.json; do
+            test "$(git -C repository cat-file -t "${expected_base}:${release_path}")" = blob
+            test "$(git -C repository cat-file -t "${expected_head}:${release_path}")" = blob
+            git -C repository diff --exit-code --quiet --no-ext-diff --no-textconv \
+              "$expected_base" "$expected_head" -- "$release_path"
+          done
+          release_receipt="$(git -C repository show "${expected_base}:changelogs/release-preparation.json")"
+          jq -e --arg version "$base_version" '
+            .schema_version == 2 and .next_version == $version
+            and (.fragments | type == "array" and length > 0)
+            and all(.fragments[];
+              (.path | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._-]*\\.ya?ml$"))
+              and (.sha256 | type == "string" and test("^[0-9a-f]{64}$")))
+            and ([.fragments[].path] | length) == ([.fragments[].path] | unique | length)
+          ' <<<"$release_receipt" >/dev/null
+          while IFS= read -r consumed_fragment; do
+            consumed_entry="$(git -C repository ls-tree --full-tree "$expected_head" -- \
+              "changelogs/fragments/${consumed_fragment}")"
+            if [ -n "$consumed_entry" ]; then
+              echo '::error::Develop restores a consumed release fragment; complete release back-sync first.'
+              exit 1
+            fi
+          done < <(jq -r '.fragments[].path' <<<"$release_receipt")
+          # LI-139 release-state guard:end
           changed_paths=()
           mapfile -t changed_paths < <(
             git -C repository diff --name-only \
