@@ -37,13 +37,16 @@ class ProtectedPromotionAdoptionTests(unittest.TestCase):
         self.assertEqual(self.text.count(MAIN_CONDITION), 1)
         relay_start = self.text.index("  dispatch:\n")
         relay_end = self.text.index("  promote:\n", relay_start)
-        canonical = (self.text[:relay_start] + self.text[relay_end:]).replace(
-            "# Repository-local adoption from lightning-it/shared-assets-lit.",
-            "# Managed by lightning-it/shared-assets-lit.",
-            1,
-        ).replace(
-            MAIN_CONDITION, "    if: github.repository == 'lightning-it/shared-assets-lit'\n", 1
-        ).replace("    environment: ansible-collection-release-prepare\n", "", 1)
+        canonical = (
+            (self.text[:relay_start] + self.text[relay_end:])
+            .replace(
+                "# Repository-local adoption from lightning-it/shared-assets-lit.",
+                "# Managed by lightning-it/shared-assets-lit.",
+                1,
+            )
+            .replace(MAIN_CONDITION, "    if: github.repository == 'lightning-it/shared-assets-lit'\n", 1)
+            .replace("    environment: ansible-collection-release-prepare\n", "", 1)
+        )
         self.assertEqual(hashlib.sha256(canonical.encode("utf-8")).hexdigest(), SOURCE_SHA256)
 
     def test_repository_and_credentials_are_narrowly_bound(self) -> None:
@@ -76,11 +79,11 @@ class ProtectedPromotionAdoptionTests(unittest.TestCase):
         self.assertEqual(relay["steps"][0]["env"], {"GH_TOKEN": "${{ github.token }}"})
         self.assertEqual(
             relay["steps"][0]["run"],
-            'set -euo pipefail\n'
+            "set -euo pipefail\n"
             'test "${GITHUB_RUN_ATTEMPT}" -eq 1\n'
-            'gh workflow run promote-develop-to-main.yml \\\n'
+            "gh workflow run promote-develop-to-main.yml \\\n"
             '  --repo "$GITHUB_REPOSITORY" \\\n'
-            '  --ref main\n',
+            "  --ref main\n",
         )
 
     def test_reruns_are_rejected_before_credentials(self) -> None:
