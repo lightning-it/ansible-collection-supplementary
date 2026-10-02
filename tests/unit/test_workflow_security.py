@@ -1685,7 +1685,10 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         ):
             with self.subTest(workflow=name):
                 workflow = (WORKFLOWS / name).read_text(encoding="utf-8")
-                self.assertIn("GITHUB_REPOSITORY_OWNER", workflow)
+                if name == "promote-develop-to-main.yml":
+                    self.assertIn("REPOSITORY_OWNER: ${{ github.repository_owner }}", workflow)
+                else:
+                    self.assertIn("GITHUB_REPOSITORY_OWNER", workflow)
                 self.assertIn(".head.repo.full_name", workflow)
                 self.assertNotIn("gh pr list", workflow)
 

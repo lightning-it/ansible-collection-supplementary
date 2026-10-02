@@ -738,8 +738,9 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn(".head_sha == $controller_sha", human_path)
 
     def test_release_app_pr_creators_finalize_draft_once(self) -> None:
+        # Release metadata still needs Exact-Revision review. A develop-to-main
+        # promotion instead opens with v2 native-ingress aggregation evidence.
         for name in (
-            "promote-develop-to-main.yml",
             "release-prepare.yml",
             "release-back-sync.yml",
         ):
