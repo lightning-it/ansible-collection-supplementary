@@ -4,6 +4,41 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v4.0.0
+======
+
+Breaking Changes / Porting Guide
+--------------------------------
+
+- Change the default Keycloak host bind address from the detected primary IPv4 address to 127.0.0.1. Deployments that intentionally expose Keycloak without the supported NGINX edge must explicitly set keycloak_deploy_host_ip to a reviewed non-loopback address and provide equivalent firewall and trusted proxy protections before upgrading.
+- Make HashiCorp Vault the fail-closed default TLS source of record for nginx_config and add an opt-in NGINX-native policy-WAF boundary for TLS proxy vhosts.
+- Reject `keycloak_destroy_execute=true` and `postgres_destroy_execute=true` for systemd-managed deployments until native Quadlet teardown is supported; keep destructive teardown disabled or use a reviewed non-systemd lifecycle.
+- Reject consumer-supplied forwarding-header overrides, NGINX include or multi-statement directives, unsafe upstream targets, and policy-engine directives that could bypass the managed proxy/WAF boundary. Existing inventories using those formerly accepted inputs must migrate to the dedicated role variables.
+- Replace legacy Keycloak and PostgreSQL units with collision-resistant `<pod-name>-pod.service` Quadlets. Direct kubeplay remains available only in explicit non-systemd mode.
+- Replace the legacy Guacamole wrapper with a collision-resistant `<pod-name>-pod.service` Quadlet and fail-closed `guacamole.service` takeover.
+- Replace the legacy Nginx podman-kube@ unit with the collision-resistant `<pod-name>-pod.service` Quadlet; direct kubeplay requires non-systemd mode, and managed-systemd mode requires `nginx_deploy_systemd_enabled=true`.
+- Require an explicit PostgreSQL private endpoint and container port for bridge-networked Keycloak while retaining the host endpoint for readiness.
+- guacamole_deploy - The Guacamole application container now explicitly clears inherited HTTP_PROXY, HTTPS_PROXY, NO_PROXY, ALL_PROXY, FTP_PROXY, and all lowercase variants by default. Deployments that previously relied on Podman host-proxy injection must set guacamole_deploy_proxy_url to their credential-free RFC1918 HTTP proxy URL before upgrading and set guacamole_deploy_no_proxy only for explicitly approved direct destinations. PostgreSQL and guacd remain free of the configured proxy variables; host routing and firewall policy remain responsible for preventing direct Internet egress.
+
+Security Fixes
+--------------
+
+- Make Keycloak and PostgreSQL legacy-to-Quadlet cutover transactional by capturing the Pod manifest before rendering, quiescing failed native controllers, and restoring the exact prior manifest and service state, including generated units, before reporting a deployment failure.
+- Require exact native Quadlet ownership and reject unhandled legacy enablement states before Keycloak or PostgreSQL can accept an existing service or pod.
+- Require exact native Quadlet ownership before accepting an existing Guacamole service or pod, and restore the verified legacy unit and state if native startup or readiness fails.
+- Restrict Keycloak proxy-header trust to explicit proxy addresses, support pinned native Quadlet networks for Keycloak, and overwrite or strip client-controlled forwarded identity headers at the NGINX boundary.
+- Validate the loaded legacy systemd fragment and restore the exact pre-transaction Pod manifest before restoring the exact prior native or legacy controller state, including generated native units.
+
+Bugfixes
+--------
+
+- Accept the bounded LI-218 promotion-helper migration alias in the protected .github cross-repository verifier while retaining exact-one aggregate-job enforcement.
+- Accept the newest successful, exact native develop-to-main promotion aggregate for the protected .github cross-repository gate while retaining the legacy reservation contract for every non-promotion pull request. Classify Release-App promotion identity before validating mutable title metadata so malformed promotion-shaped requests fail closed instead of falling back.
+- Accept validated native Quadlet `Network=<name>:ip=<IPv4>` entries without admitting other Quadlet options or IPv6 values.
+- Keep the protected .github cross-repository verifier waiting for a newer exact promotion aggregate when an earlier same-head lifecycle run has already failed, while still failing closed at the bounded deadline.
+- Recognize the exact skipped canonical promotion-aggregate job in the bounded current-revision re-evaluator topology while rejecting duplicates and unknown synthetic jobs.
+- Restrict the generated PostgreSQL Pod manifest to its owner because the runtime manifest contains the effective database password.
+
 v3.6.1
 ======
 

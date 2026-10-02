@@ -1,6 +1,0 @@
----
-bugfixes:
-  - >-
-    Keep the protected .github cross-repository verifier waiting for a newer
-    exact promotion aggregate when an earlier same-head lifecycle run has
-    already failed, while still failing closed at the bounded deadline.
