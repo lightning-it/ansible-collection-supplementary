@@ -15,6 +15,8 @@ from pathlib import Path
 from unittest.mock import patch
 from xml.etree import ElementTree as ET
 
+from scripts import quality_evidence as evidence
+
 ROOT = Path(__file__).parents[2]
 EVIDENCE_ROLES = {"keycloak_cac", "keycloak_deploy"}
 
@@ -54,6 +56,54 @@ class KeycloakEvidenceProducerTests(unittest.TestCase):
             roles = [case.attrib.get("role", "") for case in cases]
             self.assertTrue(all(role in EVIDENCE_ROLES for role in roles))
             self.assertEqual(set(roles), EVIDENCE_ROLES)
+            identities = [(case.attrib["role"], case.attrib["name"]) for case in cases]
+            self.assertEqual(len(identities), len(set(identities)), f"{scenario} has ambiguous role/testcase names")
+
+    def test_tiny_manifest_reports_match_allure_one_to_one(self) -> None:
+        source = (ROOT / "molecule" / "keycloak-tiny" / "verify.yml").read_text(encoding="utf-8")
+        match = re.search(r"<\?xml.*?</testsuite>", source, re.DOTALL)
+        self.assertIsNotNone(match)
+        assert match is not None
+        suite = ET.fromstring(match.group(0))  # noqa: S314 -- literal repository fixture.
+        permission_cases = [
+            case for case in suite.findall("testcase") if case.attrib["classname"].endswith(".security")
+        ]
+        self.assertEqual(
+            [(case.attrib["classname"], case.attrib["name"], case.attrib["role"]) for case in permission_cases],
+            [
+                ("keycloak.security", "keycloak-manifest-permissions", "keycloak_deploy"),
+                ("postgres.security", "postgres-manifest-permissions", "keycloak_deploy"),
+            ],
+        )
+        identity = evidence.Identity("keycloak_deploy", "tiny", "keycloak-tiny", "ubuntu-24.04", "1")
+        commit = "a" * 40
+        # Test only report identity wiring, not an executed runtime result.
+        for legacy_names in (False, True):
+            with self.subTest(legacy_names=legacy_names), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "allure-results").mkdir()
+                cases = [
+                    {
+                        "classname": case.attrib["classname"],
+                        "name": "manifest-permissions" if legacy_names else case.attrib["name"],
+                        "status": "passed",
+                    }
+                    for case in permission_cases
+                ]
+                with patch.object(evidence, "_tested_commit", return_value=commit):
+                    for ordinal, case in enumerate(cases):
+                        evidence.generate_allure_result(root, identity, case, ordinal=ordinal, source_junit="tiny.xml")
+                matches, failures = evidence._native_matches(
+                    cases, evidence._native_allure_results(root), identity, commit_sha=commit
+                )
+                if legacy_names:
+                    self.assertEqual(matches, [])
+                    self.assertEqual(len(failures), 2)
+                    self.assertTrue(all("2 exact Allure matches" in failure for failure in failures))
+                else:
+                    self.assertEqual(failures, [])
+                    self.assertEqual(len(matches), 2)
+                    self.assertEqual(len(set(matches)), 2)
 
     def test_heavy_idempotence_junit_is_bound_to_observed_module_change_results(self) -> None:
         role_task = (ROOT / "roles" / "keycloak_cac" / "tasks" / "cac_14_roles.yml").read_text(encoding="utf-8")

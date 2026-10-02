@@ -529,15 +529,15 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                     self.assertIn("uses: ./.github/workflows/current-revision-rerun.yml", develop_job)
                     self.assertIn(
                         "uses: lightning-it/ansible-collection-supplementary/.github/workflows/"
-                        "current-revision-rerun.yml@6b40cf5dbc1c84d6e681689196f5b5dd20ba946d",
+                        "current-revision-rerun.yml@eb1b0e7437a2a4caf50e2fec058abeddca5cf088",
                         main_job,
                     )
                     self.assertIn(
-                        "github.event.pull_request.base.sha == '6b40cf5dbc1c84d6e681689196f5b5dd20ba946d'",
+                        "github.event.pull_request.base.sha == 'eb1b0e7437a2a4caf50e2fec058abeddca5cf088'",
                         main_job,
                     )
                     self.assertIn(
-                        "PINNED_MAIN_HELPER: 6b40cf5dbc1c84d6e681689196f5b5dd20ba946d",
+                        "PINNED_MAIN_HELPER: eb1b0e7437a2a4caf50e2fec058abeddca5cf088",
                         main_guard,
                     )
                     self.assertIn('if [ "${EVENT_BASE}" != "${PINNED_MAIN_HELPER}" ]; then', main_guard)
@@ -738,8 +738,9 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertNotIn(".head_sha == $controller_sha", human_path)
 
     def test_release_app_pr_creators_finalize_draft_once(self) -> None:
+        # Release metadata still needs Exact-Revision review. A develop-to-main
+        # promotion instead opens with v2 native-ingress aggregation evidence.
         for name in (
-            "promote-develop-to-main.yml",
             "release-prepare.yml",
             "release-back-sync.yml",
         ):

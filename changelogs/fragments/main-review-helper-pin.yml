@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Bind the normal main-promotion review handoff to the current protected main
+    revision while retaining exact-base checks and the SHA-pinned reusable helper.
