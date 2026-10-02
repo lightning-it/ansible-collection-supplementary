@@ -88,6 +88,7 @@ class PromotionReleaseStateGuardTests(unittest.TestCase):
                 ["/bin/bash", "-euo", "pipefail", "-c", self.guard],
                 cwd=root,
                 env=environment,
+                check=False,
                 capture_output=True,
                 text=True,
                 timeout=10,
