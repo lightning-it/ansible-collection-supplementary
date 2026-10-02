@@ -308,12 +308,12 @@
             <testcase classname="keycloak.cac" name="required-action-lifecycle" role="keycloak_cac"/>
             <testcase classname="keycloak.cac" name="deferred-browser-binding" role="keycloak_cac"/>
             <testcase classname="keycloak.runtime" name="version" role="keycloak_deploy"/>
-            <testcase classname="keycloak.security" name="manifest-permissions" role="keycloak_deploy"/>
+            <testcase classname="keycloak.security" name="keycloak-manifest-permissions" role="keycloak_deploy"/>
             <testcase classname="keycloak.network" name="bridge-database-service-discovery" role="keycloak_deploy"/>
             <testcase classname="keycloak.network" name="quadlet-network-handoff" role="keycloak_deploy"/>
             <testcase classname="keycloak.network" name="static-service-identities" role="keycloak_deploy"/>
             <testcase classname="keycloak.proxy" name="trusted-edge-and-untrusted-direct" role="keycloak_deploy"/>
-            <testcase classname="postgres.security" name="manifest-permissions" role="keycloak_deploy"/>
+            <testcase classname="postgres.security" name="postgres-manifest-permissions" role="keycloak_deploy"/>
           </testsuite>
       delegate_to: localhost
       become: false
