@@ -119,7 +119,7 @@ class ForwardProxyContractTests(unittest.TestCase):
 
     def test_readme_example_is_an_explicit_runnable_opt_in(self) -> None:
         readme = README.read_text(encoding="utf-8")
-        self.assertIn("`lit.foundational` 1.32.0 or newer", readme)
+        self.assertIn("`lit.foundational` 1.35.0 or newer", readme)
         self.assertIn("`podman_systemd`", readme)
         self.assertIn("forward_proxy_enabled: true", readme)
         self.assertIn("forward_proxy_experimental_runtime_acceptance: true", readme)

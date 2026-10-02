@@ -423,7 +423,17 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             retry,
         )
         self.assertIn("synthetic_evidence_jobs=$(jq -c", retry)
-        self.assertIn("synthetic_authorization_jobs=$(jq -c", retry)
+        self.assertIn("synthetic_promotion_topology_jobs=$(jq -c", retry)
+        self.assertIn(
+            'select(.name == "Authorize exact Supplementary catch-up v5 successor" '
+            'or .name == "Verify aggregated develop-to-main promotion evidence")',
+            retry,
+        )
+        self.assertIn(
+            'test "$(jq \'length\' <<<"${synthetic_promotion_topology_jobs}")" -le 2',
+            retry,
+        )
+        self.assertIn("($promotion | length)", retry)
         self.assertIn("runner_backed_jobs=$(jq -c", retry)
         self.assertIn(
             "route_jobs=$(jq -c",

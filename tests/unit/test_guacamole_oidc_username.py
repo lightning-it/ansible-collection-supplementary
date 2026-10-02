@@ -107,6 +107,12 @@ class GuacamoleUsernameClaimTests(unittest.TestCase):
     def test_disabled_oidc_does_not_require_username_claim(self) -> None:
         self.precheck({"guacamole_deploy_oidc_enabled": False, "guacamole_deploy_oidc_username_claim_type": None}, True)
 
+    def test_real_prechecks_accept_all_valid_proxy_port_widths_and_reject_overflow(self) -> None:
+        for port in (80, 3128, 65535):
+            with self.subTest(port=port):
+                self.precheck({"guacamole_deploy_proxy_url": f"http://10.89.0.1:{port}"}, True)
+        self.precheck({"guacamole_deploy_proxy_url": "http://10.89.0.1:65536"}, False)
+
     def test_rendered_pod_preserves_default_and_emits_exact_subject_only_when_enabled(self) -> None:
         from ansible.plugins.filter.core import FilterModule  # noqa: PLC0415
 
@@ -135,6 +141,51 @@ class GuacamoleUsernameClaimTests(unittest.TestCase):
                     self.assertEqual(entries["EXTENSION_PRIORITY"], "*, openid")
                 else:
                     self.assertNotIn("OPENID_USERNAME_CLAIM_TYPE", entries)
+
+    def test_rendered_application_configures_java_jwks_proxy_only_in_guacamole(self) -> None:
+        from ansible.plugins.filter.core import FilterModule  # noqa: PLC0415
+
+        environment = Environment(undefined=StrictUndefined, autoescape=False)  # noqa: S701
+        environment.filters.update(FilterModule().filters())
+        template = environment.from_string((ROLE / "templates/guacamole-pod.yml.j2").read_text())
+        pod = yaml.safe_load(
+            template.render(
+                {
+                    **self.variables(),
+                    "guacamole_deploy_proxy_url": "http://10.89.0.1:3128",
+                    "guacamole_deploy_no_proxy": ["localhost", "127.0.0.1", "keycloak"],
+                }
+            )
+        )
+        containers = {item["name"]: item for item in pod["spec"]["containers"]}
+        containers.update({item["name"]: item for item in pod["spec"]["initContainers"]})
+        application_env = {item["name"]: item["value"] for item in containers["guacamole"]["env"]}
+        self.assertEqual(
+            application_env["JAVA_TOOL_OPTIONS"],
+            "-Dhttp.proxyHost=10.89.0.1 -Dhttp.proxyPort=3128 "
+            "-Dhttps.proxyHost=10.89.0.1 -Dhttps.proxyPort=3128 "
+            "-Dhttp.nonProxyHosts=localhost|127.0.0.1|keycloak",
+        )
+        self.assertEqual(application_env["HTTPS_PROXY"], "http://10.89.0.1:3128")
+        self.assertEqual(application_env["NO_PROXY"], "localhost,127.0.0.1,keycloak")
+        self.assertEqual(application_env["ALL_PROXY"], "")
+        for name in ("schema", "postgres", "guacd"):
+            environment = {item["name"]: item["value"] for item in containers[name].get("env", [])}
+            self.assertNotIn("JAVA_TOOL_OPTIONS", environment)
+            for proxy_name in (
+                "http_proxy",
+                "HTTP_PROXY",
+                "https_proxy",
+                "HTTPS_PROXY",
+                "all_proxy",
+                "ALL_PROXY",
+                "ftp_proxy",
+                "FTP_PROXY",
+                "no_proxy",
+                "NO_PROXY",
+            ):
+                self.assertIn(proxy_name, environment)
+                self.assertEqual(environment[proxy_name], "")
 
 
 def load_tests(loader, tests, pattern):  # noqa: ARG001

@@ -13,6 +13,34 @@
       - nginx_deploy_host_root | length > 0
       - nginx_deploy_health_url_effective | length > 0
       - nginx_deploy_manage_systemd is boolean
+      - >-
+        not (nginx_deploy_manage_systemd | bool)
+        or (
+          nginx_deploy_systemd_unit_name is string
+          and nginx_deploy_systemd_unit_name | length <= 240
+          and nginx_deploy_systemd_unit_name
+          is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+        )
+      - >-
+        not (nginx_deploy_manage_systemd | bool)
+        or (
+          nginx_deploy_systemd_description is string
+          and nginx_deploy_systemd_description | trim | length > 0
+          and '\n' not in nginx_deploy_systemd_description
+          and '\r' not in nginx_deploy_systemd_description
+        )
+      - >-
+        not (nginx_deploy_manage_systemd | bool)
+        or nginx_deploy_systemd_scope == 'system'
+      - >-
+        not (nginx_deploy_manage_systemd | bool)
+        or nginx_deploy_quadlet_dir | default('', true) | trim | length > 0
+      - >-
+        not (nginx_deploy_manage_systemd | bool)
+        or (
+          nginx_deploy_systemd_enabled is boolean
+          and nginx_deploy_systemd_enabled | bool
+        )
       - nginx_deploy_skip_runtime is boolean
       - nginx_deploy_skip_config is boolean
       - nginx_deploy_skip_deploy is boolean
@@ -20,7 +48,40 @@
       - nginx_deploy_validate_certs is boolean
       - nginx_deploy_port_bindings is sequence
       - nginx_deploy_port_bindings | length > 0
+      - nginx_deploy_networks is sequence
+      - nginx_deploy_networks is not string
+      - >-
+        nginx_deploy_networks | select('string') | list | length
+        == nginx_deploy_networks | length
+      - >-
+        nginx_deploy_networks | map('trim') | reject('equalto', '') | list | length
+        == nginx_deploy_networks | length
+      - >-
+        nginx_deploy_networks
+        | select(
+            'match',
+            '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}'
+            ~ '(?::ip=[0-9]{1,3}(?:[.][0-9]{1,3}){3})?$'
+          )
+        | list | length == nginx_deploy_networks | length
     fail_msg: "Nginx core variables are missing or invalid."
+  tags: always
+
+- name: Validate static IPv4 addresses in Nginx Quadlet network entries
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_facts.get('python', {}).get('executable', '/usr/bin/python3') }}"
+      - -c
+      - >-
+        import ipaddress,sys; address=ipaddress.ip_address(sys.argv[1]);
+        sys.exit(0 if address.version == 4 else 1)
+      - "{{ item.split(':ip=', 1)[1] }}"
+  loop: "{{ nginx_deploy_networks }}"
+  loop_control:
+    label: "{{ item.split(':ip=', 1)[0] }}"
+  changed_when: false
+  check_mode: false
+  when: "':ip=' in item"
   tags: always
 
 - name: Ensure default site variables are set when managed

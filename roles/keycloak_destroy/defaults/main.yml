@@ -2,6 +2,7 @@
 keycloak_destroy_execute: false
 keycloak_destroy_remove_data: false
 keycloak_destroy_remove_secrets: false
+keycloak_destroy_manage_systemd: "{{ keycloak_deploy_manage_systemd | default(true) }}"
 keycloak_destroy_pod_name: "{{ keycloak_deploy_pod_name | default('keycloak', true) }}"
 keycloak_destroy_pod_manifest_path: >-
   {{

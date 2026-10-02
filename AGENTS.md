@@ -406,11 +406,17 @@ For service/application lifecycle roles, prefer this role family layout:
 Use only applicable roles. For databases such as PostgreSQL, omit `_cac` by default unless there is real declarative
 object reconciliation.
 
-For persistent containerized service/application lifecycle roles, use `lit.foundational.podman_systemd` as the
-default execution path. Deploy roles SHOULD render Podman kube manifests and hand persistent startup, enablement,
-restart, stop, and removal to `podman_systemd` through Quadlet/systemd. `lit.foundational.kubeplay` is reserved for
-non-persistent/manual runtime actions, tests, compatibility exceptions, and emergency operations where systemd is not
-available.
+All managed application-container configuration MUST be rendered as Kubernetes YAML suitable for `podman kube play`;
+Compose files and imperative container definitions are not permitted deployment sources. New or changed persistent
+runtimes MUST be started and owned exclusively through a native Quadlet `.kube` unit managed by
+`lit.foundational.podman_systemd`. Startup, enablement, restart, stop, and removal MUST go through the
+Quadlet-generated service. A role MUST NOT invoke `lit.foundational.kubeplay` or `podman kube play` directly while
+Quadlet/systemd management is enabled; doing so creates two competing lifecycle controllers. Direct
+`lit.foundational.kubeplay` is permitted only for an explicit non-systemd test/manual mode, a documented
+compatibility exception where Quadlet is unavailable, or an emergency operation. Such an exception MUST be
+fail-closed, narrowly scoped, and covered by regression evidence. Ephemeral Devtools and CI containers are execution
+environments, not managed application deployments, and therefore do not require persistent Quadlet units.
+Legacy wrappers are debt; changes MUST migrate them or document an exception.
 
 ## 4. Role Structure and Prechecks
 

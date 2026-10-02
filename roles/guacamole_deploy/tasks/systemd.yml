@@ -1,0 +1,807 @@
+---
+- name: Require systemd for persistent Guacamole lifecycle management
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ansible_service_mgr | default(ansible_facts.service_mgr | default('')))
+        == 'systemd'
+    fail_msg: >-
+      Persistent Guacamole deployments require native Quadlet under systemd.
+      Render-only operation must set guacamole_deploy_skip_runtime=true.
+    quiet: true
+
+- name: Inspect the exact legacy Guacamole unit activity
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - "{{ guacamole_deploy_legacy_systemd_unit_path | basename }}"
+  register: guacamole_deploy_legacy_systemd_active
+  changed_when: false
+  failed_when: false
+
+- name: Inspect the pre-transaction Guacamole Pod manifest
+  ansible.builtin.stat:
+    path: "{{ guacamole_deploy_manifest_path }}"
+    follow: false
+  register: guacamole_deploy_original_manifest_file
+
+- name: Refuse an unsafe pre-transaction Guacamole Pod manifest
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (guacamole_deploy_original_manifest_file.stat.exists | default(false))
+        or (
+          guacamole_deploy_original_manifest_file.stat.isreg | default(false)
+          and not (guacamole_deploy_original_manifest_file.stat.islnk | default(false))
+          and guacamole_deploy_original_manifest_file.stat.uid | default(-1) | int == 0
+          and guacamole_deploy_original_manifest_file.stat.gid | default(-1) | int == 0
+          and guacamole_deploy_original_manifest_file.stat.mode | default('')
+          is match('^0[0-7][0145][0145]\\Z')
+        )
+    fail_msg: >-
+      The Guacamole Pod manifest must be absent or a root-owned, root-grouped
+      regular non-symlink file without group or world write permission before
+      a transactional Quadlet update.
+    quiet: true
+
+- name: Capture the exact pre-transaction Guacamole Pod manifest
+  ansible.builtin.slurp:
+    src: "{{ guacamole_deploy_manifest_path }}"
+  register: guacamole_deploy_original_manifest_read
+  no_log: true
+  when: guacamole_deploy_original_manifest_file.stat.exists | default(false)
+
+- name: Inspect the exact legacy Guacamole unit enablement
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-enabled
+      - "{{ guacamole_deploy_legacy_systemd_unit_path | basename }}"
+  register: guacamole_deploy_legacy_systemd_enabled
+  changed_when: false
+  failed_when: false
+
+- name: Resolve the loaded legacy Guacamole unit fragment
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - --property=FragmentPath
+      - --value
+      - "{{ guacamole_deploy_legacy_systemd_unit_path | basename }}"
+  register: guacamole_deploy_legacy_fragment_path
+  changed_when: false
+  failed_when: false
+
+- name: Resolve loaded legacy Guacamole unit drop-ins
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - --property=DropInPaths
+      - --value
+      - "{{ guacamole_deploy_legacy_systemd_unit_path | basename }}"
+  register: guacamole_deploy_legacy_drop_in_paths
+  changed_when: false
+  failed_when: false
+
+- name: Inspect the exact native Guacamole unit activity
+  ansible.builtin.command:
+    argv: >-
+      {{ ['systemctl']
+         + (['--user'] if guacamole_deploy_systemd_scope == 'user' else [])
+         + ['is-active', guacamole_deploy_systemd_unit_name ~ '.service'] }}
+  register: guacamole_deploy_native_systemd_active
+  changed_when: false
+  failed_when: false
+
+- name: Inspect the exact native Guacamole unit enablement
+  ansible.builtin.command:
+    argv: >-
+      {{ ['systemctl']
+         + (['--user'] if guacamole_deploy_systemd_scope == 'user' else [])
+         + ['is-enabled', guacamole_deploy_systemd_unit_name ~ '.service'] }}
+  register: guacamole_deploy_native_systemd_enabled
+  changed_when: false
+  failed_when: false
+
+- name: Resolve the loaded native Guacamole unit fragment
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - "{{ guacamole_deploy_systemd_unit_name }}.service"
+      - --property=FragmentPath
+      - --value
+  register: guacamole_deploy_native_fragment_path
+  changed_when: false
+  failed_when: false
+
+- name: Resolve loaded native Guacamole unit drop-ins
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - "{{ guacamole_deploy_systemd_unit_name }}.service"
+      - --property=DropInPaths
+      - --value
+  register: guacamole_deploy_native_drop_in_paths
+  changed_when: false
+  failed_when: false
+
+- name: Inspect the exact legacy Guacamole unit path
+  ansible.builtin.stat:
+    path: "{{ guacamole_deploy_legacy_systemd_unit_path }}"
+    follow: false
+  register: guacamole_deploy_legacy_unit_stat
+
+- name: Refuse unknown Guacamole lifecycle states
+  ansible.builtin.assert:
+    that:
+      - guacamole_deploy_legacy_systemd_active.rc in [0, 1, 3, 4]
+      - >-
+        guacamole_deploy_legacy_systemd_active.stdout | trim
+        in ['active', 'inactive', 'failed', 'unknown']
+      - >-
+        (
+          guacamole_deploy_legacy_unit_stat.stat.exists | default(false)
+          and guacamole_deploy_legacy_systemd_active.stdout | trim
+          in ['active', 'inactive']
+        )
+        or (
+          not (guacamole_deploy_legacy_unit_stat.stat.exists | default(false))
+          and guacamole_deploy_legacy_systemd_active.stdout | trim
+          in ['inactive', 'unknown']
+          and guacamole_deploy_legacy_systemd_enabled.stdout | trim == 'not-found'
+          and guacamole_deploy_legacy_fragment_path.stdout | trim == ''
+        )
+      - guacamole_deploy_legacy_systemd_enabled.rc in [0, 1, 3, 4]
+      - >-
+        guacamole_deploy_legacy_systemd_enabled.stdout | trim
+        in ['enabled', 'disabled', 'not-found']
+      - >-
+        (
+          guacamole_deploy_legacy_unit_stat.stat.exists | default(false)
+          and guacamole_deploy_legacy_systemd_enabled.stdout | trim
+          in ['enabled', 'disabled']
+        )
+        or (
+          not (guacamole_deploy_legacy_unit_stat.stat.exists | default(false))
+          and guacamole_deploy_legacy_systemd_enabled.stdout | trim == 'not-found'
+        )
+      - guacamole_deploy_native_systemd_active.rc in [0, 3, 4]
+      - >-
+        guacamole_deploy_native_systemd_active.stdout | trim
+        in ['active', 'inactive', 'failed', 'unknown']
+      - guacamole_deploy_native_systemd_active.stdout | trim != 'failed'
+      - guacamole_deploy_native_systemd_enabled.rc in [0, 1, 3, 4]
+      - >-
+        guacamole_deploy_native_systemd_enabled.stdout | trim
+        in ['enabled', 'disabled', 'generated', 'not-found']
+      - >-
+        not (
+          guacamole_deploy_legacy_systemd_active.stdout | trim == 'active'
+          and guacamole_deploy_native_systemd_active.stdout | trim == 'active'
+        )
+    fail_msg: >-
+      Unable to prove the exact Guacamole legacy/native lifecycle state;
+      refusing Quadlet takeover.
+    quiet: true
+
+- name: Inspect the desired native Guacamole Quadlet file
+  ansible.builtin.stat:
+    path: "{{ guacamole_deploy_quadlet_dir }}/{{ guacamole_deploy_systemd_unit_name }}.kube"
+    follow: false
+  register: guacamole_deploy_native_quadlet_file
+
+- name: Read the desired native Guacamole Quadlet file
+  ansible.builtin.slurp:
+    src: "{{ guacamole_deploy_quadlet_dir }}/{{ guacamole_deploy_systemd_unit_name }}.kube"
+  register: guacamole_deploy_native_quadlet_read
+  when:
+    - guacamole_deploy_native_quadlet_file.stat.exists | default(false)
+    - guacamole_deploy_native_quadlet_file.stat.isreg | default(false)
+    - not (guacamole_deploy_native_quadlet_file.stat.islnk | default(false))
+
+- name: Refuse unproven drift in an existing native Guacamole Quadlet
+  ansible.builtin.assert:
+    that:
+      - guacamole_deploy_native_quadlet_file.stat.exists | default(false)
+      - guacamole_deploy_native_quadlet_file.stat.isreg | default(false)
+      - not (guacamole_deploy_native_quadlet_file.stat.islnk | default(false))
+      - guacamole_deploy_native_quadlet_file.stat.mode | default('') == '0644'
+      - guacamole_deploy_native_quadlet_file.stat.pw_name | default('') == 'root'
+      - guacamole_deploy_native_quadlet_file.stat.gr_name | default('') == 'root'
+      - guacamole_deploy_native_quadlet_read.content | default('') | length > 0
+      - guacamole_deploy_native_drop_in_paths.rc == 0
+      - guacamole_deploy_native_drop_in_paths.stdout | trim == ''
+      - >-
+        (
+          guacamole_deploy_native_systemd_active.stdout | trim == 'unknown'
+          and guacamole_deploy_native_systemd_enabled.stdout | trim == 'not-found'
+          and guacamole_deploy_native_fragment_path.stdout | trim == ''
+        )
+        or (
+          guacamole_deploy_native_fragment_path.rc == 0
+          and guacamole_deploy_native_fragment_path.stdout | trim
+          is match(
+            '^/run/systemd/generator(?:\\.early|\\.late)?/'
+            ~ (guacamole_deploy_systemd_unit_name | regex_escape)
+            ~ '\\.service\\Z'
+          )
+        )
+      - >-
+        (
+          guacamole_deploy_native_quadlet_read.content
+          | default('') | b64decode
+        ).splitlines()
+        | reject('equalto', '') | list
+        == (
+          [
+            '[Unit]',
+            'Description=' ~ guacamole_deploy_systemd_description,
+            'After=network-online.target',
+            'Wants=network-online.target',
+            '[Kube]',
+            'Yaml=' ~ guacamole_deploy_manifest_path
+          ]
+          + (
+            guacamole_deploy_quadlet_networks
+            | map('regex_replace', '^(.*)$', 'Network=\\1') | list
+          )
+          + ['[Install]', 'WantedBy=multi-user.target']
+        )
+      - >-
+        (
+          guacamole_deploy_systemd_enabled | bool
+          and guacamole_deploy_native_systemd_enabled.stdout | trim
+          in ['enabled', 'generated']
+        )
+        or (
+          not (guacamole_deploy_systemd_enabled | bool)
+          and guacamole_deploy_native_systemd_enabled.stdout | trim == 'disabled'
+        )
+    fail_msg: >-
+      The existing native Guacamole Quadlet cannot be proven role-owned with
+      the requested manifest, networks, description, and enablement. Refusing
+      to collide with or take over an administrator-owned unit.
+    quiet: true
+  when: >-
+    guacamole_deploy_native_quadlet_file.stat.exists | default(false)
+    or guacamole_deploy_native_systemd_enabled.stdout | trim != 'not-found'
+    or guacamole_deploy_native_systemd_active.stdout | trim in ['active', 'failed']
+
+- name: Refuse unmanaged Guacamole pod; remove it first
+  ansible.builtin.command:
+    argv: [podman, pod, exists, "{{ guacamole_deploy_pod_name }}"]
+  register: guacamole_deploy_existing_pod
+  changed_when: false
+  failed_when: >-
+    guacamole_deploy_existing_pod.rc not in [0, 1]
+    or (guacamole_deploy_existing_pod.rc == 0
+    and guacamole_deploy_legacy_systemd_active.stdout | trim != 'active'
+    and guacamole_deploy_native_systemd_active.stdout | trim != 'active')
+
+- name: Refuse a legacy Guacamole unit loaded from an unexpected fragment
+  ansible.builtin.assert:
+    that:
+      - guacamole_deploy_legacy_fragment_path.rc == 0
+      - guacamole_deploy_legacy_drop_in_paths.rc == 0
+      - guacamole_deploy_legacy_drop_in_paths.stdout | trim == ''
+      - >-
+        guacamole_deploy_legacy_fragment_path.stdout | trim
+        in ['', guacamole_deploy_legacy_systemd_unit_path]
+      - >-
+        (
+          guacamole_deploy_legacy_systemd_active.stdout | trim
+          in ['inactive', 'unknown']
+          and guacamole_deploy_legacy_systemd_enabled.stdout | trim == 'not-found'
+          and guacamole_deploy_legacy_fragment_path.stdout | trim == ''
+        )
+        or (
+          guacamole_deploy_legacy_fragment_path.stdout | trim
+          == guacamole_deploy_legacy_systemd_unit_path
+        )
+      - >-
+        guacamole_deploy_legacy_unit_stat.stat.exists | bool
+        or (
+          guacamole_deploy_legacy_systemd_active.stdout | trim
+          in ['inactive', 'unknown']
+          and guacamole_deploy_legacy_systemd_enabled.stdout | trim == 'not-found'
+          and guacamole_deploy_legacy_fragment_path.stdout | trim == ''
+        )
+    fail_msg: >-
+      guacamole.service is loaded from an unverified fragment outside the
+      configured role-owned path; refusing to start a second controller.
+    quiet: true
+
+- name: Refuse an unsafe legacy Guacamole unit path before reading
+  ansible.builtin.assert:
+    that:
+      - not (guacamole_deploy_legacy_unit_stat.stat.islnk | default(false) | bool)
+      - guacamole_deploy_legacy_unit_stat.stat.isreg | default(false) | bool
+      - guacamole_deploy_legacy_unit_stat.stat.mode | default('') == '0644'
+      - guacamole_deploy_legacy_unit_stat.stat.pw_name | default('') == 'root'
+      - guacamole_deploy_legacy_unit_stat.stat.gr_name | default('') == 'root'
+    fail_msg: >-
+      The exact Guacamole service path exists but is not a root-owned regular
+      file with mode 0644. Refusing to read, follow, or replace it.
+    quiet: true
+  when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
+- name: Read the exact legacy Guacamole unit before takeover
+  ansible.builtin.slurp:
+    src: "{{ guacamole_deploy_legacy_systemd_unit_path }}"
+  register: guacamole_deploy_legacy_unit_raw
+  no_log: true
+  when:
+    - guacamole_deploy_legacy_unit_stat.stat.exists | bool
+    - not (guacamole_deploy_legacy_unit_stat.stat.islnk | default(false) | bool)
+    - guacamole_deploy_legacy_unit_stat.stat.isreg | default(false) | bool
+
+- name: Normalize the role-owned legacy Guacamole unit contract
+  ansible.builtin.set_fact:
+    guacamole_deploy_legacy_unit_actual_lines: >-
+      {{
+        (guacamole_deploy_legacy_unit_raw.content | b64decode).splitlines()
+        | map('trim')
+        | reject('equalto', '')
+        | reject('match', '^#')
+        | list
+      }}
+    guacamole_deploy_legacy_unit_expected_lines:
+      - "[Unit]"
+      - "Description=Apache Guacamole Podman application pod"
+      - "Wants=network-online.target"
+      - "After=network-online.target"
+      - "[Service]"
+      - "Type=oneshot"
+      - "RemainAfterExit=yes"
+      - "ExecStartPre=-/usr/bin/podman kube down {{ guacamole_deploy_manifest_path }}"
+      - >-
+        ExecStart=/usr/bin/podman kube play{% if guacamole_deploy_network_name | length > 0 %}
+        --network {{ guacamole_deploy_network_name }}:ip={{ guacamole_deploy_network_ipv4 }}{% endif %}
+        {{ guacamole_deploy_manifest_path }}
+      - "ExecStop=/usr/bin/podman kube down {{ guacamole_deploy_manifest_path }}"
+      - "TimeoutStartSec=300"
+      - "TimeoutStopSec=120"
+      - "[Install]"
+      - "WantedBy=multi-user.target"
+  when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
+- name: Refuse to replace an unknown Guacamole systemd unit
+  ansible.builtin.assert:
+    that:
+      - >-
+        guacamole_deploy_legacy_unit_actual_lines
+        == guacamole_deploy_legacy_unit_expected_lines
+    fail_msg: >-
+      The exact Guacamole service path exists but is not the role-owned legacy
+      podman-kube wrapper with its canonical ordered directives. Refusing
+      destructive takeover.
+    quiet: true
+  when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
+- name: Cut over to native Guacamole Quadlet with rollback
+  block:
+    - name: Preview transactional Guacamole Pod manifest drift
+      ansible.builtin.template:
+        src: guacamole-pod.yml.j2
+        dest: "{{ guacamole_deploy_manifest_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      check_mode: true
+      diff: false
+      no_log: true
+      register: guacamole_deploy_manifest_preview
+
+    - name: Stage native Guacamole Quadlet before lifecycle mutation
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: stopped
+        podman_systemd_unit_name: "{{ guacamole_deploy_systemd_unit_name }}"
+        podman_systemd_description: "{{ guacamole_deploy_systemd_description }}"
+        podman_systemd_manifest_path: "{{ guacamole_deploy_manifest_path }}"
+        podman_systemd_scope: "{{ guacamole_deploy_systemd_scope }}"
+        podman_systemd_quadlet_dir: "{{ guacamole_deploy_quadlet_dir }}"
+        podman_systemd_enabled: false
+        podman_systemd_networks: "{{ guacamole_deploy_quadlet_networks }}"
+      when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
+
+    - name: Reinspect the staged native Guacamole Quadlet
+      ansible.builtin.stat:
+        path: "{{ guacamole_deploy_quadlet_dir }}/{{ guacamole_deploy_systemd_unit_name }}.kube"
+        follow: false
+      register: guacamole_deploy_staged_quadlet_file
+      when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
+
+    - name: Resolve the staged native Guacamole unit fragment
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - "{{ guacamole_deploy_systemd_unit_name }}.service"
+          - --property=FragmentPath
+          - --value
+      register: guacamole_deploy_staged_fragment_path
+      changed_when: false
+      failed_when: false
+      when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
+
+    - name: Resolve staged native Guacamole unit drop-ins
+      ansible.builtin.command:
+        argv:
+          - systemctl
+          - show
+          - "{{ guacamole_deploy_systemd_unit_name }}.service"
+          - --property=DropInPaths
+          - --value
+      register: guacamole_deploy_staged_drop_in_paths
+      changed_when: false
+      failed_when: false
+      when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
+
+    - name: Require the staged native Guacamole Quadlet provenance boundary
+      ansible.builtin.assert:
+        that:
+          - guacamole_deploy_staged_quadlet_file.stat.isreg | default(false)
+          - not (guacamole_deploy_staged_quadlet_file.stat.islnk | default(false))
+          - guacamole_deploy_staged_quadlet_file.stat.mode | default('') == '0644'
+          - guacamole_deploy_staged_quadlet_file.stat.pw_name | default('') == 'root'
+          - guacamole_deploy_staged_quadlet_file.stat.gr_name | default('') == 'root'
+          - guacamole_deploy_staged_fragment_path.rc == 0
+          - guacamole_deploy_staged_drop_in_paths.rc == 0
+          - guacamole_deploy_staged_drop_in_paths.stdout | trim == ''
+          - >-
+            guacamole_deploy_staged_fragment_path.stdout | trim
+            is match(
+              '^/run/systemd/generator(?:\\.early|\\.late)?/'
+              ~ (guacamole_deploy_systemd_unit_name | regex_escape)
+              ~ '\\.service\\Z'
+            )
+        fail_msg: >-
+          The staged Guacamole controller is not a root-owned mode-0644
+          Quadlet with the expected generated systemd fragment; refusing
+          lifecycle mutation.
+        quiet: true
+      when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
+
+    - name: Stop and disable the exact legacy Guacamole unit before removal
+      ansible.builtin.systemd_service:
+        name: "{{ guacamole_deploy_legacy_systemd_unit_path | basename }}"
+        state: stopped
+        enabled: false
+      when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
+    - name: Stop the exact active native Guacamole unit before manifest replacement
+      ansible.builtin.systemd_service:
+        name: "{{ guacamole_deploy_systemd_unit_name }}.service"
+        state: stopped
+        scope: "{{ guacamole_deploy_systemd_scope }}"
+      when:
+        - guacamole_deploy_native_systemd_active.stdout | trim == 'active'
+        - guacamole_deploy_manifest_preview.changed | default(false) | bool
+
+    - name: Render the transactional Guacamole Pod manifest
+      ansible.builtin.template:
+        src: guacamole-pod.yml.j2
+        dest: "{{ guacamole_deploy_manifest_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+      register: guacamole_deploy_manifest_render
+
+    - name: Manage native Guacamole Quadlet service
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: >-
+          {{
+            'restarted'
+            if (
+              guacamole_deploy_manifest_render.changed | default(false) | bool
+              or guacamole_deploy_native_systemd_active.stdout | trim != 'active'
+            )
+            else 'present'
+          }}
+        podman_systemd_unit_name: "{{ guacamole_deploy_systemd_unit_name }}"
+        podman_systemd_description: "{{ guacamole_deploy_systemd_description }}"
+        podman_systemd_manifest_path: "{{ guacamole_deploy_manifest_path }}"
+        podman_systemd_scope: "{{ guacamole_deploy_systemd_scope }}"
+        podman_systemd_quadlet_dir: "{{ guacamole_deploy_quadlet_dir }}"
+        podman_systemd_enabled: "{{ guacamole_deploy_systemd_enabled }}"
+        podman_systemd_networks: "{{ guacamole_deploy_quadlet_networks }}"
+
+    - name: Wait for Guacamole readiness before committing legacy removal
+      ansible.builtin.uri:
+        url: "{{ guacamole_deploy_health_url }}"
+        method: GET
+        status_code: 200
+        validate_certs: "{{ guacamole_deploy_validate_certs }}"
+      register: guacamole_deploy_health
+      until: guacamole_deploy_health.status == 200
+      retries: 40
+      delay: 5
+      changed_when: false
+
+    - name: Remove the verified legacy Guacamole systemd unit
+      ansible.builtin.file:
+        path: "{{ guacamole_deploy_legacy_systemd_unit_path }}"
+        state: absent
+      register: guacamole_deploy_legacy_unit_removal
+      when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
+    # This reload is part of the takeover transaction. A handler would require
+    # a play-global flush and could execute unrelated handlers before commit.
+    - name: Reload systemd after verified legacy Guacamole unit removal  # noqa: no-handler
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+        scope: system
+      when: guacamole_deploy_legacy_unit_removal.changed | default(false)
+  rescue:
+    - name: Capture the original native Guacamole takeover failure
+      ansible.builtin.set_fact:
+        guacamole_deploy_takeover_failure_message: >-
+          {{ ansible_failed_result.msg | default('unknown takeover failure') }}
+        guacamole_deploy_cleanup_failure_message: ""
+        guacamole_deploy_manifest_restore_failure_message: ""
+        guacamole_deploy_native_quadlet_restore_failure_message: ""
+        guacamole_deploy_native_restore_failure_message: ""
+        guacamole_deploy_native_quiescence_failure_message: ""
+        guacamole_deploy_legacy_restore_failure_message: ""
+        guacamole_deploy_native_quiescence_proven: false
+        guacamole_deploy_native_cleanup_proven: >-
+          {{ guacamole_deploy_native_quadlet_file.stat.exists | default(false) }}
+        guacamole_deploy_manifest_restoration_proven: false
+        guacamole_deploy_native_quadlet_restoration_proven: >-
+          {{ not (guacamole_deploy_native_quadlet_file.stat.exists | default(false)) }}
+
+    - name: Attempt failed native Guacamole cleanup without blocking restoration
+      block:
+        - name: Remove the transaction-created native Guacamole Quadlet
+          ansible.builtin.include_role:
+            name: lit.foundational.podman_systemd
+          vars:
+            podman_systemd_action: absent
+            podman_systemd_unit_name: "{{ guacamole_deploy_systemd_unit_name }}"
+            podman_systemd_description: "{{ guacamole_deploy_systemd_description }}"
+            podman_systemd_manifest_path: "{{ guacamole_deploy_manifest_path }}"
+            podman_systemd_scope: "{{ guacamole_deploy_systemd_scope }}"
+            podman_systemd_quadlet_dir: "{{ guacamole_deploy_quadlet_dir }}"
+            podman_systemd_enabled: false
+            podman_systemd_networks: "{{ guacamole_deploy_quadlet_networks }}"
+          when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
+
+        - name: Record proven transaction-created native Guacamole cleanup
+          ansible.builtin.set_fact:
+            guacamole_deploy_native_cleanup_proven: true
+          when: not (guacamole_deploy_native_quadlet_file.stat.exists | default(false))
+
+      rescue:
+        - name: Capture failed native Guacamole cleanup
+          ansible.builtin.set_fact:
+            guacamole_deploy_cleanup_failure_message: >-
+              {{ ansible_failed_result.msg | default('unknown cleanup failure') }}
+
+    - name: Prove failed native Guacamole quiescence before file restoration
+      block:
+        - name: Inspect native Guacamole activity before rollback quiescence
+          ansible.builtin.command:
+            argv: >-
+              {{ ['systemctl']
+                 + (['--user'] if guacamole_deploy_systemd_scope == 'user' else [])
+                 + ['is-active', guacamole_deploy_systemd_unit_name ~ '.service'] }}
+          register: guacamole_deploy_native_activity_before_rollback
+          changed_when: false
+          failed_when: false
+
+        - name: Stop the exact failed native Guacamole unit before file restoration
+          ansible.builtin.systemd:
+            name: "{{ guacamole_deploy_systemd_unit_name }}.service"
+            state: stopped
+            scope: "{{ guacamole_deploy_systemd_scope }}"
+          when: >-
+            guacamole_deploy_native_activity_before_rollback.stdout | trim
+            in ['active', 'failed']
+
+        - name: Inspect native Guacamole activity after rollback stop
+          ansible.builtin.command:
+            argv: >-
+              {{ ['systemctl']
+                 + (['--user'] if guacamole_deploy_systemd_scope == 'user' else [])
+                 + ['is-active', guacamole_deploy_systemd_unit_name ~ '.service'] }}
+          register: guacamole_deploy_native_activity_after_cleanup
+          changed_when: false
+          failed_when: false
+
+        - name: Inspect native Guacamole pod after rollback stop
+          ansible.builtin.command:
+            argv: [podman, pod, exists, "{{ guacamole_deploy_pod_name }}"]
+          register: guacamole_deploy_native_pod_after_cleanup
+          changed_when: false
+          failed_when: guacamole_deploy_native_pod_after_cleanup.rc not in [0, 1]
+
+        - name: Require native Guacamole service and pod absence before file restoration
+          ansible.builtin.assert:
+            that:
+              - guacamole_deploy_native_activity_after_cleanup.rc in [3, 4]
+              - >-
+                guacamole_deploy_native_activity_after_cleanup.stdout | trim
+                in ['inactive', 'failed', 'unknown']
+              - guacamole_deploy_native_pod_after_cleanup.rc == 1
+            fail_msg: >-
+              The failed native Guacamole controller or pod is not proven
+              quiescent; refusing file restoration or controller restart.
+            quiet: true
+
+        - name: Record proven native Guacamole quiescence before file restoration
+          ansible.builtin.set_fact:
+            guacamole_deploy_native_quiescence_proven: true
+      rescue:
+        - name: Capture unproven native Guacamole quiescence
+          ansible.builtin.set_fact:
+            guacamole_deploy_native_quiescence_failure_message: >-
+              {{ ansible_failed_result.msg | default('native controller or pod quiescence is unproven') }}
+
+    - name: Attempt exact Guacamole Pod manifest restoration
+      when: guacamole_deploy_native_quiescence_proven | bool
+      block:
+        - name: Restore the exact pre-transaction Guacamole Pod manifest
+          ansible.builtin.copy:
+            dest: "{{ guacamole_deploy_manifest_path }}"
+            content: "{{ guacamole_deploy_original_manifest_read.content | b64decode }}"
+            owner: "{{ guacamole_deploy_original_manifest_file.stat.uid }}"
+            group: "{{ guacamole_deploy_original_manifest_file.stat.gid }}"
+            mode: "{{ guacamole_deploy_original_manifest_file.stat.mode }}"
+          no_log: true
+          when: guacamole_deploy_original_manifest_file.stat.exists | default(false)
+
+        - name: Remove a transaction-created Guacamole Pod manifest
+          ansible.builtin.file:
+            path: "{{ guacamole_deploy_manifest_path }}"
+            state: absent
+          when: not (guacamole_deploy_original_manifest_file.stat.exists | default(false))
+
+        - name: Record proven Guacamole Pod manifest restoration
+          ansible.builtin.set_fact:
+            guacamole_deploy_manifest_restoration_proven: true
+      rescue:
+        - name: Capture failed Guacamole Pod manifest restoration
+          ansible.builtin.set_fact:
+            guacamole_deploy_manifest_restore_failure_message: >-
+              {{ ansible_failed_result.msg | default('unknown manifest restoration failure') }}
+
+    - name: Attempt exact pre-existing native Guacamole Quadlet restoration
+      when:
+        - guacamole_deploy_native_quiescence_proven | bool
+        - guacamole_deploy_native_quadlet_file.stat.exists | default(false)
+      block:
+        - name: Restore exact pre-transaction native Guacamole Quadlet
+          ansible.builtin.copy:
+            dest: "{{ guacamole_deploy_quadlet_dir }}/{{ guacamole_deploy_systemd_unit_name }}.kube"
+            content: "{{ guacamole_deploy_native_quadlet_read.content | b64decode }}"
+            owner: "{{ guacamole_deploy_native_quadlet_file.stat.uid }}"
+            group: "{{ guacamole_deploy_native_quadlet_file.stat.gid }}"
+            mode: "{{ guacamole_deploy_native_quadlet_file.stat.mode }}"
+          no_log: true
+
+        - name: Reload systemd after exact native Guacamole Quadlet restoration
+          ansible.builtin.systemd:
+            daemon_reload: true
+            scope: "{{ guacamole_deploy_systemd_scope }}"
+
+        - name: Record proven native Guacamole Quadlet restoration
+          ansible.builtin.set_fact:
+            guacamole_deploy_native_quadlet_restoration_proven: true
+      rescue:
+        - name: Capture failed native Guacamole Quadlet restoration
+          ansible.builtin.set_fact:
+            guacamole_deploy_native_quadlet_restore_failure_message: >-
+              {{ ansible_failed_result.msg | default('unknown native Quadlet restoration failure') }}
+
+    - name: Attempt pre-existing native Guacamole service-state restoration
+      when:
+        - guacamole_deploy_native_quiescence_proven | bool
+        - guacamole_deploy_native_cleanup_proven | bool
+        - guacamole_deploy_manifest_restoration_proven | bool
+        - guacamole_deploy_native_quadlet_restoration_proven | bool
+      block:
+        - name: Restore enabled or disabled native Guacamole service state after failure
+          ansible.builtin.systemd:
+            name: "{{ guacamole_deploy_systemd_unit_name }}.service"
+            state: >-
+              {{
+                'restarted'
+                if (
+                  guacamole_deploy_native_systemd_active.stdout | trim == 'active'
+                  and guacamole_deploy_manifest_render.changed | default(false) | bool
+                )
+                else (
+                  'started'
+                  if guacamole_deploy_native_systemd_active.stdout | trim == 'active'
+                  else 'stopped'
+                )
+              }}
+            enabled: >-
+              {{ guacamole_deploy_native_systemd_enabled.stdout | trim == 'enabled' }}
+            scope: "{{ guacamole_deploy_systemd_scope }}"
+          when: guacamole_deploy_native_systemd_enabled.stdout | trim in ['enabled', 'disabled']
+
+        - name: Restore generated native Guacamole service state after failure
+          ansible.builtin.systemd:
+            name: "{{ guacamole_deploy_systemd_unit_name }}.service"
+            state: >-
+              {{
+                'restarted'
+                if (
+                  guacamole_deploy_native_systemd_active.stdout | trim == 'active'
+                  and guacamole_deploy_manifest_render.changed | default(false) | bool
+                )
+                else (
+                  'started'
+                  if guacamole_deploy_native_systemd_active.stdout | trim == 'active'
+                  else 'stopped'
+                )
+              }}
+            scope: "{{ guacamole_deploy_systemd_scope }}"
+          when: guacamole_deploy_native_systemd_enabled.stdout | trim == 'generated'
+      rescue:
+        - name: Capture failed pre-existing native Guacamole restoration
+          ansible.builtin.set_fact:
+            guacamole_deploy_native_restore_failure_message: >-
+              {{ ansible_failed_result.msg | default('unknown native restoration failure') }}
+
+    - name: Attempt exact legacy Guacamole restoration after failed takeover
+      when:
+        - guacamole_deploy_native_quiescence_proven | bool
+        - guacamole_deploy_native_cleanup_proven | bool
+        - guacamole_deploy_manifest_restoration_proven | bool
+        - guacamole_deploy_native_quadlet_restoration_proven | bool
+      block:
+        - name: Restore the exact legacy Guacamole unit file
+          ansible.builtin.copy:
+            dest: "{{ guacamole_deploy_legacy_systemd_unit_path }}"
+            content: "{{ guacamole_deploy_legacy_unit_raw.content | b64decode }}"
+            owner: "{{ guacamole_deploy_legacy_unit_stat.stat.uid }}"
+            group: "{{ guacamole_deploy_legacy_unit_stat.stat.gid }}"
+            mode: "{{ guacamole_deploy_legacy_unit_stat.stat.mode }}"
+          no_log: true
+          when: guacamole_deploy_legacy_unit_stat.stat.exists | bool
+
+        - name: Restore the exact legacy Guacamole service state
+          ansible.builtin.systemd_service:
+            name: "{{ guacamole_deploy_legacy_systemd_unit_path | basename }}"
+            state: >-
+              {{ 'started' if guacamole_deploy_legacy_systemd_active.stdout | trim == 'active' else 'stopped' }}
+            enabled: >-
+              {{ guacamole_deploy_legacy_systemd_enabled.stdout | trim == 'enabled' }}
+            daemon_reload: true
+          when:
+            - guacamole_deploy_legacy_unit_stat.stat.exists | bool
+      rescue:
+        - name: Capture failed legacy Guacamole restoration
+          ansible.builtin.set_fact:
+            guacamole_deploy_legacy_restore_failure_message: >-
+              {{ ansible_failed_result.msg | default('unknown legacy restoration failure') }}
+
+    - name: Report failed native Guacamole takeover after rollback
+      ansible.builtin.fail:
+        msg: >-
+          Native Guacamole Quadlet takeover failed:
+          {{ guacamole_deploy_takeover_failure_message }}.
+          Cleanup failure:
+          {{ guacamole_deploy_cleanup_failure_message | default('') | default('none', true) }}.
+          Manifest restoration failure:
+          {{ guacamole_deploy_manifest_restore_failure_message | default('') | default('none', true) }}.
+          Native Quadlet restoration failure:
+          {{ guacamole_deploy_native_quadlet_restore_failure_message | default('') | default('none', true) }}.
+          Native restoration failure:
+          {{ guacamole_deploy_native_restore_failure_message | default('') | default('none', true) }}.
+          Native quiescence failure:
+          {{ guacamole_deploy_native_quiescence_failure_message | default('') | default('none', true) }}.
+          Legacy restoration failure:
+          {{ guacamole_deploy_legacy_restore_failure_message | default('') | default('none', true) }}.

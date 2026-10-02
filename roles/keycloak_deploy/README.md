@@ -31,6 +31,20 @@ Key variables:
 - `keycloak_deploy_admin_password`
 - `keycloak_deploy_generate_secrets`
 - `keycloak_deploy_manage_systemd`
+Proxy headers require valid `keycloak_deploy_proxy_trusted_addresses`, rendered
+as `KC_PROXY_TRUSTED_ADDRESSES`. Edge TLS keeps Keycloak on host loopback,
+attaches NGINX and Keycloak to a pinned private Quadlet network, and trusts only
+the NGINX pod address.
+
+Managed bridge PostgreSQL requires a private `keycloak_deploy_db_host` matching
+its pinned network IP; readiness uses the published host endpoint. DNS and
+Keycloak loopback are rejected.
+
+Exactly one lifecycle controller owns the pod: native `.kube` Quadlet through
+`lit.foundational.podman_systemd`, or explicit fail-closed direct kubeplay.
+Both verify the active database endpoint before health acceptance. Quadlet
+takeover disables only the exact legacy unit; its `<pod-name>-pod.service` name
+avoids `keycloak.service` collisions. Missing systemd fails prechecks.
 
 ## Dependencies
 
@@ -48,6 +62,12 @@ the collection.
     - role: lit.supplementary.keycloak_deploy
       vars:
         keycloak_deploy_manage_postgres: true
+        keycloak_deploy_manage_systemd: true
+        keycloak_deploy_networks:
+          - keycloak-access.network:ip=10.89.40.2
+        keycloak_deploy_postgres_networks:
+          - keycloak-access.network:ip=10.89.40.3
+        keycloak_deploy_db_host: 10.89.40.3
         keycloak_deploy_admin_user: admin
         keycloak_deploy_generate_secrets: false
         keycloak_deploy_admin_password: "{{ vault_keycloak_admin_password }}"
