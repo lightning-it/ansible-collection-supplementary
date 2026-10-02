@@ -171,12 +171,45 @@ jobs:
           release_receipt="$(git -C repository show "${expected_base}:changelogs/release-preparation.json")"
           jq -e --arg version "$base_version" '
             .schema_version == 2 and .next_version == $version
+            and (
+              if .release_mode == "normal" then
+                .security == null and .chain_id == null
+              elif .release_mode == "security" then
+                (.security | type == "object")
+                and (.chain_id | type == "string" and test("^sha256:[0-9a-f]{64}$"))
+                and .security.metadata_path == (".lit/security-releases/" + $version + ".json")
+                and .security.intake_receipt_path == (".lit/security-release-intakes/" + $version + ".json")
+                and (.security.metadata_sha256 | type == "string" and test("^sha256:[0-9a-f]{64}$"))
+                and (.security.intake_receipt_sha256 | type == "string" and test("^sha256:[0-9a-f]{64}$"))
+              else false end
+            )
             and (.fragments | type == "array" and length > 0)
             and all(.fragments[];
               (.path | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._-]*\\.ya?ml$"))
               and (.sha256 | type == "string" and test("^[0-9a-f]{64}$")))
             and ([.fragments[].path] | length) == ([.fragments[].path] | unique | length)
           ' <<<"$release_receipt" >/dev/null
+          if [ "$(jq -r '.release_mode' <<<"$release_receipt")" = security ]; then
+            for security_kind in metadata intake_receipt; do
+              security_path="$(jq -er --arg key "${security_kind}_path" '.security[$key]' <<<"$release_receipt")"
+              expected_digest="$(jq -er --arg key "${security_kind}_sha256" '.security[$key]' <<<"$release_receipt")"
+              test "$(git -C repository cat-file -t "${expected_base}:${security_path}")" = blob
+              test "$(git -C repository cat-file -t "${expected_head}:${security_path}")" = blob
+              actual_digest="$(git -C repository show "${expected_base}:${security_path}" | sha256sum | cut -d ' ' -f1)"
+              test "sha256:${actual_digest}" = "$expected_digest"
+              git -C repository diff --exit-code --quiet --no-ext-diff --no-textconv \
+                "$expected_base" "$expected_head" -- "$security_path"
+            done
+          else
+            # Normal mode cannot gain or retain a current-version Security marker.
+            for security_directory in .lit/security-releases .lit/security-release-intakes; do
+              for revision in "$expected_base" "$expected_head"; do
+                security_entry="$(git -C repository ls-tree --full-tree "$revision" -- \
+                  "${security_directory}/${base_version}.json")"
+                test -z "$security_entry"
+              done
+            done
+          fi
           while IFS= read -r consumed_fragment; do
             consumed_entry="$(git -C repository ls-tree --full-tree "$expected_head" -- \
               "changelogs/fragments/${consumed_fragment}")"

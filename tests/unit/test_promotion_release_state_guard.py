@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -21,8 +22,28 @@ GENERATED = (
 )
 RECEIPT = {
     "schema_version": 2,
+    "release_mode": "normal",
+    "security": None,
+    "chain_id": None,
     "next_version": "4.0.0",
     "fragments": [{"path": "consumed.yml", "sha256": "1" * 64}],
+}
+SECURITY_FILES = {
+    ".lit/security-releases/4.0.0.json": '{"evidenceId":"fixture"}\n',
+    ".lit/security-release-intakes/4.0.0.json": '{"request":{"evidenceId":"fixture"}}\n',
+}
+SECURITY_RECEIPT = {
+    **RECEIPT,
+    "release_mode": "security",
+    "chain_id": "sha256:" + "2" * 64,
+    "security": {
+        "metadata_path": ".lit/security-releases/4.0.0.json",
+        "metadata_sha256": "sha256:"
+        + hashlib.sha256(SECURITY_FILES[".lit/security-releases/4.0.0.json"].encode()).hexdigest(),
+        "intake_receipt_path": ".lit/security-release-intakes/4.0.0.json",
+        "intake_receipt_sha256": "sha256:"
+        + hashlib.sha256(SECURITY_FILES[".lit/security-release-intakes/4.0.0.json"].encode()).hexdigest(),
+    },
 }
 
 
@@ -140,6 +161,53 @@ class PromotionReleaseStateGuardTests(unittest.TestCase):
             self.script.index("# LI-139 release-state guard:end"),
             self.script.index("create_promotion_pr()"),
         )
+
+    def test_preserved_security_release_state_is_allowed(self) -> None:
+        base = {**SECURITY_FILES, "changelogs/release-preparation.json": json.dumps(SECURITY_RECEIPT)}
+        result = self.run_case({}, base)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_security_files_cannot_be_changed_or_deleted(self) -> None:
+        base = {**SECURITY_FILES, "changelogs/release-preparation.json": json.dumps(SECURITY_RECEIPT)}
+        for path in SECURITY_FILES:
+            for content in (None, "changed\n"):
+                with self.subTest(path=path, content=content):
+                    self.assertNotEqual(self.run_case({path: content}, base).returncode, 0)
+
+    def test_security_paths_and_digests_are_strictly_version_bound(self) -> None:
+        for field, value in (
+            ("metadata_path", ".lit/security-releases/3.6.1.json"),
+            ("intake_receipt_path", "../outside.json"),
+            ("metadata_sha256", "sha256:" + "0" * 64),
+            ("intake_receipt_sha256", "sha256:" + "0" * 64),
+            ("metadata_sha256", "invalid"),
+            ("intake_receipt_sha256", None),
+        ):
+            with self.subTest(field=field, value=value):
+                receipt = json.loads(json.dumps(SECURITY_RECEIPT))
+                receipt["security"][field] = value
+                base = {**SECURITY_FILES, "changelogs/release-preparation.json": json.dumps(receipt)}
+                self.assertNotEqual(self.run_case({}, base).returncode, 0)
+
+    def test_release_mode_must_be_explicit_and_consistent(self) -> None:
+        for receipt in (
+            {key: value for key, value in RECEIPT.items() if key != "release_mode"},
+            {**RECEIPT, "release_mode": "unknown"},
+            {**RECEIPT, "release_mode": "security"},
+            {**RECEIPT, "security": {}},
+            {**RECEIPT, "chain_id": "sha256:" + "0" * 64},
+            {**SECURITY_RECEIPT, "chain_id": None},
+        ):
+            with self.subTest(receipt=receipt):
+                self.assertNotEqual(
+                    self.run_case({}, {"changelogs/release-preparation.json": json.dumps(receipt)}).returncode, 0
+                )
+
+    def test_normal_release_cannot_acquire_current_version_security_markers(self) -> None:
+        for path, content in SECURITY_FILES.items():
+            with self.subTest(path=path):
+                self.assertNotEqual(self.run_case({path: content}).returncode, 0)
+                self.assertNotEqual(self.run_case({}, {path: content}).returncode, 0)
 
 
 if __name__ == "__main__":
