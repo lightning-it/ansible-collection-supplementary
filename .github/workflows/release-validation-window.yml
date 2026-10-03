@@ -74,23 +74,29 @@ jobs:
           run_attempt="$PRIOR_RUN_ATTEMPT"
           complete=false
           for attempt in $(seq 1 "$ATTEMPTS"); do
-            if [ -z "$run_id" ]; then
-              runs="$(
-                gh api --method GET \
-                  "repos/${GITHUB_REPOSITORY}/actions/workflows/collection-ci.yml/runs" \
-                  -f branch=main -f event=push -f head_sha="$RELEASE_SHA" -f per_page=100
-              )"
-              matches="$(
-                jq -c --arg sha "$RELEASE_SHA" '
-                  [.workflow_runs[] | select(
-                    .event == "push" and .head_branch == "main" and .head_sha == $sha
-                  )]
-                ' <<< "$runs"
-              )"
-              # A second producer for one release SHA is ambiguous; never select a newer one silently.
-              test "$(jq 'length' <<< "$matches")" -le 1
-              run_id="$(jq -r '.[0].id // empty' <<< "$matches")"
-              run_attempt="$(jq -r '.[0].run_attempt // empty' <<< "$matches")"
+            runs="$(
+              gh api --method GET \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/collection-ci.yml/runs" \
+                -f branch=main -f event=push -f head_sha="$RELEASE_SHA" -f per_page=100
+            )"
+            matches="$(
+              jq -c --arg sha "$RELEASE_SHA" '
+                [.workflow_runs[] | select(
+                  .event == "push" and .head_branch == "main" and .head_sha == $sha
+                )]
+              ' <<< "$runs"
+            )"
+            # Re-query on every poll; a later producer invalidates an existing binding.
+            test "$(jq -r '.total_count // 101' <<< "$runs")" -le 1
+            test "$(jq 'length' <<< "$matches")" -le 1
+            selected_id="$(jq -r '.[0].id // empty' <<< "$matches")"
+            selected_attempt="$(jq -r '.[0].run_attempt // empty' <<< "$matches")"
+            if [ -n "$run_id" ]; then
+              test "$selected_id" = "$run_id"
+              test "$selected_attempt" = "$run_attempt"
+            else
+              run_id="$selected_id"
+              run_attempt="$selected_attempt"
             fi
             if [ -n "$run_id" ]; then
               [[ "$run_id" =~ ^[1-9][0-9]*$ ]]

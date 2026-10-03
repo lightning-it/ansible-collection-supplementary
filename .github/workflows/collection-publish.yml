@@ -462,6 +462,9 @@ jobs:
       contents: write
       id-token: write
       pull-requests: read
+    env:
+      CI_RUN_ID: ${{ needs.release-validation.outputs.ci-run-id }}
+      CI_RUN_ATTEMPT: ${{ needs.release-validation.outputs.ci-run-attempt }}
 
     steps:
       - name: Enforce dedicated release-tag principal configuration
@@ -723,9 +726,11 @@ jobs:
       - name: Download exact candidate and evidence from validated run
         env:
           CI_RUN_ID: ${{ needs.release-validation.outputs.ci-run-id }}
+          CI_RUN_ATTEMPT: ${{ needs.release-validation.outputs.ci-run-attempt }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
           mkdir -p incoming/candidate incoming/evidence
           gh run download "$CI_RUN_ID" \
             --repo "$GITHUB_REPOSITORY" \
@@ -735,10 +740,12 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --name "collection-release-evidence-${RELEASE_SHA}" \
             --dir incoming/evidence
+          bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
 
       - name: Validate candidate, MANIFEST, evidence, and repository policy
         env:
           CI_RUN_ID: ${{ needs.release-validation.outputs.ci-run-id }}
+          CI_RUN_ATTEMPT: ${{ needs.release-validation.outputs.ci-run-attempt }}
           REQUEST_CREATE_GITHUB_RELEASE: ${{ inputs.create_github_release }}
           REQUEST_PUBLISH_GALAXY: ${{ inputs.publish_galaxy }}
         run: |
@@ -851,12 +858,16 @@ jobs:
               raise SystemExit("evidence commit does not match release SHA")
           if str(evidence_manifest.get("workflow_run_id")) != os.environ["CI_RUN_ID"]:
               raise SystemExit("evidence workflow run does not match selected CI run")
+          if str(evidence_manifest.get("workflow_attempt")) != os.environ["CI_RUN_ATTEMPT"]:
+              raise SystemExit("evidence workflow attempt does not match selected CI attempt")
           if evidence_manifest.get("release_eligible") is not True:
               raise SystemExit("release evidence is not eligible")
           if publication.get("commit_sha") != release_sha:
               raise SystemExit("publication eligibility commit does not match release SHA")
           if str(publication.get("workflow_run_id")) != os.environ["CI_RUN_ID"]:
               raise SystemExit("publication eligibility workflow does not match selected CI run")
+          if str(publication.get("workflow_attempt")) != os.environ["CI_RUN_ATTEMPT"]:
+              raise SystemExit("publication eligibility attempt does not match selected CI attempt")
           if publication.get("release_eligible") is not True:
               raise SystemExit("publication eligibility is false")
           publication_gates = publication.get("gates")
@@ -870,6 +881,8 @@ jobs:
               raise SystemExit("release-security receipt commit does not match release SHA")
           if str(security_receipt.get("workflow_run_id")) != os.environ["CI_RUN_ID"]:
               raise SystemExit("release-security receipt workflow does not match selected CI run")
+          if str(security_receipt.get("workflow_attempt")) != os.environ["CI_RUN_ATTEMPT"]:
+              raise SystemExit("release-security receipt attempt does not match selected CI attempt")
           if security_receipt.get("release_eligible") is not True:
               raise SystemExit("release-security receipt is not eligible")
           receipt_gates = security_receipt.get("gates")
@@ -1204,6 +1217,11 @@ jobs:
             --source-ref refs/heads/main \
             --source-digest "$RELEASE_SHA"
 
+      - name: Revalidate exact CI producer before external staging
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
+
       - name: Stage exact Security candidate in native Nexus Galaxy v3
         if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'
         env:
@@ -1520,6 +1538,11 @@ jobs:
             and .repositories[0].full_name == $repository
           ' "$repositories" >/dev/null
 
+      - name: Revalidate exact CI producer before release publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
+
       - name: Create or verify immutable tag with dedicated App
         env:
           APP_SLUG: ${{ steps.release-tag-token.outputs.app-slug }}
@@ -1691,6 +1714,11 @@ jobs:
               )] | length'
           )"
           test "$post_asset_count" -eq 0 || test "$post_asset_count" -eq 2
+
+      - name: Revalidate exact CI producer before Galaxy publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
 
       - name: Publish or verify validated artifact on Ansible Galaxy
         if: env.GALAXY_REQUIRED == 'true'

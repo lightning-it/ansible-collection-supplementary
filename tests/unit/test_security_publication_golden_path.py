@@ -86,8 +86,22 @@ class SecurityPublicationGoldenPathTests(unittest.TestCase):
         self.assertNotIn("Wait for exact-SHA main Release Validation", self.step_names)
         download = self.steps["Download exact candidate and evidence from validated run"]
         self.assertEqual("${{ needs.release-validation.outputs.ci-run-id }}", download["env"]["CI_RUN_ID"])
+        self.assertEqual("${{ needs.release-validation.outputs.ci-run-attempt }}", download["env"]["CI_RUN_ATTEMPT"])
+        self.assertEqual(2, download["run"].count("scripts/verify-release-ci-run.sh"))
         validate = self.steps["Validate candidate, MANIFEST, evidence, and repository policy"]
         self.assertEqual("${{ needs.release-validation.outputs.ci-run-id }}", validate["env"]["CI_RUN_ID"])
+        self.assertEqual("${{ needs.release-validation.outputs.ci-run-attempt }}", validate["env"]["CI_RUN_ATTEMPT"])
+        for evidence in ("evidence_manifest", "publication", "security_receipt"):
+            self.assertIn(f'{evidence}.get("workflow_attempt")', validate["run"])
+        for name in (
+            "Revalidate exact CI producer before external staging",
+            "Revalidate exact CI producer before release publication",
+            "Revalidate exact CI producer before Galaxy publication",
+        ):
+            self.assertIn(
+                'scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"',
+                self.steps[name]["run"],
+            )
 
     def test_release_validation_window_rejects_changed_identity_and_failed_gate(self) -> None:
         reusable = yaml.safe_load((WORKFLOW_PATH.parent / "release-validation-window.yml").read_text())
@@ -113,7 +127,8 @@ if path.endswith("/jobs"):
     }
     result = [{"jobs": [gate]}]
 elif path.endswith("/runs"):
-    result = {"workflow_runs": [run, {**run, "id": 124}] if case == "ambiguous" else [run]}
+    matches = [run, {**run, "id": 124}] if case in {"ambiguous", "late-duplicate"} else [run]
+    result = {"total_count": len(matches), "workflow_runs": matches}
 else:
     result = run
 print(json.dumps(result))
@@ -125,7 +140,7 @@ print(json.dumps(result))
             gh = bin_dir / "gh"
             gh.write_text(stub, encoding="utf-8")
             gh.chmod(0o755)
-            for case in ("success", "changed-attempt", "changed-sha", "failed-gate", "ambiguous"):
+            for case in ("success", "changed-attempt", "changed-sha", "failed-gate", "ambiguous", "late-duplicate"):
                 with self.subTest(case=case):
                     output = root / f"{case}.output"
                     environment = {
@@ -158,6 +173,18 @@ print(json.dumps(result))
                     else:
                         self.assertNotEqual(0, result.returncode, result.stdout)
                         self.assertFalse(output.exists())
+                    publisher_check = subprocess.run(  # noqa: S603 -- fixed checked-in verifier with a local gh stub.
+                        ["/bin/bash", str(ROOT / "scripts/verify-release-ci-run.sh"), "a" * 40, "123", "1"],
+                        env=environment,
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
+                    if case == "success":
+                        self.assertEqual(0, publisher_check.returncode, publisher_check.stderr)
+                    else:
+                        self.assertNotEqual(0, publisher_check.returncode, publisher_check.stdout)
 
     def test_security_order_is_nexus_then_signed_modulix_then_galaxy(self) -> None:
         nexus = self.step_names.index("Stage exact Security candidate in native Nexus Galaxy v3")
