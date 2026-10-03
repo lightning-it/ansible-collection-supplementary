@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -37,8 +40,8 @@ class SecurityPublicationGoldenPathTests(unittest.TestCase):
 
     def test_release_validation_wait_covers_complete_ci_budget(self) -> None:
         environment = self.workflow["env"]
-        attempts = int(environment["RELEASE_VALIDATION_WINDOW_ONE_ATTEMPTS"]) + int(
-            environment["RELEASE_VALIDATION_WINDOW_TWO_ATTEMPTS"]
+        attempts = 7 * int(environment["RELEASE_VALIDATION_WINDOW_ATTEMPTS"]) + int(
+            environment["RELEASE_VALIDATION_FINAL_ATTEMPTS"]
         )
         budget = attempts * int(environment["RELEASE_VALIDATION_POLL_SECONDS"]) // 60
         required = int(environment["RELEASE_VALIDATION_WORST_CASE_MINUTES"]) + int(
@@ -46,29 +49,142 @@ class SecurityPublicationGoldenPathTests(unittest.TestCase):
         )
         self.assertGreaterEqual(budget, required)
         jobs = self.workflow["jobs"]
-        self.assertLessEqual(jobs["release-validation-window"]["timeout-minutes"], 360)
-        self.assertLessEqual(jobs["release-validation"]["timeout-minutes"], 360)
-        first_wait = jobs["release-validation-window"]["steps"][0]["run"]
-        final_wait = jobs["release-validation"]["steps"][0]["run"]
+        reusable = yaml.safe_load((WORKFLOW_PATH.parent / "release-validation-window.yml").read_text())
+        self.assertLessEqual(reusable["jobs"]["window"]["timeout-minutes"], 90)
+        wait = reusable["jobs"]["window"]["steps"][0]["run"]
+        predecessor = "security-classification"
+        for index in range(1, 9):
+            job_name = (
+                "release-validation"
+                if index == 8
+                else ("release-validation-window" if index == 1 else f"release-validation-window-{index}")
+            )
+            job = jobs[job_name]
+            self.assertEqual(predecessor, job["needs"])
+            self.assertEqual("./.github/workflows/release-validation-window.yml", job["uses"])
+            self.assertEqual("${{ inputs.release_sha }}", job["with"]["release_sha"])
+            self.assertEqual(140 if index == 8 else 160, job["with"]["attempts"])
+            self.assertEqual(index == 8, job["with"]["final_window"])
+            if index > 1:
+                for binding, output in (
+                    ("prior_run_id", "ci-run-id"),
+                    ("prior_run_attempt", "ci-run-attempt"),
+                    ("prior_complete", "complete"),
+                ):
+                    self.assertEqual(f"${{{{ needs.{predecessor}.outputs.{output} }}}}", job["with"][binding])
+            predecessor = job_name
         for exact_identity in (
             '.event == "push"',
             '.head_branch == "main"',
             ".head_sha == $sha",
         ):
-            self.assertIn(exact_identity, first_wait)
-            self.assertIn(exact_identity, final_wait)
-        self.assertIn('test -n "$run_id"', first_wait)
-        self.assertIn('echo "ci-run-id=$run_id"', first_wait)
-        self.assertIn("First bounded window exhausted", first_wait)
-        self.assertIn('test "$EARLY_RUN_ID" = "$run_id"', final_wait)
-        self.assertIn('test "$conclusion" = success', final_wait)
-        self.assertIn('test "$gate_count" -eq 1', final_wait)
+            self.assertIn(exact_identity, wait)
+        self.assertIn(".run_attempt == $run_attempt", wait)
+        self.assertIn('test "$conclusion" = success', wait)
+        self.assertIn('test "$gate_count" -eq 1', wait)
         self.assertEqual(["security-classification", "release-validation"], self.publish["needs"])
         self.assertNotIn("Wait for exact-SHA main Release Validation", self.step_names)
         download = self.steps["Download exact candidate and evidence from validated run"]
         self.assertEqual("${{ needs.release-validation.outputs.ci-run-id }}", download["env"]["CI_RUN_ID"])
+        self.assertEqual("${{ needs.release-validation.outputs.ci-run-attempt }}", download["env"]["CI_RUN_ATTEMPT"])
+        self.assertEqual(2, download["run"].count("scripts/verify-release-ci-run.sh"))
         validate = self.steps["Validate candidate, MANIFEST, evidence, and repository policy"]
         self.assertEqual("${{ needs.release-validation.outputs.ci-run-id }}", validate["env"]["CI_RUN_ID"])
+        self.assertEqual("${{ needs.release-validation.outputs.ci-run-attempt }}", validate["env"]["CI_RUN_ATTEMPT"])
+        for evidence in ("evidence_manifest", "publication", "security_receipt"):
+            self.assertIn(f'{evidence}.get("workflow_attempt")', validate["run"])
+        for name in (
+            "Revalidate exact CI producer before external staging",
+            "Revalidate exact CI producer before release publication",
+            "Revalidate exact CI producer before Galaxy publication",
+        ):
+            self.assertIn(
+                'scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"',
+                self.steps[name]["run"],
+            )
+
+    def test_release_validation_window_rejects_changed_identity_and_failed_gate(self) -> None:
+        reusable = yaml.safe_load((WORKFLOW_PATH.parent / "release-validation-window.yml").read_text())
+        wait = reusable["jobs"]["window"]["steps"][0]["run"]
+        stub = """#!/usr/bin/env python3
+import json
+import os
+import sys
+
+case = os.environ["STUB_CASE"]
+sha = "a" * 40
+run = {
+    "id": 123, "run_attempt": 2 if case == "changed-attempt" else 1,
+    "event": "push", "head_branch": "main",
+    "head_sha": "b" * 40 if case == "changed-sha" else sha,
+    "status": "completed", "conclusion": "success",
+}
+path = next(arg for arg in sys.argv[1:] if arg.startswith("repos/"))
+if path.endswith("/jobs"):
+    gate = {
+        "name": "Collection / Release Validation", "run_attempt": 1,
+        "status": "completed", "conclusion": "failure" if case == "failed-gate" else "success",
+    }
+    result = [{"jobs": [gate]}]
+elif path.endswith("/runs"):
+    matches = [run, {**run, "id": 124}] if case in {"ambiguous", "late-duplicate"} else [run]
+    result = {"total_count": len(matches), "workflow_runs": matches}
+else:
+    result = run
+print(json.dumps(result))
+"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            gh = bin_dir / "gh"
+            gh.write_text(stub, encoding="utf-8")
+            gh.chmod(0o755)
+            for case in ("success", "changed-attempt", "changed-sha", "failed-gate", "ambiguous", "late-duplicate"):
+                with self.subTest(case=case):
+                    output = root / f"{case}.output"
+                    environment = {
+                        **os.environ,
+                        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+                        "STUB_CASE": case,
+                        "GITHUB_REPOSITORY": "lightning-it/ansible-collection-supplementary",
+                        "GITHUB_OUTPUT": str(output),
+                        "GH_TOKEN": "fixture",
+                        "RELEASE_SHA": "a" * 40,
+                        "PRIOR_RUN_ID": "" if case == "ambiguous" else "123",
+                        "PRIOR_RUN_ATTEMPT": "" if case == "ambiguous" else "1",
+                        "PRIOR_COMPLETE": "false",
+                        "ATTEMPTS": "1",
+                        "FINAL_WINDOW": "true",
+                    }
+                    result = subprocess.run(  # noqa: S603 -- fixed checked-in workflow with a local gh stub.
+                        ["/bin/bash", "-e", "-c", wait],
+                        env=environment,
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
+                    if case == "success":
+                        self.assertEqual(0, result.returncode, result.stderr)
+                        self.assertIn("ci-run-id=123", output.read_text(encoding="utf-8"))
+                        self.assertIn("ci-run-attempt=1", output.read_text(encoding="utf-8"))
+                        self.assertIn("complete=true", output.read_text(encoding="utf-8"))
+                    else:
+                        self.assertNotEqual(0, result.returncode, result.stdout)
+                        self.assertFalse(output.exists())
+                    publisher_check = subprocess.run(  # noqa: S603 -- fixed checked-in verifier with a local gh stub.
+                        ["/bin/bash", str(ROOT / "scripts/verify-release-ci-run.sh"), "a" * 40, "123", "1"],
+                        env=environment,
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
+                    if case == "success":
+                        self.assertEqual(0, publisher_check.returncode, publisher_check.stderr)
+                    else:
+                        self.assertNotEqual(0, publisher_check.returncode, publisher_check.stdout)
 
     def test_security_order_is_nexus_then_signed_modulix_then_galaxy(self) -> None:
         nexus = self.step_names.index("Stage exact Security candidate in native Nexus Galaxy v3")
