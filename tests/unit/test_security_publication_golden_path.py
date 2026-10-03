@@ -225,6 +225,27 @@ print(json.dumps(result))
         self.assertIn("Nexus readback bytes differ", script)
         self.assertNotIn("print(password", script)
 
+    def test_staged_release_handoff_is_bound_before_modulix_dispatch(self) -> None:
+        stage = self.step_names.index("Stage exact Security candidate in native Nexus Galaxy v3")
+        handoff = self.step_names.index("Create exact staged-release handoff")
+        upload = self.step_names.index("Upload bound staged release")
+        receipt = self.step_names.index("Require signed successful ModuLix validation receipt")
+        self.assertLess(stage, handoff)
+        self.assertLess(handoff, upload)
+        self.assertLess(upload, receipt)
+        step = self.steps["Create exact staged-release handoff"]
+        self.assertEqual("env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'", step["if"])
+        for field in ("$GITHUB_RUN_ID", "$GITHUB_RUN_ATTEMPT", "$CI_RUN_ID", "$CI_RUN_ATTEMPT", "$RELEASE_SHA"):
+            self.assertIn(field, step["run"])
+        self.assertIn("scripts/release-stage-handoff.py create", step["run"])
+        artifact = self.steps["Upload bound staged release"]
+        self.assertEqual(step["if"], artifact["if"])
+        self.assertIn("release-stage-handoff.json", artifact["with"]["path"])
+        self.assertIn("dist/", artifact["with"]["path"])
+        self.assertIn("incoming/", artifact["with"]["path"])
+        self.assertEqual("error", artifact["with"]["if-no-files-found"])
+        self.assertEqual("${{ steps.release-handoff.outputs.sha256 }}", self.publish["outputs"]["handoff-sha256"])
+
     def test_modulix_dispatch_is_exact_app_scoped_and_receipt_gated(self) -> None:
         audit_token = self.steps["Mint read-only release automation installation audit token"]
         self.assertEqual("read", audit_token["with"]["permission-actions"])

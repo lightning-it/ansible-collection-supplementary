@@ -122,7 +122,7 @@ class ReleaseStageHandoffTests(unittest.TestCase):
             MODULE.load_canonical(b'{"a":1,"a":2}\n', "test")
         with self.assertRaisesRegex(MODULE.HandoffError, "not canonical"):
             MODULE.load_canonical(b'{ "a": 1 }\n', "test")
-        for unsafe in ("dist/../secret", "incoming//secret", "dist/evil\\name", "dist/\ud800"):
+        for unsafe in ("dist/../secret", "incoming//secret", "dist/evil\\name", "dist/\ud800", "dist/.token"):
             with self.subTest(path=unsafe), self.assertRaises(MODULE.HandoffError):
                 MODULE.safe_relative(unsafe)
 

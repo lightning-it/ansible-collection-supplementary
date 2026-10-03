@@ -116,7 +116,7 @@ def safe_relative(path: str) -> None:
     if not (0 < len(encoded) <= 1024):
         raise HandoffError("handoff file path is invalid")
     parts = path.split("/")
-    if parts[0] not in ROOTS or any(part in ("", ".", "..", ".git") for part in parts):
+    if parts[0] not in ROOTS or any(part in ("", ".", "..") or part.startswith(".") for part in parts):
         raise HandoffError("handoff file path is unsafe")
     if any(
         any(ord(character) < 32 or ord(character) == 127 or character == "\\" for character in part) for part in parts

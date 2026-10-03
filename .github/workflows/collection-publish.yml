@@ -462,6 +462,9 @@ jobs:
       contents: write
       id-token: write
       pull-requests: read
+    outputs:
+      handoff-sha256: ${{ steps.release-handoff.outputs.sha256 }}
+      handoff-artifact-id: ${{ steps.upload-release-stage.outputs.artifact-id }}
     env:
       CI_RUN_ID: ${{ needs.release-validation.outputs.ci-run-id }}
       CI_RUN_ATTEMPT: ${{ needs.release-validation.outputs.ci-run-attempt }}
@@ -1241,6 +1244,46 @@ jobs:
             --repository-url "$NEXUS_GALAXY_REPOSITORY_URL" \
             --repository "$NEXUS_GALAXY_REPOSITORY" \
             --output dist/validation/nexus-stage.json
+
+      - name: Create exact staged-release handoff
+        id: release-handoff
+        if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'
+        env:
+          SECURITY_EVIDENCE_ID: ${{ needs.security-classification.outputs.security-evidence-id }}
+        run: |
+          set -euo pipefail
+          binding="$RUNNER_TEMP/release-stage-binding.json"
+          jq -S -c -n \
+            --arg candidateName "$CANDIDATE_NAME" \
+            --argjson ciRunAttempt "$CI_RUN_ATTEMPT" \
+            --argjson ciRunId "$CI_RUN_ID" \
+            --arg releaseVersion "$RELEASE_VERSION" \
+            --arg securityEvidenceId "$SECURITY_EVIDENCE_ID" \
+            --argjson sourceRunAttempt "$GITHUB_RUN_ATTEMPT" \
+            --argjson sourceRunId "$GITHUB_RUN_ID" \
+            --arg sourceSha "$RELEASE_SHA" \
+            '{candidateName: $candidateName, ciRunAttempt: $ciRunAttempt,
+              ciRunId: $ciRunId, galaxyRequired: true,
+              releaseVersion: $releaseVersion, securityEvidenceId: $securityEvidenceId,
+              securityRelease: true, sourceRunAttempt: $sourceRunAttempt,
+              sourceRunId: $sourceRunId, sourceSha: $sourceSha}' > "$binding"
+          digest="$(python scripts/release-stage-handoff.py create \
+            --root . --binding "$binding" --manifest release-stage-handoff.json)"
+          echo "sha256=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Upload bound staged release
+        id: upload-release-stage
+        if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
+        with:
+          name: release-stage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            dist/
+            incoming/
+            release-stage-handoff.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
 
       - name: Mint read-only release automation installation audit token
         id: release-automation-audit-app
