@@ -1227,3 +1227,13 @@ releases:
       - promotion-release-state-guard.yml
       - protected-promotion-contract.yml
     release_date: '2026-10-02'
+  4.0.2:
+    changes:
+      bugfixes:
+        - nginx_config - run delegated Vault modules with the controller Python that
+          contains the hvac dependency.
+        - nginx_config - use the supported Vault AppRole mount_point argument for
+          TLS reads, issuance, and persistence.
+    fragments:
+      - li139-nginx-vault-runtime.yml
+    release_date: '2026-10-03'
