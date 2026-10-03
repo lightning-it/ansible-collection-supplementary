@@ -4,6 +4,15 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v4.0.2
+======
+
+Bugfixes
+--------
+
+- nginx_config - run delegated Vault modules with the controller Python that contains the hvac dependency.
+- nginx_config - use the supported Vault AppRole mount_point argument for TLS reads, issuance, and persistence.
+
 v4.0.1
 ======
 
