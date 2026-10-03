@@ -44,8 +44,8 @@ permissions:
 env:
   RELEASE_VALIDATION_WORST_CASE_MINUTES: "530"
   RELEASE_VALIDATION_QUEUE_ALLOWANCE_MINUTES: "100"
-  RELEASE_VALIDATION_WINDOW_ONE_ATTEMPTS: "660"
-  RELEASE_VALIDATION_WINDOW_TWO_ATTEMPTS: "600"
+  RELEASE_VALIDATION_WINDOW_ATTEMPTS: "160"
+  RELEASE_VALIDATION_FINAL_ATTEMPTS: "140"
   RELEASE_VALIDATION_POLL_SECONDS: "30"
 
 jobs:
@@ -305,120 +305,134 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main'
-    name: Wait for exact-SHA Collection CI terminal state
+    name: Exact-SHA Collection CI window 1/8
     needs: security-classification
-    runs-on: ubuntu-latest
-    timeout-minutes: 340
+    uses: ./.github/workflows/release-validation-window.yml
     permissions:
       actions: read
-    outputs:
-      ci-run-id: ${{ steps.wait.outputs.ci-run-id }}
-    steps:
-      - name: Wait within the first bounded Collection CI window
-        id: wait
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ inputs.release_sha }}
-        run: |
-          set -euo pipefail
-          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          total_minutes=$((
-            (RELEASE_VALIDATION_WINDOW_ONE_ATTEMPTS + RELEASE_VALIDATION_WINDOW_TWO_ATTEMPTS) *
-            RELEASE_VALIDATION_POLL_SECONDS / 60
-          ))
-          required_minutes=$((
-            RELEASE_VALIDATION_WORST_CASE_MINUTES + RELEASE_VALIDATION_QUEUE_ALLOWANCE_MINUTES
-          ))
-          test "$total_minutes" -ge "$required_minutes"
-          for attempt in $(seq 1 "$RELEASE_VALIDATION_WINDOW_ONE_ATTEMPTS"); do
-            runs="$(
-              gh api --method GET \
-                "repos/${GITHUB_REPOSITORY}/actions/workflows/collection-ci.yml/runs" \
-                -f branch=main -f event=push -f head_sha="$RELEASE_SHA" -f per_page=100 \
-            )"
-            latest="$(
-              jq -c --arg sha "$RELEASE_SHA" '
-                [.workflow_runs[] | select(
-                  .event == "push" and .head_branch == "main" and .head_sha == $sha
-                )] | sort_by(.run_attempt, .id) | last // {}
-              ' <<< "$runs"
-            )"
-            run_id="$(jq -r '.id // empty' <<< "$latest")"
-            status="$(jq -r '.status // empty' <<< "$latest")"
-            if [ "$status" = completed ]; then
-              test -n "$run_id"
-              echo "ci-run-id=$run_id" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            case "$status" in ""|queued|in_progress|pending|requested|waiting) ;; *) exit 1 ;; esac
-            echo "Waiting for Collection CI terminal state ($attempt/$RELEASE_VALIDATION_WINDOW_ONE_ATTEMPTS)."
-            sleep "$RELEASE_VALIDATION_POLL_SECONDS"
-          done
-          echo "First bounded window exhausted; continuing with the final exact-SHA window."
+    with:
+      release_sha: ${{ inputs.release_sha }}
+      attempts: 160
+      final_window: false
+
+  release-validation-window-2:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
+    name: Exact-SHA Collection CI window 2/8
+    needs: release-validation-window
+    uses: ./.github/workflows/release-validation-window.yml
+    permissions:
+      actions: read
+    with:
+      release_sha: ${{ inputs.release_sha }}
+      attempts: 160
+      final_window: false
+      prior_run_id: ${{ needs.release-validation-window.outputs.ci-run-id }}
+      prior_run_attempt: ${{ needs.release-validation-window.outputs.ci-run-attempt }}
+      prior_complete: ${{ needs.release-validation-window.outputs.complete }}
+
+  release-validation-window-3:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
+    name: Exact-SHA Collection CI window 3/8
+    needs: release-validation-window-2
+    uses: ./.github/workflows/release-validation-window.yml
+    permissions:
+      actions: read
+    with:
+      release_sha: ${{ inputs.release_sha }}
+      attempts: 160
+      final_window: false
+      prior_run_id: ${{ needs.release-validation-window-2.outputs.ci-run-id }}
+      prior_run_attempt: ${{ needs.release-validation-window-2.outputs.ci-run-attempt }}
+      prior_complete: ${{ needs.release-validation-window-2.outputs.complete }}
+
+  release-validation-window-4:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
+    name: Exact-SHA Collection CI window 4/8
+    needs: release-validation-window-3
+    uses: ./.github/workflows/release-validation-window.yml
+    permissions:
+      actions: read
+    with:
+      release_sha: ${{ inputs.release_sha }}
+      attempts: 160
+      final_window: false
+      prior_run_id: ${{ needs.release-validation-window-3.outputs.ci-run-id }}
+      prior_run_attempt: ${{ needs.release-validation-window-3.outputs.ci-run-attempt }}
+      prior_complete: ${{ needs.release-validation-window-3.outputs.complete }}
+
+  release-validation-window-5:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
+    name: Exact-SHA Collection CI window 5/8
+    needs: release-validation-window-4
+    uses: ./.github/workflows/release-validation-window.yml
+    permissions:
+      actions: read
+    with:
+      release_sha: ${{ inputs.release_sha }}
+      attempts: 160
+      final_window: false
+      prior_run_id: ${{ needs.release-validation-window-4.outputs.ci-run-id }}
+      prior_run_attempt: ${{ needs.release-validation-window-4.outputs.ci-run-attempt }}
+      prior_complete: ${{ needs.release-validation-window-4.outputs.complete }}
+
+  release-validation-window-6:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
+    name: Exact-SHA Collection CI window 6/8
+    needs: release-validation-window-5
+    uses: ./.github/workflows/release-validation-window.yml
+    permissions:
+      actions: read
+    with:
+      release_sha: ${{ inputs.release_sha }}
+      attempts: 160
+      final_window: false
+      prior_run_id: ${{ needs.release-validation-window-5.outputs.ci-run-id }}
+      prior_run_attempt: ${{ needs.release-validation-window-5.outputs.ci-run-attempt }}
+      prior_complete: ${{ needs.release-validation-window-5.outputs.complete }}
+
+  release-validation-window-7:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
+    name: Exact-SHA Collection CI window 7/8
+    needs: release-validation-window-6
+    uses: ./.github/workflows/release-validation-window.yml
+    permissions:
+      actions: read
+    with:
+      release_sha: ${{ inputs.release_sha }}
+      attempts: 160
+      final_window: false
+      prior_run_id: ${{ needs.release-validation-window-6.outputs.ci-run-id }}
+      prior_run_attempt: ${{ needs.release-validation-window-6.outputs.ci-run-attempt }}
+      prior_complete: ${{ needs.release-validation-window-6.outputs.complete }}
 
   release-validation:
     if: >-
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main'
-    name: Verify exact-SHA Release Validation
-    needs: [security-classification, release-validation-window]
-    runs-on: ubuntu-latest
-    timeout-minutes: 310
+    name: Verify exact-SHA Release Validation within final window
+    needs: release-validation-window-7
+    uses: ./.github/workflows/release-validation-window.yml
     permissions:
       actions: read
-    outputs:
-      ci-run-id: ${{ steps.exact.outputs.ci-run-id }}
-    steps:
-      - name: Verify terminal success within the final bounded window
-        id: exact
-        env:
-          EARLY_RUN_ID: ${{ needs.release-validation-window.outputs.ci-run-id }}
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ inputs.release_sha }}
-        run: |
-          set -euo pipefail
-          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          for attempt in $(seq 1 "$RELEASE_VALIDATION_WINDOW_TWO_ATTEMPTS"); do
-            runs="$(
-              gh api --method GET \
-                "repos/${GITHUB_REPOSITORY}/actions/workflows/collection-ci.yml/runs" \
-                -f branch=main -f event=push -f head_sha="$RELEASE_SHA" -f per_page=100
-            )"
-            latest="$(
-              jq -c --arg sha "$RELEASE_SHA" '
-                [.workflow_runs[] | select(
-                  .event == "push" and .head_branch == "main" and .head_sha == $sha
-                )] | sort_by(.run_attempt, .id) | last // {}
-              ' <<< "$runs"
-            )"
-            run_id="$(jq -r '.id // empty' <<< "$latest")"
-            status="$(jq -r '.status // empty' <<< "$latest")"
-            conclusion="$(jq -r '.conclusion // empty' <<< "$latest")"
-            if [ -n "$EARLY_RUN_ID" ] && [ -n "$run_id" ]; then
-              test "$EARLY_RUN_ID" = "$run_id"
-            fi
-            if [ "$status" = completed ]; then
-              test "$conclusion" = success
-              jobs="$(
-                gh api --method GET --paginate --slurp \
-                  "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs" -f per_page=100
-              )"
-              gate_count="$(
-                jq '[.[].jobs[] | select(
-                  .name == "Collection / Release Validation"
-                  and .status == "completed" and .conclusion == "success"
-                )] | length' <<< "$jobs"
-              )"
-              test "$gate_count" -eq 1
-              echo "ci-run-id=$run_id" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            case "$status" in ""|queued|in_progress|pending|requested|waiting) ;; *) exit 1 ;; esac
-            echo "Waiting for exact-SHA Release Validation ($attempt/$RELEASE_VALIDATION_WINDOW_TWO_ATTEMPTS)."
-            sleep "$RELEASE_VALIDATION_POLL_SECONDS"
-          done
-          echo "No terminal exact-SHA Release Validation was found." >&2
-          exit 1
+    with:
+      release_sha: ${{ inputs.release_sha }}
+      attempts: 140
+      final_window: true
+      prior_run_id: ${{ needs.release-validation-window-7.outputs.ci-run-id }}
+      prior_run_attempt: ${{ needs.release-validation-window-7.outputs.ci-run-attempt }}
+      prior_complete: ${{ needs.release-validation-window-7.outputs.complete }}
 
   publish:
     if: >-
