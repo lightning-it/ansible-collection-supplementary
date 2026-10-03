@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Give Keycloak and PostgreSQL manifest-permission assertions distinct Tiny testcase names
-    so the unchanged release-evidence verifier can match their Allure reports one-to-one.

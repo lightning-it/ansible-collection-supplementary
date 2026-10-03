@@ -1,6 +1,0 @@
----
-bugfixes:
-  - >-
-    Release promotion now uses the canonical protected aggregation contract,
-    reusing exact accepted develop evidence instead of requesting another
-    cumulative AI review.
