@@ -10,6 +10,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = ROOT / ".github" / "workflows" / "collection-publish.yml"
+MODULIX_WINDOW_PATH = ROOT / ".github" / "workflows" / "modulix-validation-window.yml"
 
 
 class SecurityPublicationGoldenPathTests(unittest.TestCase):
@@ -245,6 +246,28 @@ print(json.dumps(result))
         self.assertIn("incoming/", artifact["with"]["path"])
         self.assertEqual("error", artifact["with"]["if-no-files-found"])
         self.assertEqual("${{ steps.release-handoff.outputs.sha256 }}", self.publish["outputs"]["handoff-sha256"])
+
+    def test_reusable_modulix_window_rechecks_handoff_and_never_dispatches(self) -> None:
+        workflow = yaml.safe_load(MODULIX_WINDOW_PATH.read_text(encoding="utf-8"))
+        window = workflow["jobs"]["window"]
+        self.assertEqual(90, window["timeout-minutes"])
+        self.assertEqual("mlx90-security-publish", window["environment"])
+        self.assertIn("github.actor_id == '307565056'", window["if"])
+        steps = {step["name"]: step for step in window["steps"]}
+        verify = steps["Rebuild and verify exact staged-release handoff"]["run"]
+        self.assertIn("scripts/release-stage-handoff.py verify", verify)
+        self.assertIn('--expected-sha256 "$HANDOFF_SHA256"', verify)
+        self.assertIn("$GITHUB_RUN_ATTEMPT", verify)
+        self.assertIn("$CI_RUN_ATTEMPT", verify)
+        self.assertIn("scripts/verify-release-ci-run.sh", verify)
+        token = steps["Mint exact ModuLix validation App token"]
+        self.assertEqual("modulix-validation", token["with"]["repositories"])
+        self.assertEqual("write", token["with"]["permission-actions"])
+        poll = steps["Poll only the bound ModuLix run"]["run"]
+        self.assertIn("--phase window", poll)
+        self.assertIn("--bound-run-attempt", poll)
+        self.assertIn("--final-window", poll)
+        self.assertNotIn("--phase dispatch", poll)
 
     def test_modulix_dispatch_is_exact_app_scoped_and_receipt_gated(self) -> None:
         audit_token = self.steps["Mint read-only release automation installation audit token"]

@@ -1,0 +1,219 @@
+# yamllint disable rule:truthy
+---
+name: Bound ModuLix Security validation window
+
+on:
+  workflow_call:
+    inputs:
+      release_sha:
+        required: true
+        type: string
+      release_version:
+        required: true
+        type: string
+      ci_run_id:
+        required: true
+        type: string
+      ci_run_attempt:
+        required: true
+        type: string
+      security_evidence_id:
+        required: true
+        type: string
+      handoff_sha256:
+        required: true
+        type: string
+      controller_sha:
+        required: true
+        type: string
+      request_id:
+        required: true
+        type: string
+      prior_run_id:
+        required: false
+        type: string
+        default: ""
+      prior_run_attempt:
+        required: false
+        type: string
+        default: ""
+      wait_seconds:
+        required: true
+        type: number
+      final_window:
+        required: true
+        type: boolean
+      publish_runner:
+        required: true
+        type: string
+    secrets:
+      release_automation_app_private_key:
+        required: true
+    outputs:
+      controller-run-id:
+        value: ${{ jobs.window.outputs.controller-run-id }}
+      controller-run-attempt:
+        value: ${{ jobs.window.outputs.controller-run-attempt }}
+      complete:
+        value: ${{ jobs.window.outputs.complete }}
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  window:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'lightning-it-release-automation[bot]' &&
+      github.actor_id == '307565056'
+    runs-on: ${{ fromJSON(inputs.publish_runner) }}
+    timeout-minutes: 90
+    environment: mlx90-security-publish
+    outputs:
+      controller-run-id: ${{ steps.poll.outputs.controller-run-id }}
+      controller-run-attempt: ${{ steps.poll.outputs.controller-run-attempt }}
+      complete: ${{ steps.poll.outputs.complete }}
+    steps:
+      - name: Checkout exact protected release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          persist-credentials: false
+
+      - name: Verify release source and exact CI producer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+          CI_RUN_ATTEMPT: ${{ inputs.ci_run_attempt }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          test "$(git ls-remote origin refs/heads/main | awk '{print $1}')" = "$RELEASE_SHA"
+          bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
+
+      - name: Download exact stage artifact from this source run
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7
+        with:
+          name: release-stage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .
+
+      - name: Rebuild and verify exact staged-release handoff
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+          CI_RUN_ATTEMPT: ${{ inputs.ci_run_attempt }}
+          SECURITY_EVIDENCE_ID: ${{ inputs.security_evidence_id }}
+          HANDOFF_SHA256: ${{ inputs.handoff_sha256 }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -s release-stage-handoff.json
+          test -s dist/validation/nexus-stage.json
+          version="$(python - <<'PY'
+          import re
+          from pathlib import Path
+          match = re.search(r'(?m)^version:\s*["\x27]?([^\s"\x27]+)', Path('galaxy.yml').read_text())
+          if match is None:
+              raise SystemExit('galaxy.yml has no version')
+          print(match.group(1))
+          PY
+          )"
+          test "$version" = "$RELEASE_VERSION"
+          binding="$RUNNER_TEMP/release-stage-binding.json"
+          jq -S -c -n \
+            --arg candidateName "lit-supplementary-${RELEASE_VERSION}.tar.gz" \
+            --argjson ciRunAttempt "$CI_RUN_ATTEMPT" \
+            --argjson ciRunId "$CI_RUN_ID" \
+            --arg releaseVersion "$RELEASE_VERSION" \
+            --arg securityEvidenceId "$SECURITY_EVIDENCE_ID" \
+            --argjson sourceRunAttempt "$GITHUB_RUN_ATTEMPT" \
+            --argjson sourceRunId "$GITHUB_RUN_ID" \
+            --arg sourceSha "$RELEASE_SHA" \
+            '{candidateName: $candidateName, ciRunAttempt: $ciRunAttempt,
+              ciRunId: $ciRunId, galaxyRequired: true,
+              releaseVersion: $releaseVersion, securityEvidenceId: $securityEvidenceId,
+              securityRelease: true, sourceRunAttempt: $sourceRunAttempt,
+              sourceRunId: $sourceRunId, sourceSha: $sourceSha}' > "$binding"
+          python scripts/release-stage-handoff.py verify \
+            --root . --binding "$binding" --manifest release-stage-handoff.json \
+            --expected-sha256 "$HANDOFF_SHA256"
+          bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
+
+      - name: Install Cosign for signed receipt verification
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+
+      - name: Mint exact ModuLix validation App token
+        id: modulix-validation-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.release_automation_app_private_key }}
+          owner: ${{ github.repository_owner }}
+          repositories: modulix-validation
+          permission-actions: write
+          permission-contents: read
+
+      - name: Poll only the bound ModuLix run
+        id: poll
+        env:
+          APP_SLUG: ${{ steps.modulix-validation-app.outputs.app-slug }}
+          APP_INSTALLATION_ID: ${{ steps.modulix-validation-app.outputs.installation-id }}
+          GH_TOKEN: ${{ steps.modulix-validation-app.outputs.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SECURITY_EVIDENCE_ID: ${{ inputs.security_evidence_id }}
+          CONTROLLER_SHA: ${{ inputs.controller_sha }}
+          REQUEST_ID: ${{ inputs.request_id }}
+          PRIOR_RUN_ID: ${{ inputs.prior_run_id }}
+          PRIOR_RUN_ATTEMPT: ${{ inputs.prior_run_attempt }}
+          WAIT_SECONDS: ${{ inputs.wait_seconds }}
+          FINAL_WINDOW: ${{ inputs.final_window }}
+        run: |
+          set -euo pipefail
+          test "$APP_SLUG" = lightning-it-release-automation
+          test "$APP_INSTALLATION_ID" = 148019054
+          [[ "$PRIOR_RUN_ID" =~ ^([1-9][0-9]*)?$ ]]
+          [[ "$PRIOR_RUN_ATTEMPT" =~ ^([1-9][0-9]*)?$ ]]
+          if [ -n "$PRIOR_RUN_ID" ]; then
+            test -n "$PRIOR_RUN_ATTEMPT"
+          else
+            test -z "$PRIOR_RUN_ATTEMPT"
+          fi
+          arguments=(
+            --phase window
+            --nexus-manifest dist/validation/nexus-stage.json
+            --source-sha "$RELEASE_SHA"
+            --source-run-id "$GITHUB_RUN_ID"
+            --source-run-attempt "$GITHUB_RUN_ATTEMPT"
+            --security-evidence-id "$SECURITY_EVIDENCE_ID"
+            --version "$RELEASE_VERSION"
+            --app-slug "$APP_SLUG"
+            --installation-id "$APP_INSTALLATION_ID"
+            --controller-sha "$CONTROLLER_SHA"
+            --request-id "$REQUEST_ID"
+            --timeout-seconds "$WAIT_SECONDS"
+            --output-directory dist/validation/modulix
+          )
+          if [ -n "$PRIOR_RUN_ID" ]; then
+            arguments+=(--bound-run-id "$PRIOR_RUN_ID" --bound-run-attempt "$PRIOR_RUN_ATTEMPT")
+          fi
+          if [ "$FINAL_WINDOW" = true ]; then
+            arguments+=(--final-window)
+          else
+            test "$FINAL_WINDOW" = false
+          fi
+          result="$RUNNER_TEMP/modulix-window-result.json"
+          python scripts/modulix-validation-receipt.py "${arguments[@]}" > "$result"
+          jq -e '.state == "pending" or .state == "complete"' "$result" >/dev/null
+          test "$(jq -r '.controllerSha' "$result")" = "$CONTROLLER_SHA"
+          test "$(jq -r '.requestId' "$result")" = "$REQUEST_ID"
+          {
+            echo "controller-run-id=$(jq -r '.controllerRunId // empty' "$result")"
+            echo "controller-run-attempt=$(jq -r '.controllerRunAttempt // empty' "$result")"
+            echo "complete=$(jq -r '.state == "complete"' "$result")"
+          } >> "$GITHUB_OUTPUT"
