@@ -171,12 +171,14 @@
 - name: Read TLS certificate from Vault KV2
   delegate_to: localhost
   become: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
   community.hashi_vault.vault_kv2_get:
     url: "{{ nginx_config_vault_address }}"
     validate_certs: "{{ nginx_config_vault_validate_certs }}"
     ca_cert: "{{ nginx_config_vault_ca_cert if (nginx_config_vault_ca_cert | trim | length > 0) else omit }}"
     namespace: "{{ nginx_config_vault_namespace if (nginx_config_vault_namespace | trim | length > 0) else omit }}"
-    auth_mount_point: "{{ nginx_config_vault_auth_mount_point }}"
+    mount_point: "{{ nginx_config_vault_auth_mount_point }}"
     engine_mount_point: "{{ nginx_config_vault_kv_mount }}"
     path: "{{ nginx_config_vault_kv_path }}"
     auth_method: "{{ nginx_config_vault_auth_method }}"
@@ -453,12 +455,14 @@
 - name: Request TLS certificate from Vault PKI when missing
   delegate_to: localhost
   become: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
   community.hashi_vault.vault_write:
     url: "{{ nginx_config_vault_address }}"
     validate_certs: "{{ nginx_config_vault_validate_certs }}"
     ca_cert: "{{ nginx_config_vault_ca_cert if (nginx_config_vault_ca_cert | trim | length > 0) else omit }}"
     namespace: "{{ nginx_config_vault_namespace if (nginx_config_vault_namespace | trim | length > 0) else omit }}"
-    auth_mount_point: "{{ nginx_config_vault_auth_mount_point }}"
+    mount_point: "{{ nginx_config_vault_auth_mount_point }}"
     auth_method: "{{ nginx_config_vault_auth_method }}"
     token: >-
       {{
@@ -571,12 +575,14 @@
 - name: Store generated TLS certificate in Vault KV2
   delegate_to: localhost
   become: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
   community.hashi_vault.vault_kv2_write:
     url: "{{ nginx_config_vault_address }}"
     validate_certs: "{{ nginx_config_vault_validate_certs }}"
     ca_cert: "{{ nginx_config_vault_ca_cert if (nginx_config_vault_ca_cert | trim | length > 0) else omit }}"
     namespace: "{{ nginx_config_vault_namespace if (nginx_config_vault_namespace | trim | length > 0) else omit }}"
-    auth_mount_point: "{{ nginx_config_vault_auth_mount_point }}"
+    mount_point: "{{ nginx_config_vault_auth_mount_point }}"
     engine_mount_point: "{{ nginx_config_vault_kv_mount }}"
     path: "{{ nginx_config_vault_kv_path }}"
     auth_method: "{{ nginx_config_vault_auth_method }}"
