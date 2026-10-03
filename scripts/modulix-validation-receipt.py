@@ -475,7 +475,7 @@ def dispatch_if_absent(
     request_json: str,
     request_id: str,
     controller_sha: str,
-) -> bool:
+) -> tuple[bool, tuple[int, int] | None]:
     if (
         REQUEST_ID_RE.fullmatch(request_id) is None
         or hashlib.sha256(request_json.encode("utf-8")).hexdigest() != request_id
@@ -485,9 +485,13 @@ def dispatch_if_absent(
     if len(matches) > 1:
         raise ReceiptError("multiple ModuLix runs already match the exact validation request")
     if matches:
-        return False
+        run = matches[0]
+        return False, (
+            positive_integer(run.get("id"), "controller run ID"),
+            positive_integer(run.get("run_attempt"), "controller run attempt"),
+        )
     client.dispatch(request_json, request_id)
-    return True
+    return True, None
 
 
 def wait_for_run(
@@ -496,18 +500,39 @@ def wait_for_run(
     controller_sha: str,
     timeout_seconds: int,
     *,
+    bound_run: tuple[int, int] | None = None,
+    require_initial_attempt_one: bool = False,
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
+    if bound_run is not None:
+        if not isinstance(bound_run, tuple) or len(bound_run) != 2:
+            raise ReceiptError("bound ModuLix run identity is malformed")
+        bound_run = (
+            positive_integer(bound_run[0], "bound controller run ID"),
+            positive_integer(bound_run[1], "bound controller run attempt"),
+        )
+    if bound_run is not None and require_initial_attempt_one:
+        raise ReceiptError("a newly dispatched ModuLix run cannot have a prior binding")
     deadline = monotonic() + timeout_seconds
     while monotonic() < deadline:
         matches = [run for run in client.workflow_runs() if matching_run(run, request_id, controller_sha)]
         if len(matches) > 1:
             raise ReceiptError("multiple ModuLix runs match the exact validation request")
+        if bound_run is not None and not matches:
+            raise ReceiptError("bound ModuLix validation run disappeared")
         if matches:
             run = matches[0]
-            positive_integer(run.get("id"), "controller run ID")
-            positive_integer(run.get("run_attempt"), "controller run attempt")
+            identity = (
+                positive_integer(run.get("id"), "controller run ID"),
+                positive_integer(run.get("run_attempt"), "controller run attempt"),
+            )
+            if bound_run is None:
+                if require_initial_attempt_one and identity[1] != 1:
+                    raise ReceiptError("new ModuLix validation run is not on attempt one")
+                bound_run = identity
+            elif identity != bound_run:
+                raise ReceiptError("bound ModuLix validation run identity changed")
             status = run.get("status")
             if status == "completed":
                 if run.get("conclusion") != "success":
@@ -517,6 +542,24 @@ def wait_for_run(
                 raise ReceiptError("exact ModuLix validation run has an unknown status")
         sleep(DEFAULT_POLL_SECONDS)
     raise ReceiptError("timed out waiting for the exact ModuLix validation run")
+
+
+def require_bound_success(
+    client: ControllerClient,
+    request_id: str,
+    controller_sha: str,
+    bound_run: tuple[int, int],
+) -> None:
+    matches = [run for run in client.workflow_runs() if matching_run(run, request_id, controller_sha)]
+    if len(matches) != 1:
+        raise ReceiptError("bound ModuLix validation run is missing or ambiguous")
+    run = matches[0]
+    identity = (
+        positive_integer(run.get("id"), "controller run ID"),
+        positive_integer(run.get("run_attempt"), "controller run attempt"),
+    )
+    if identity != bound_run or run.get("status") != "completed" or run.get("conclusion") != "success":
+        raise ReceiptError("bound ModuLix validation run changed before receipt acceptance")
 
 
 def validate_run_jobs(jobs: list[dict[str, Any]]) -> None:
@@ -650,6 +693,15 @@ def download_and_verify_receipt(
         receipt = load_json(receipt_path, "ModuLix validation receipt")
         validate_receipt(receipt, request, request_id, run)
         client.verify_signature(receipt_path, bundle_path, string(run.get("head_sha"), "controller run SHA"))
+        require_bound_success(
+            client,
+            request_id,
+            string(run.get("head_sha"), "controller run SHA"),
+            (
+                positive_integer(run.get("id"), "controller run ID"),
+                positive_integer(run.get("run_attempt"), "controller run attempt"),
+            ),
+        )
         temporary.rename(output_directory)
     except Exception:
         if temporary.exists() and not temporary.is_symlink():
@@ -689,8 +741,24 @@ def main() -> int:
             version=args.version,
             controller_sha=controller_sha,
         )
-        dispatch_if_absent(client, request_json, request_id, controller_sha)
-        run = wait_for_run(client, request_id, controller_sha, args.timeout_seconds)
+        dispatched, bound_run = dispatch_if_absent(client, request_json, request_id, controller_sha)
+        run = wait_for_run(
+            client,
+            request_id,
+            controller_sha,
+            args.timeout_seconds,
+            bound_run=bound_run,
+            require_initial_attempt_one=dispatched,
+        )
+        require_bound_success(
+            client,
+            request_id,
+            controller_sha,
+            (
+                positive_integer(run.get("id"), "controller run ID"),
+                positive_integer(run.get("run_attempt"), "controller run attempt"),
+            ),
+        )
         validate_run_jobs(client.jobs(positive_integer(run.get("id"), "controller run ID")))
         receipt_path = download_and_verify_receipt(client, request, request_id, run, args.output_directory)[0]
     except ReceiptError as exc:

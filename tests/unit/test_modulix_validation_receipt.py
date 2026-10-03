@@ -298,16 +298,59 @@ class ModuLixValidationReceiptTests(unittest.TestCase):
         request_json = MODULE.canonical_json(request)
         run = run_payload(request_id)
         client = FakeController(request, request_id, run)
-        self.assertFalse(MODULE.dispatch_if_absent(client, request_json, request_id, CONTROLLER_SHA))
+        self.assertEqual(
+            (False, (998877, 1)),
+            MODULE.dispatch_if_absent(client, request_json, request_id, CONTROLLER_SHA),
+        )
         self.assertEqual(0, client.dispatches)
 
         client.runs = []
-        self.assertTrue(MODULE.dispatch_if_absent(client, request_json, request_id, CONTROLLER_SHA))
+        self.assertEqual(
+            (True, None),
+            MODULE.dispatch_if_absent(client, request_json, request_id, CONTROLLER_SHA),
+        )
         self.assertEqual(1, client.dispatches)
 
         client.runs = [run, deepcopy(run)]
         with self.assertRaisesRegex(MODULE.ReceiptError, "multiple"):
             MODULE.dispatch_if_absent(client, request_json, request_id, CONTROLLER_SHA)
+
+    def test_wait_keeps_the_first_exact_run_and_attempt_bound(self) -> None:
+        request, request_id = request_payload()
+        queued = run_payload(request_id, status="in_progress", conclusion=None)
+        success = run_payload(request_id)
+        client = FakeController(request, request_id, queued)
+
+        def observe(*snapshots: list[dict[str, object]], bound_run=None, newly_dispatched=False):
+            observations = iter(snapshots)
+            ticks = iter(range(20))
+            client.workflow_runs = lambda: next(observations)
+            return MODULE.wait_for_run(
+                client,
+                request_id,
+                CONTROLLER_SHA,
+                10,
+                bound_run=bound_run,
+                require_initial_attempt_one=newly_dispatched,
+                monotonic=lambda: next(ticks),
+                sleep=lambda _: None,
+            )
+
+        self.assertEqual(success, observe([], [queued], [success], newly_dispatched=True))
+        self.assertEqual(success, observe([queued], [success], bound_run=(998877, 1)))
+
+        changed_attempt = {**success, "run_attempt": 2}
+        changed_id = {**success, "id": 998878}
+        for replacement in (changed_attempt, changed_id):
+            with self.subTest(replacement=replacement), self.assertRaisesRegex(MODULE.ReceiptError, "identity changed"):
+                observe([queued], [replacement], bound_run=(998877, 1))
+
+        with self.assertRaisesRegex(MODULE.ReceiptError, "disappeared"):
+            observe([queued], [], bound_run=(998877, 1))
+        with self.assertRaisesRegex(MODULE.ReceiptError, "attempt one"):
+            observe([changed_attempt], newly_dispatched=True)
+        with self.assertRaisesRegex(MODULE.ReceiptError, "multiple"):
+            observe([queued], [queued, changed_attempt], bound_run=(998877, 1))
 
     def test_run_jobs_prove_real_nexus_heavy_application_and_signing(self) -> None:
         request, request_id = request_payload()
@@ -333,6 +376,24 @@ class ModuLixValidationReceiptTests(unittest.TestCase):
             self.assertTrue(receipt.is_file())
             self.assertTrue(bundle.is_file())
         self.assertTrue(client.signature_verified)
+
+    def test_receipt_is_not_persisted_if_controller_attempt_changes_during_download(self) -> None:
+        request, request_id = request_payload()
+        run = run_payload(request_id)
+        client = FakeController(request, request_id, run)
+        original_download = client.download
+
+        def rerun_after_download(run_id: int, artifact_name: str, destination: Path) -> None:
+            original_download(run_id, artifact_name, destination)
+            client.runs = [{**run, "run_attempt": 2, "status": "in_progress", "conclusion": None}]
+
+        client.download = rerun_after_download
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "modulix"
+            with self.assertRaisesRegex(MODULE.ReceiptError, "changed before receipt acceptance"):
+                MODULE.download_and_verify_receipt(client, request, request_id, run, output)
+            self.assertFalse(output.exists())
+            self.assertEqual([], list(Path(temporary_directory).iterdir()))
 
     def test_receipt_fails_closed_for_decision_observation_or_run_substitution(self) -> None:
         request, request_id = request_payload()
