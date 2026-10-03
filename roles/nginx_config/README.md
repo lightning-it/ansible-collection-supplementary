@@ -4,7 +4,10 @@ Manage Nginx virtual host configuration files for the Podman container deploymen
 
 ## Requirements
 
-None.
+Vault-backed TLS requires `community.hashi_vault` and `hvac` in the controller
+execution environment. Delegated Vault operations use `ansible_playbook_python`;
+no Vault dependency is installed on the managed NGINX host. The role input
+`nginx_config_vault_auth_mount_point` maps to the module argument `mount_point`.
 
 ## Variables
 
