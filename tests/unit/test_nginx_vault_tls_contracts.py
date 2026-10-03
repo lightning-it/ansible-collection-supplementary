@@ -24,6 +24,29 @@ TASKS = ROOT / "roles" / "nginx_config" / "tasks" / "main.yml"
 
 
 class NginxVaultTlsContractTests(unittest.TestCase):
+    def test_vault_tasks_use_supported_controller_runtime(self) -> None:
+        tasks = yaml.safe_load(TASKS.read_text(encoding="utf-8"))
+        modules = (
+            "community.hashi_vault.vault_kv2_get",
+            "community.hashi_vault.vault_write",
+            "community.hashi_vault.vault_kv2_write",
+        )
+        for module in modules:
+            selected = [task for task in tasks if module in task]
+            self.assertEqual(len(selected), 1, module)
+            task = selected[0]
+            options = task[module]
+            with self.subTest(module=module):
+                self.assertEqual(options.get("mount_point"), "{{ nginx_config_vault_auth_mount_point }}")
+                self.assertNotIn("auth_mount_point", options)
+                self.assertEqual(task["delegate_to"], "localhost")
+                self.assertIs(task["become"], False)
+                self.assertEqual(
+                    task.get("vars", {}).get("ansible_python_interpreter"),
+                    "{{ ansible_playbook_python }}",
+                )
+                self.assertEqual(task["no_log"], "{{ nginx_config_tls_no_log }}")
+
     @staticmethod
     def _evaluate(condition: str, variables: dict) -> bool:
         loader = DataLoader()
