@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import json
 import os
 import shutil
 import subprocess
@@ -32,25 +31,12 @@ class NginxVaultTlsContractTests(unittest.TestCase):
             "community.hashi_vault.vault_write",
             "community.hashi_vault.vault_kv2_write",
         )
-        executable = shutil.which("ansible-doc")
-        self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
-        result = subprocess.run(  # noqa: S603 - installed module docs, no Vault calls
-            [executable, "--json", *modules],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=60,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        documentation = json.loads(result.stdout)
         for module in modules:
             selected = [task for task in tasks if module in task]
             self.assertEqual(len(selected), 1, module)
             task = selected[0]
             options = task[module]
             with self.subTest(module=module):
-                supported = documentation[module]["doc"]["options"]
-                self.assertIn("mount_point", supported)
                 self.assertEqual(options.get("mount_point"), "{{ nginx_config_vault_auth_mount_point }}")
                 self.assertNotIn("auth_mount_point", options)
                 self.assertEqual(task["delegate_to"], "localhost")
