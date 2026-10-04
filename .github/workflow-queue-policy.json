@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "locations": {
+    ".github/workflows/collection-publish.yml#jobs.publish.concurrency": "collection-release-${{ github.repository }}",
+    ".github/workflows/collection-publish.yml#jobs.publish-security-finalize.concurrency": "collection-release-${{ github.repository }}"
+  }
+}

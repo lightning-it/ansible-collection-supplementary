@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -283,6 +284,7 @@ print(json.dumps(result))
         jobs = self.workflow["jobs"]
         for job in (self.publish, self.finalize):
             self.assertEqual("collection-release-${{ github.repository }}", job["concurrency"]["group"])
+            self.assertEqual("max", job["concurrency"]["queue"])
             self.assertFalse(job["concurrency"]["cancel-in-progress"])
         previous = "publish"
         for index, wait_seconds in enumerate((4500, 4500, 4500, 2700), start=1):
@@ -329,6 +331,49 @@ print(json.dumps(result))
                 self.assertIn("env.SECURITY_RELEASE != 'true'", self.steps[name]["if"])
         self.assertIn("failure()", self.steps["Upload exact release attachment set"]["if"])
         self.assertIn("env.GALAXY_REQUIRED != 'true'", self.steps["Upload exact release attachment set"]["if"])
+
+    def test_queue_extension_is_manifest_bound_and_fails_on_mutation(self) -> None:
+        config = yaml.safe_load((ROOT / ".github/actionlint.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(
+            {
+                ".github/workflows/collection-publish.yml": {
+                    "ignore": ['unexpected key "queue" for "concurrency" section']
+                }
+            },
+            config["paths"],
+        )
+        policy = (ROOT / ".github/workflow-queue-policy.json").read_text(encoding="utf-8")
+        validator = ROOT / "scripts/validate-actionlint-queue-policy.py"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workflows = root / ".github/workflows"
+            workflows.mkdir(parents=True)
+            (root / ".github/workflow-queue-policy.json").write_text(policy, encoding="utf-8")
+            workflow = workflows / "collection-publish.yml"
+
+            def check() -> subprocess.CompletedProcess[str]:
+                return subprocess.run(  # noqa: S603 -- fixed checked-in validator and isolated temporary fixture.
+                    [sys.executable, str(validator), "--root", str(root)],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+
+            workflow.write_text(self.workflow_text, encoding="utf-8")
+            self.assertEqual(0, check().returncode)
+            workflow.write_text(self.workflow_text.replace("queue: max", "queue: single", 1), encoding="utf-8")
+            self.assertNotEqual(0, check().returncode)
+            workflow.write_text(self.workflow_text, encoding="utf-8")
+            workflow.write_text(self.workflow_text.replace("      queue: max\n", "", 1), encoding="utf-8")
+            self.assertNotEqual(0, check().returncode)
+            workflow.write_text(self.workflow_text, encoding="utf-8")
+            (workflows / "extra.yml").write_text(
+                "jobs:\n  extra:\n    concurrency:\n      group: extra\n"
+                "      queue: max\n      cancel-in-progress: false\n",
+                encoding="utf-8",
+            )
+            self.assertNotEqual(0, check().returncode)
 
     def test_modulix_dispatch_is_exact_app_scoped_and_receipt_gated(self) -> None:
         audit_token = self.steps["Mint read-only release automation installation audit token"]

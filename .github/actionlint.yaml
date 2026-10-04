@@ -3,3 +3,7 @@ self-hosted-runner:
   labels:
     - incus
     - keycloak-test
+paths:
+  .github/workflows/collection-publish.yml:
+    ignore:
+      - 'unexpected key "queue" for "concurrency" section'

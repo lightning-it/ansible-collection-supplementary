@@ -455,6 +455,7 @@ jobs:
             'ansible-collections' }}
     concurrency:
       group: collection-release-${{ github.repository }}
+      queue: max
       cancel-in-progress: false
     permissions:
       actions: write
@@ -2354,6 +2355,7 @@ jobs:
     environment: mlx90-security-publish
     concurrency:
       group: collection-release-${{ github.repository }}
+      queue: max
       cancel-in-progress: false
     permissions:
       actions: write
