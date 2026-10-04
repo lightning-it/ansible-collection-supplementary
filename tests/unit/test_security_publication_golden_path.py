@@ -334,11 +334,12 @@ print(json.dumps(result))
 
     def test_queue_extension_is_manifest_bound_and_fails_on_mutation(self) -> None:
         config = yaml.safe_load((ROOT / ".github/actionlint.yaml").read_text(encoding="utf-8"))
+        ignored = {"ignore": ['unexpected key "queue" for "concurrency" section']}
         self.assertEqual(
             {
-                ".github/workflows/collection-publish.yml": {
-                    "ignore": ['unexpected key "queue" for "concurrency" section']
-                }
+                ".github/workflows/collection-publish.yml": ignored,
+                ".github/workflows/release-back-sync.yml": ignored,
+                ".github/workflows/release-prepare.yml": ignored,
             },
             config["paths"],
         )
@@ -350,6 +351,8 @@ print(json.dumps(result))
             workflows.mkdir(parents=True)
             (root / ".github/workflow-queue-policy.json").write_text(policy, encoding="utf-8")
             workflow = workflows / "collection-publish.yml"
+            for filename in ("release-back-sync.yml", "release-prepare.yml"):
+                (workflows / filename).write_bytes((WORKFLOW_PATH.parent / filename).read_bytes())
 
             def check() -> subprocess.CompletedProcess[str]:
                 return subprocess.run(  # noqa: S603 -- fixed checked-in validator and isolated temporary fixture.
@@ -374,6 +377,46 @@ print(json.dumps(result))
                 encoding="utf-8",
             )
             self.assertNotEqual(0, check().returncode)
+            (workflows / "extra.yml").unlink()
+            prepare = workflows / "release-prepare.yml"
+            prepare.write_text(prepare.read_text(encoding="utf-8").replace("  queue: max\n", "", 1), encoding="utf-8")
+            self.assertNotEqual(0, check().returncode)
+
+    def test_repository_local_release_jobs_have_bounded_class_limits(self) -> None:
+        selected = {
+            "changelog.yml": {"changelog": 30},
+            "collection-ci.yml": {
+                "quality-matrix": 10,
+                "tiny": 10,
+                "fast": 10,
+                "heavy": 10,
+                "acceptance": 10,
+                "legacy-lint": 10,
+                "legacy-build": 10,
+                "legacy-molecule": 10,
+                "keycloak-legacy-lint-sanity": 10,
+                "keycloak-legacy-tiny": 10,
+                "keycloak-legacy-heavy": 10,
+                "keycloak-legacy-acceptance": 10,
+                "keycloak-legacy-evidence": 10,
+                "keycloak-legacy-release-validation": 10,
+            },
+            "release-back-sync.yml": {"back-sync": 60},
+            "release-prepare.yml": {"prepare": 60},
+        }
+        for filename, additions in selected.items():
+            jobs = yaml.safe_load((WORKFLOW_PATH.parent / filename).read_text(encoding="utf-8"))["jobs"]
+            for name, minutes in additions.items():
+                self.assertEqual(minutes, jobs[name]["timeout-minutes"], f"{filename}:{name}")
+            for name, job in jobs.items():
+                if "uses" not in job:
+                    limit = job.get("timeout-minutes")
+                    self.assertIs(type(limit), int, f"{filename}:{name}")
+                    self.assertLessEqual(limit, 90, f"{filename}:{name}")
+        for filename in ("release-back-sync.yml", "release-prepare.yml"):
+            concurrency = yaml.safe_load((WORKFLOW_PATH.parent / filename).read_text(encoding="utf-8"))["concurrency"]
+            self.assertEqual("max", concurrency["queue"])
+            self.assertFalse(concurrency["cancel-in-progress"])
 
     def test_modulix_dispatch_is_exact_app_scoped_and_receipt_gated(self) -> None:
         audit_token = self.steps["Mint read-only release automation installation audit token"]

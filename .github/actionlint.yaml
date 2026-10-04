@@ -7,3 +7,9 @@ paths:
   .github/workflows/collection-publish.yml:
     ignore:
       - 'unexpected key "queue" for "concurrency" section'
+  .github/workflows/release-back-sync.yml:
+    ignore:
+      - 'unexpected key "queue" for "concurrency" section'
+  .github/workflows/release-prepare.yml:
+    ignore:
+      - 'unexpected key "queue" for "concurrency" section'
