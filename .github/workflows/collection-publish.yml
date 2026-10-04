@@ -442,10 +442,10 @@ jobs:
        (needs.security-classification.outputs.security-release == 'true' &&
         github.actor == 'lightning-it-release-automation[bot]' &&
         github.actor_id == '307565056'))
-    name: Publish collection release
+    name: Stage or publish collection release
     needs: [security-classification, release-validation]
     runs-on: ${{ fromJSON(needs.security-classification.outputs.publish-runner) }}
-    timeout-minutes: 360
+    timeout-minutes: 90
     environment:
       name: >-
         ${{ needs.security-classification.outputs.security-release == 'true' &&
@@ -465,6 +465,12 @@ jobs:
     outputs:
       handoff-sha256: ${{ steps.release-handoff.outputs.sha256 }}
       handoff-artifact-id: ${{ steps.upload-release-stage.outputs.artifact-id }}
+      validation-required: ${{ steps.release-handoff.outputs.validation-required }}
+      release-version: ${{ steps.release-handoff.outputs.release-version }}
+      controller-sha: ${{ steps.modulix-dispatch.outputs.controller-sha }}
+      request-id: ${{ steps.modulix-dispatch.outputs.request-id }}
+      controller-run-id: ${{ steps.modulix-dispatch.outputs.controller-run-id }}
+      controller-run-attempt: ${{ steps.modulix-dispatch.outputs.controller-run-attempt }}
     env:
       CI_RUN_ID: ${{ needs.release-validation.outputs.ci-run-id }}
       CI_RUN_ATTEMPT: ${{ needs.release-validation.outputs.ci-run-attempt }}
@@ -1269,7 +1275,11 @@ jobs:
               sourceRunId: $sourceRunId, sourceSha: $sourceSha}' > "$binding"
           digest="$(python scripts/release-stage-handoff.py create \
             --root . --binding "$binding" --manifest release-stage-handoff.json)"
-          echo "sha256=$digest" >> "$GITHUB_OUTPUT"
+          {
+            echo "sha256=$digest"
+            echo "validation-required=true"
+            echo "release-version=$RELEASE_VERSION"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upload bound staged release
         id: upload-release-stage
@@ -1344,7 +1354,8 @@ jobs:
           permission-actions: write
           permission-contents: read
 
-      - name: Require signed successful ModuLix validation receipt
+      - name: Dispatch exact ModuLix validation request once
+        id: modulix-dispatch
         if: env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'
         env:
           APP_INSTALLATION_ID: ${{ steps.modulix-validation-app.outputs.installation-id }}
@@ -1355,8 +1366,1131 @@ jobs:
           set -euo pipefail
           test "$APP_SLUG" = lightning-it-release-automation
           test "$APP_INSTALLATION_ID" = 148019054
-          result="$RUNNER_TEMP/modulix-validation-result.json"
+          result="$RUNNER_TEMP/modulix-validation-dispatch.json"
           python scripts/modulix-validation-receipt.py \
+            --phase dispatch \
+            --nexus-manifest dist/validation/nexus-stage.json \
+            --source-sha "$RELEASE_SHA" \
+            --source-run-id "$GITHUB_RUN_ID" \
+            --source-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --security-evidence-id "$SECURITY_EVIDENCE_ID" \
+            --version "$RELEASE_VERSION" \
+            --app-slug "$APP_SLUG" \
+            --installation-id "$APP_INSTALLATION_ID" > "$result"
+          jq -e '.state == "dispatched" or .state == "found"' "$result" >/dev/null
+          {
+            echo "controller-sha=$(jq -er '.controllerSha' "$result")"
+            echo "request-id=$(jq -er '.requestId' "$result")"
+            echo "controller-run-id=$(jq -r '.controllerRunId // empty' "$result")"
+            echo "controller-run-attempt=$(jq -r '.controllerRunAttempt // empty' "$result")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Finalize immutable release attachments and notes
+        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          (
+            cd dist/release
+            checksum_file="$RUNNER_TEMP/publish-release-assets-SHA256SUMS"
+            find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' \
+              | sort \
+              | xargs sha256sum > "$checksum_file"
+            mv "$checksum_file" SHA256SUMS
+            test -s SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+          publish_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-publish.yml@refs/heads/main"
+          release_response="$RUNNER_TEMP/existing-release-for-checksum-bundle.json"
+          release_status="$(
+            curl --silent --show-error --location \
+              --output "$release_response" \
+              --write-out '%{http_code}' \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}"
+          )"
+          case "$release_status" in
+            404)
+              checksum_asset_count=0
+              bundle_asset_count=0
+              ;;
+            200)
+              checksum_asset_count="$(
+                jq '[.assets[] | select(.name == "SHA256SUMS")] | length' \
+                  "$release_response"
+              )"
+              bundle_asset_count="$(
+                jq '[.assets[] | select(.name == "SHA256SUMS.sigstore.json")] | length' \
+                  "$release_response"
+              )"
+              ;;
+            *)
+              echo "Unexpected GitHub Release lookup status: $release_status" >&2
+              exit 1
+              ;;
+          esac
+          test "$checksum_asset_count" -le 1
+          test "$bundle_asset_count" -le 1
+          test "$checksum_asset_count" -eq "$bundle_asset_count"
+          if [ "$checksum_asset_count" -eq 1 ]; then
+            existing_pair="$RUNNER_TEMP/existing-release-checksum-pair"
+            mkdir -p "$existing_pair"
+            gh release download "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern SHA256SUMS \
+              --pattern SHA256SUMS.sigstore.json \
+              --dir "$existing_pair"
+            cmp --silent "$existing_pair/SHA256SUMS" dist/release/SHA256SUMS
+            cp "$existing_pair/SHA256SUMS.sigstore.json" \
+              dist/release/SHA256SUMS.sigstore.json
+          else
+            cosign sign-blob --yes \
+              --bundle dist/release/SHA256SUMS.sigstore.json \
+              dist/release/SHA256SUMS
+          fi
+          cosign verify-blob \
+            --bundle dist/release/SHA256SUMS.sigstore.json \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "$publish_identity" \
+            --certificate-github-workflow-sha "$RELEASE_SHA" \
+            dist/release/SHA256SUMS
+
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          version = os.environ["RELEASE_VERSION"]
+          lines = Path("CHANGELOG.rst").read_text(encoding="utf-8").splitlines()
+          start = next((index for index, line in enumerate(lines) if line.strip() == f"v{version}"), None)
+          if start is None:
+              raise SystemExit(f"CHANGELOG.rst has no v{version} section")
+          end = len(lines)
+          for index in range(start + 1, len(lines)):
+              if re.fullmatch(r"v[0-9]+(?:\.[0-9]+){2}(?:[-.][0-9A-Za-z.-]+)?", lines[index].strip()):
+                  end = index
+                  break
+          notes = "\n".join(lines[start:end]).strip() + "\n"
+          if len(notes.splitlines()) < 3:
+              raise SystemExit(f"CHANGELOG.rst v{version} section is empty")
+          if os.environ["SECURITY_RELEASE"] == "true":
+              import json
+
+              evidence = json.loads(
+                  Path("dist/release/security-release-evidence.json").read_text(
+                      encoding="utf-8"
+                  )
+              )
+              evidence_id = evidence["metadata"]["id"]
+              identifiers = ", ".join(
+                  f"``{identifier}``"
+                  for identifier in evidence["security"]["identifiers"]
+              )
+              evidence_url = (
+                  f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/"
+                  f"download/{os.environ['RELEASE_TAG']}/security-release-evidence.json"
+              )
+              notes += (
+                  "\nSecurity release evidence\n"
+                  "-------------------------\n\n"
+                  f"* Evidence ID: ``{evidence_id}``\n"
+                  f"* Security identifiers: {identifiers}\n"
+                  f"* Evidence: `{evidence_id} <{evidence_url}>`_\n"
+              )
+          Path("dist/release-notes.rst").write_text(notes, encoding="utf-8")
+          PY
+
+      - name: Require configured publication credentials
+        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        env:
+          GALAXY_API_TOKEN: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ "$GALAXY_REQUIRED" = true ]; then
+            test -n "${GALAXY_API_TOKEN:-}"
+            candidate_sha="$(
+              sha256sum "incoming/candidate/${CANDIDATE_NAME}" | awk '{print $1}'
+            )"
+            version_url="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index/lit/supplementary/versions/${RELEASE_VERSION}/"
+            response="$RUNNER_TEMP/galaxy-preflight.json"
+            status="$(
+              curl --silent --show-error \
+                --output "$response" \
+                --write-out '%{http_code}' \
+                "$version_url"
+            )"
+            if [ "$status" = 200 ]; then
+              EXPECTED_SHA="$candidate_sha" RESPONSE="$response" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(Path(os.environ["RESPONSE"]).read_text(encoding="utf-8"))
+          artifact = payload.get("artifact") or {}
+          if artifact.get("filename") != os.environ["CANDIDATE_NAME"]:
+              raise SystemExit("existing Galaxy artifact filename mismatch")
+          if artifact.get("sha256") != os.environ["EXPECTED_SHA"]:
+              raise SystemExit("existing Galaxy artifact digest mismatch")
+          PY
+            elif [ "$status" != 404 ]; then
+              echo "Unexpected Galaxy preflight API status: $status" >&2
+              exit 1
+            fi
+          fi
+
+      - name: Mint exact repository-scoped release-tag App token
+        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        id: release-tag-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_TAG_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_TAG_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
+      - name: Validate exact release-tag App installation
+        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        env:
+          ACTION_APP_SLUG: ${{ steps.release-tag-token.outputs.app-slug }}
+          ACTION_INSTALLATION_ID: ${{ steps.release-tag-token.outputs.installation-id }}
+          EXPECTED_APP_ID: ${{ vars.RELEASE_TAG_APP_ID }}
+          EXPECTED_APP_CLIENT_ID: ${{ vars.RELEASE_TAG_APP_CLIENT_ID }}
+          EXPECTED_INSTALLATION_ID: ${{ vars.RELEASE_TAG_APP_INSTALLATION_ID }}
+          GH_TOKEN: ${{ steps.release-tag-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          [[ "$ACTION_INSTALLATION_ID" =~ ^[1-9][0-9]*$ ]]
+          test "$ACTION_INSTALLATION_ID" = "$EXPECTED_INSTALLATION_ID"
+          test -n "$ACTION_APP_SLUG"
+
+          app="$RUNNER_TEMP/release-tag-app.json"
+          repositories="$RUNNER_TEMP/release-tag-app-repositories.json"
+          gh api "/apps/${ACTION_APP_SLUG}" > "$app"
+          jq -e \
+            --argjson app_id "$EXPECTED_APP_ID" \
+            --arg client_id "$EXPECTED_APP_CLIENT_ID" \
+            --arg app_slug "$ACTION_APP_SLUG" \
+            --arg owner "$GITHUB_REPOSITORY_OWNER" '
+              .id == $app_id
+              and .client_id == $client_id
+              and .slug == $app_slug
+              and .owner.login == $owner
+            ' "$app" >/dev/null
+          gh api '/installation/repositories?per_page=100' > "$repositories"
+          jq -e --arg repository "$GITHUB_REPOSITORY" '
+            .total_count == 1
+            and (.repositories | length) == 1
+            and .repositories[0].full_name == $repository
+          ' "$repositories" >/dev/null
+
+      - name: Revalidate exact CI producer before release publication
+        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
+
+      - name: Create or verify immutable tag with dedicated App
+        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        env:
+          APP_SLUG: ${{ steps.release-tag-token.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.release-tag-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          current_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test -n "$current_main"
+          test "$current_main" = "$RELEASE_SHA"
+
+          app_bot_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          [[ "$app_bot_id" =~ ^[1-9][0-9]*$ ]]
+          app_bot_name="${APP_SLUG}[bot]"
+          app_bot_email="${app_bot_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+          remote_tag="$(git ls-remote --tags origin "refs/tags/${RELEASE_TAG}" | awk '{print $1}')"
+          if [ -n "$remote_tag" ]; then
+            git fetch --no-tags origin "refs/tags/${RELEASE_TAG}"
+            test "$(git cat-file -t FETCH_HEAD)" = tag
+            tagged_sha="$(git rev-parse 'FETCH_HEAD^{commit}')"
+            test "$tagged_sha" = "$RELEASE_SHA"
+            tag_payload="$RUNNER_TEMP/existing-release-tag.txt"
+            git cat-file tag FETCH_HEAD > "$tag_payload"
+            EXPECTED_TAGGER_EMAIL="$app_bot_email" \
+              EXPECTED_TAGGER_NAME="$app_bot_name" \
+              TAG_PAYLOAD="$tag_payload" python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          payload = Path(os.environ["TAG_PAYLOAD"]).read_text(encoding="utf-8")
+          headers, separator, message = payload.partition("\n\n")
+          if not separator:
+              raise SystemExit("existing release tag has no annotation")
+          expected = {
+              f"object {os.environ['RELEASE_SHA']}",
+              "type commit",
+              f"tag {os.environ['RELEASE_TAG']}",
+          }
+          lines = headers.splitlines()
+          if not expected.issubset(set(lines)):
+              raise SystemExit("existing annotated tag identity differs from the release")
+          taggers = [line for line in lines if line.startswith("tagger ")]
+          expected_tagger = (
+              f"tagger {os.environ['EXPECTED_TAGGER_NAME']} "
+              f"<{os.environ['EXPECTED_TAGGER_EMAIL']}> "
+          )
+          if len(taggers) != 1 or re.fullmatch(
+              re.escape(expected_tagger) + r"[0-9]+ [+-][0-9]{4}", taggers[0]
+          ) is None:
+              raise SystemExit("existing release tag has an unauthorized tagger identity")
+          if message.rstrip("\n") != f"Release {os.environ['RELEASE_TAG']}":
+              raise SystemExit("existing release tag annotation differs")
+          PY
+          else
+            tag_object="$(
+              gh api --method POST \
+                "repos/${GITHUB_REPOSITORY}/git/tags" \
+                -f tag="$RELEASE_TAG" \
+                -f message="Release ${RELEASE_TAG}" \
+                -f object="$RELEASE_SHA" \
+                -f type=commit \
+                -f "tagger[name]=${app_bot_name}" \
+                -f "tagger[email]=${app_bot_email}" \
+                -f "tagger[date]=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                --jq .sha
+            )"
+            test -n "$tag_object"
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${RELEASE_TAG}" \
+              -f sha="$tag_object" >/dev/null
+            git fetch --no-tags origin "refs/tags/${RELEASE_TAG}"
+            test "$(git cat-file -t FETCH_HEAD)" = tag
+            test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$RELEASE_SHA"
+          fi
+
+      - name: Create or verify GitHub Release and immutable assets
+        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          current_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test -n "$current_main"
+          test "$current_main" = "$RELEASE_SHA"
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null; then
+            release_state="$(
+              gh release view "$RELEASE_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json body,isDraft,isPrerelease,name,tagName
+            )"
+            jq -e --arg tag "$RELEASE_TAG" '
+              .tagName == $tag
+              and .name == $tag
+              and .isDraft == false
+              and .isPrerelease == false
+            ' <<< "$release_state" >/dev/null
+            release_state_path="$RUNNER_TEMP/existing-release.json"
+            printf '%s\n' "$release_state" > "$release_state_path"
+            RELEASE_STATE_PATH="$release_state_path" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          state = json.loads(Path(os.environ["RELEASE_STATE_PATH"]).read_text(encoding="utf-8"))
+          expected = Path("dist/release-notes.rst").read_text(encoding="utf-8").rstrip()
+          if str(state.get("body", "")).rstrip() != expected:
+              raise SystemExit("existing GitHub Release notes differ from the changelog")
+          PY
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "$RELEASE_TAG" \
+              --notes-file dist/release-notes.rst
+          fi
+
+          assets_json="$(
+            gh release view "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets
+          )"
+          asset_index=0
+          while IFS= read -r asset; do
+            asset_index=$((asset_index + 1))
+            name="$(basename "$asset")"
+            if jq -e --arg name "$name" \
+              '.assets | any(.name == $name)' <<< "$assets_json" >/dev/null
+            then
+              verify_dir="$RUNNER_TEMP/existing-release-asset-${asset_index}"
+              mkdir -p "$verify_dir"
+              gh release download "$RELEASE_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --pattern "$name" \
+                --dir "$verify_dir"
+              test "$(sha256sum "$verify_dir/$name" | awk '{print $1}')" = \
+                "$(sha256sum "$asset" | awk '{print $1}')"
+            else
+              gh release upload "$RELEASE_TAG" "$asset" \
+                --repo "$GITHUB_REPOSITORY"
+            fi
+          done < <(find dist/release -maxdepth 1 -type f -print | sort)
+
+          local_assets="$(
+            find dist/release -maxdepth 1 -type f -printf '%f\n' | sort
+          )"
+          remote_assets="$(
+            gh release view "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets \
+              --jq '.assets[].name | select(
+                . != "post-release-verification.json"
+                and . != "post-release-verification.json.sigstore.json"
+              )' \
+              | sort
+          )"
+          test "$remote_assets" = "$local_assets"
+
+          post_asset_count="$(
+            gh release view "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets \
+              --jq '[.assets[].name | select(
+                . == "post-release-verification.json"
+                or . == "post-release-verification.json.sigstore.json"
+              )] | length'
+          )"
+          test "$post_asset_count" -eq 0 || test "$post_asset_count" -eq 2
+
+      - name: Revalidate exact CI producer before Galaxy publication
+        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
+
+      - name: Publish or verify validated artifact on Ansible Galaxy
+        if: >-
+          (env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true') &&
+          (env.GALAXY_REQUIRED == 'true')
+        env:
+          GALAXY_API_TOKEN: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          candidate="incoming/candidate/${CANDIDATE_NAME}"
+          candidate_sha="$(sha256sum "$candidate" | awk '{print $1}')"
+          if [ "$SECURITY_RELEASE" = true ]; then
+            test -s "$MODULIX_VALIDATION_RECEIPT"
+            test -s "${MODULIX_VALIDATION_RECEIPT}.sigstore.json"
+            test "$MODULIX_VALIDATION_RECEIPT_SHA256" = \
+              "sha256:$(sha256sum "$MODULIX_VALIDATION_RECEIPT" | awk '{print $1}')"
+            jq -e \
+              --arg digest "sha256:$candidate_sha" \
+              --arg repository "$GITHUB_REPOSITORY" \
+              --arg request_id "$MODULIX_VALIDATION_REQUEST_ID" \
+              --arg run_attempt "$MODULIX_VALIDATION_RUN_ATTEMPT" \
+              --arg run_id "$MODULIX_VALIDATION_RUN_ID" \
+              --arg sha "$RELEASE_SHA" '
+              .apiVersion == "lit.mlx90.collection-validation-receipt/v2"
+              and .kind == "CollectionValidationReceipt"
+              and .request.source.repository == $repository
+              and .request.source.sha == $sha
+              and .request.source.actor == "lightning-it-release-automation[bot]"
+              and .request.source.actorId == 307565056
+              and .request.source.actorType == "Bot"
+              and .request.source.event == "workflow_dispatch"
+              and .request.source.ref == "refs/heads/main"
+              and (.request.source.runId | tostring) == env.GITHUB_RUN_ID
+              and (.request.source.runAttempt | tostring) == env.GITHUB_RUN_ATTEMPT
+              and .request.candidate.sha256 == $digest
+              and .request.security.humanActions == 0
+              and .requestId == $request_id
+              and (.validation.runId | tostring) == $run_id
+              and (.validation.runAttempt | tostring) == $run_attempt
+              and .validation.actor == "lightning-it-release-automation[bot]"
+              and .validation.actorId == 307565056
+              and .validation.actorType == "Bot"
+              and .validation.humanActions == 0
+              and .validation.conclusion == "success"
+              and .decision.candidateUnchanged == true
+              and .decision.galaxyPublicationAuthorized == true
+              and .decision.releaseEligible == true
+            ' "$MODULIX_VALIDATION_RECEIPT" >/dev/null
+          fi
+          version_url="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index/lit/supplementary/versions/${RELEASE_VERSION}/"
+          response="$RUNNER_TEMP/galaxy-version.json"
+          status="$(
+            curl --silent --show-error \
+              --output "$response" \
+              --write-out '%{http_code}' \
+              "$version_url"
+          )"
+
+          if [ "$status" = 404 ]; then
+            ansible-galaxy collection publish "$candidate" \
+              --api-key "$GALAXY_API_TOKEN"
+          elif [ "$status" != 200 ]; then
+            echo "Unexpected Galaxy version API status: $status" >&2
+            exit 1
+          fi
+
+          for attempt in $(seq 1 60); do
+            status="$(
+              curl --silent --show-error \
+                --output "$response" \
+                --write-out '%{http_code}' \
+                "$version_url"
+            )"
+            if [ "$status" = 200 ]; then
+              break
+            fi
+            if [ "$status" != 404 ]; then
+              echo "Unexpected Galaxy verification status: $status" >&2
+              exit 1
+            fi
+            echo "Waiting for Galaxy import (attempt $attempt/60)."
+            sleep 10
+          done
+          test "$status" = 200
+
+          galaxy_download_url="$(EXPECTED_SHA="$candidate_sha" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(Path(os.environ["RUNNER_TEMP"]).joinpath("galaxy-version.json").read_text())
+          artifact = payload.get("artifact") or {}
+          if artifact.get("filename") != os.environ["CANDIDATE_NAME"]:
+              raise SystemExit("Galaxy artifact filename mismatch")
+          if artifact.get("sha256") != os.environ["EXPECTED_SHA"]:
+              raise SystemExit("Galaxy artifact digest mismatch")
+          download_url = payload.get("download_url")
+          if not isinstance(download_url, str) or not download_url.startswith("https://"):
+              raise SystemExit("Galaxy download URL is missing or unsafe")
+          print(download_url)
+          PY
+          )"
+
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/galaxy-${CANDIDATE_NAME}" \
+            "$galaxy_download_url"
+          test "$(sha256sum "$RUNNER_TEMP/galaxy-${CANDIDATE_NAME}" | awk '{print $1}')" = \
+            "$candidate_sha"
+
+      - name: Verify GitHub Release download, install, and smoke
+        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          verify_root="$RUNNER_TEMP/github-release-verification"
+          install_root="$RUNNER_TEMP/github-release-install"
+          mkdir -p "$verify_root"
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$verify_root"
+          (
+            cd "$verify_root"
+            sha256sum --check SHA256SUMS
+          )
+          publish_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-publish.yml@refs/heads/main"
+          cosign verify-blob \
+            --bundle "$verify_root/SHA256SUMS.sigstore.json" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "$publish_identity" \
+            --certificate-github-workflow-sha "$RELEASE_SHA" \
+            "$verify_root/SHA256SUMS"
+          test "$(sha256sum "$verify_root/$CANDIDATE_NAME" | awk '{print $1}')" = \
+            "$(sha256sum "incoming/candidate/$CANDIDATE_NAME" | awk '{print $1}')"
+          if [ "$SECURITY_RELEASE" = true ]; then
+            python scripts/generate-security-release-evidence.py verify \
+              --metadata "$SECURITY_METADATA" \
+              --profiles .lit/security-release-profiles.json \
+              --source-sha "$RELEASE_SHA" \
+              --artifact "$verify_root/$CANDIDATE_NAME" \
+              --signature "$verify_root/$CANDIDATE_NAME.sigstore.json" \
+              --sbom "$verify_root/sbom.cdx.json" \
+              --provenance "$verify_root/provenance.json" \
+              --evidence "$verify_root/security-release-evidence.json"
+            cosign verify-blob \
+              --bundle "$verify_root/security-release-evidence.json.sigstore.json" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity "$publish_identity" \
+              --certificate-github-workflow-sha "$RELEASE_SHA" \
+              "$verify_root/security-release-evidence.json"
+            gh attestation verify "$verify_root/security-release-evidence.json" \
+              --repo "$GITHUB_REPOSITORY" \
+              --cert-identity "$publish_identity" \
+              --source-ref refs/heads/main \
+              --source-digest "$RELEASE_SHA"
+            candidate_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-ci.yml@refs/heads/main"
+            cosign verify-blob \
+              --bundle "$verify_root/$CANDIDATE_NAME.sigstore.json" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity "$candidate_identity" \
+              --certificate-github-workflow-sha "$RELEASE_SHA" \
+              "$verify_root/$CANDIDATE_NAME"
+          fi
+          ansible-galaxy collection install \
+            "$verify_root/$CANDIDATE_NAME" \
+            -p "$install_root" \
+            --force
+          ANSIBLE_COLLECTIONS_PATH="$install_root" \
+            ansible-doc --type role lit.supplementary.keycloak_deploy >/dev/null
+          installed_playbook="$install_root/ansible_collections/lit/supplementary/playbooks/example.yml"
+          test -s "$installed_playbook"
+          ANSIBLE_COLLECTIONS_PATH="$install_root" \
+            ansible-playbook --syntax-check "$installed_playbook"
+
+      - name: Verify Galaxy version install and smoke
+        if: >-
+          (env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true') &&
+          (env.GALAXY_REQUIRED == 'true')
+        run: |
+          set -euo pipefail
+
+          install_root="$RUNNER_TEMP/galaxy-release-install"
+          ansible-galaxy collection install \
+            "lit.supplementary:==${RELEASE_VERSION}" \
+            -p "$install_root" \
+            --force
+          ANSIBLE_COLLECTIONS_PATH="$install_root" \
+            ansible-doc --type role lit.supplementary.keycloak_deploy >/dev/null
+          installed_playbook="$install_root/ansible_collections/lit/supplementary/playbooks/example.yml"
+          test -s "$installed_playbook"
+          ANSIBLE_COLLECTIONS_PATH="$install_root" \
+            ansible-playbook --syntax-check "$installed_playbook"
+
+      - name: Mint exact back-sync dispatch App token
+        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        id: back-sync-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-actions: write
+
+      - name: Trigger release back-sync after verified publication
+        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        env:
+          GH_TOKEN: ${{ steps.back-sync-app.outputs.token }}
+          RELEASE_TAG_APP_SLUG: ${{ steps.release-tag-token.outputs.app-slug }}
+          RELEASE_TAG_APP_ID: ${{ vars.RELEASE_TAG_APP_ID }}
+          RELEASE_TAG_APP_CLIENT_ID: ${{ vars.RELEASE_TAG_APP_CLIENT_ID }}
+          SECURITY_EVIDENCE_ID: ${{ needs.security-classification.outputs.security-evidence-id }}
+        run: |
+          set -euo pipefail
+          gh workflow run release-back-sync.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f tag="$RELEASE_TAG" \
+            -f release_tag_app_slug="$RELEASE_TAG_APP_SLUG" \
+            -f release_tag_app_id="$RELEASE_TAG_APP_ID" \
+            -f release_tag_app_client_id="$RELEASE_TAG_APP_CLIENT_ID" \
+            -f security_evidence_id="$SECURITY_EVIDENCE_ID"
+
+      - name: Attach signed post-publication verification receipt
+        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          receipt_root="dist/post-release"
+          mkdir -p "$receipt_root"
+          RECEIPT_ROOT="$receipt_root" python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["RECEIPT_ROOT"])
+          candidate = Path("incoming/candidate") / os.environ["CANDIDATE_NAME"]
+          galaxy_required = os.environ["GALAXY_REQUIRED"] == "true"
+          security_validation = None
+          if os.environ["SECURITY_RELEASE"] == "true":
+              receipt_path = Path(os.environ["MODULIX_VALIDATION_RECEIPT"])
+              nexus_path = Path("dist/validation/nexus-stage.json")
+              receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+              nexus = json.loads(nexus_path.read_text(encoding="utf-8"))
+              receipt_digest = "sha256:" + hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+              if receipt_digest != os.environ["MODULIX_VALIDATION_RECEIPT_SHA256"]:
+                  raise SystemExit("ModuLix validation receipt changed after verification")
+              security_validation = {
+                  "humanActions": 0,
+                  "nexus": {
+                      "repository": nexus["repository"]["name"],
+                      "readbackSha256": nexus["readback"]["sha256"],
+                  },
+                  "receipt": {
+                      "requestId": receipt["requestId"],
+                      "sha256": receipt_digest,
+                  },
+                  "run": {
+                      "attempt": receipt["validation"]["runAttempt"],
+                      "id": receipt["validation"]["runId"],
+                      "repository": receipt["validation"]["repository"],
+                      "sha": receipt["validation"]["sha"],
+                      "workflow": receipt["validation"]["workflow"],
+                  },
+              }
+          gates = {
+              "github_release_assets_verified": True,
+              "github_release_install_smoke": True,
+              "galaxy_artifact_verified_or_not_required": True,
+              "galaxy_install_smoke_or_not_required": True,
+              "release_back_sync_dispatched": True,
+          }
+          if security_validation is not None:
+              gates["security_validation_verified"] = True
+          payload = {
+              "schema_version": 2 if security_validation is not None else 1,
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "commit_sha": os.environ["RELEASE_SHA"],
+              "release_tag": os.environ["RELEASE_TAG"],
+              "collection_version": os.environ["RELEASE_VERSION"],
+              "candidate": {
+                  "name": candidate.name,
+                  "sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
+              },
+              "github_release_url": (
+                  f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/tag/"
+                  f"{os.environ['RELEASE_TAG']}"
+              ),
+              "galaxy_required": galaxy_required,
+              "galaxy_version": os.environ["RELEASE_VERSION"] if galaxy_required else None,
+              "back_sync": {
+                  "workflow": "release-back-sync.yml",
+                  "ref": "main",
+                  "tag": os.environ["RELEASE_TAG"],
+                  "dispatch_accepted": True,
+              },
+              "verified": all(gates.values()),
+              "gates": gates,
+          }
+          if security_validation is not None:
+              payload["security_validation"] = security_validation
+          (root / "post-release-verification.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+
+          receipt="$receipt_root/post-release-verification.json"
+          bundle="${receipt}.sigstore.json"
+          assets="$(
+            gh release view "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets \
+              --jq '.assets[].name'
+          )"
+          receipt_exists=false
+          bundle_exists=false
+          grep -Fxq "$(basename "$receipt")" <<< "$assets" && receipt_exists=true
+          grep -Fxq "$(basename "$bundle")" <<< "$assets" && bundle_exists=true
+          if [ "$receipt_exists" != "$bundle_exists" ]; then
+            echo "Existing post-release receipt assets are incomplete." >&2
+            exit 1
+          fi
+          if [ "$receipt_exists" = true ]; then
+            existing_root="$RUNNER_TEMP/existing-post-release-receipt"
+            rm -rf "$existing_root"
+            mkdir -p "$existing_root"
+            gh release download "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern "$(basename "$receipt")" \
+              --pattern "$(basename "$bundle")" \
+              --dir "$existing_root"
+            test "$(sha256sum "$existing_root/$(basename "$receipt")" | awk '{print $1}')" = \
+              "$(sha256sum "$receipt" | awk '{print $1}')"
+            cp "$existing_root/$(basename "$bundle")" "$bundle"
+          else
+            cosign sign-blob --yes --bundle "$bundle" "$receipt"
+            gh release upload "$RELEASE_TAG" "$receipt" "$bundle" \
+              --repo "$GITHUB_REPOSITORY"
+          fi
+
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-publish.yml@refs/heads/main"
+          cosign verify-blob \
+            --bundle "$bundle" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "$identity" \
+            --certificate-github-workflow-sha "$RELEASE_SHA" \
+            "$receipt"
+          verify_root="$RUNNER_TEMP/final-post-release-receipt"
+          rm -rf "$verify_root"
+          mkdir -p "$verify_root"
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$(basename "$receipt")" \
+            --pattern "$(basename "$bundle")" \
+            --dir "$verify_root"
+          test "$(sha256sum "$verify_root/$(basename "$receipt")" | awk '{print $1}')" = \
+            "$(sha256sum "$receipt" | awk '{print $1}')"
+          cosign verify-blob \
+            --bundle "$verify_root/$(basename "$bundle")" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "$identity" \
+            --certificate-github-workflow-sha "$RELEASE_SHA" \
+            "$verify_root/$(basename "$receipt")"
+
+      - name: Mint exact consumer-scoped Security release token
+        id: security-app
+        if: >-
+          (env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true') &&
+          (env.SECURITY_RELEASE == 'true')
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: container-ee-wunder-ansible-ubi9
+          permission-actions: write
+
+      - name: Dispatch immutable Security evidence after Producer acceptance
+        if: >-
+          (env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true') &&
+          (env.SECURITY_RELEASE == 'true')
+        env:
+          APP_INSTALLATION_ID: ${{ steps.security-app.outputs.installation-id }}
+          APP_SLUG: ${{ steps.security-app.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.security-app.outputs.token }}
+          PRODUCER_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$APP_SLUG" = lightning-it-release-automation
+          test "$APP_INSTALLATION_ID" = 148019054
+          actual_repositories="$(
+            gh api --paginate 'installation/repositories?per_page=100' \
+              | jq -sc '[.[].repositories[].full_name] | sort | unique'
+          )"
+          test "$actual_repositories" = \
+            '["lightning-it/container-ee-wunder-ansible-ubi9"]'
+          evidence=dist/release/security-release-evidence.json
+          python scripts/generate-security-release-evidence.py verify \
+            --metadata "$SECURITY_METADATA" \
+            --profiles .lit/security-release-profiles.json \
+            --source-sha "$RELEASE_SHA" \
+            --artifact "dist/release/${CANDIDATE_NAME}" \
+            --signature "dist/release/${CANDIDATE_NAME}.sigstore.json" \
+            --sbom dist/release/sbom.cdx.json \
+            --provenance dist/release/provenance.json \
+            --evidence "$evidence"
+          evidence_id="$(jq -er '.metadata.id' "$evidence")"
+          release_state="$RUNNER_TEMP/security-release-before-dispatch.json"
+          curl --fail --silent --show-error --location \
+            --output "$release_state" \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${PRODUCER_TOKEN}" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}"
+          revocation_count="$(
+            jq --arg id "$evidence_id" '[.assets[].name | select(
+              . == "security-release-revocation.json"
+              or . == ("security-release-revocation-" + $id + ".json")
+            )] | length' "$release_state"
+          )"
+          test "$revocation_count" -eq 0
+          evidence_url="https://github.com/${GITHUB_REPOSITORY}/"
+          evidence_url+="releases/download/${RELEASE_TAG}/$(basename "$evidence")"
+          evidence_sha256="sha256:$(sha256sum "$evidence" | awk '{print $1}')"
+          python scripts/dispatch-security-release.py \
+            --evidence-url "$evidence_url" \
+            --evidence-sha256 "$evidence_sha256"
+
+      - name: Upload exact release attachment set
+        if: >-
+          always() &&
+          (failure() || env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true')
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
+        with:
+          name: release-attachments-${{ steps.source.outputs.sha }}
+          path: |
+            dist/release/
+            dist/post-release/
+            dist/validation/
+          if-no-files-found: warn
+          retention-days: 90
+
+  modulix-validation-window-1:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'lightning-it-release-automation[bot]' &&
+      github.actor_id == '307565056' &&
+      needs.publish.outputs.validation-required == 'true'
+    name: Bound ModuLix validation window 1/4
+    needs: [security-classification, release-validation, publish]
+    uses: ./.github/workflows/modulix-validation-window.yml
+    permissions:
+      actions: read
+      contents: read
+    with:
+      release_sha: ${{ inputs.release_sha }}
+      release_version: ${{ needs.publish.outputs.release-version }}
+      ci_run_id: ${{ needs.release-validation.outputs.ci-run-id }}
+      ci_run_attempt: ${{ needs.release-validation.outputs.ci-run-attempt }}
+      security_evidence_id: ${{ needs.security-classification.outputs.security-evidence-id }}
+      handoff_sha256: ${{ needs.publish.outputs.handoff-sha256 }}
+      controller_sha: ${{ needs.publish.outputs.controller-sha }}
+      request_id: ${{ needs.publish.outputs.request-id }}
+      prior_run_id: ${{ needs.publish.outputs.controller-run-id }}
+      prior_run_attempt: ${{ needs.publish.outputs.controller-run-attempt }}
+      wait_seconds: 4500
+      final_window: false
+      publish_runner: ${{ needs.security-classification.outputs.publish-runner }}
+    secrets:
+      release_automation_app_private_key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+
+  modulix-validation-window-2:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'lightning-it-release-automation[bot]' &&
+      github.actor_id == '307565056' &&
+      needs.publish.outputs.validation-required == 'true'
+    name: Bound ModuLix validation window 2/4
+    needs: [security-classification, release-validation, publish, modulix-validation-window-1]
+    uses: ./.github/workflows/modulix-validation-window.yml
+    permissions:
+      actions: read
+      contents: read
+    with:
+      release_sha: ${{ inputs.release_sha }}
+      release_version: ${{ needs.publish.outputs.release-version }}
+      ci_run_id: ${{ needs.release-validation.outputs.ci-run-id }}
+      ci_run_attempt: ${{ needs.release-validation.outputs.ci-run-attempt }}
+      security_evidence_id: ${{ needs.security-classification.outputs.security-evidence-id }}
+      handoff_sha256: ${{ needs.publish.outputs.handoff-sha256 }}
+      controller_sha: ${{ needs.publish.outputs.controller-sha }}
+      request_id: ${{ needs.publish.outputs.request-id }}
+      prior_run_id: ${{ needs.modulix-validation-window-1.outputs.controller-run-id }}
+      prior_run_attempt: ${{ needs.modulix-validation-window-1.outputs.controller-run-attempt }}
+      wait_seconds: 4500
+      final_window: false
+      publish_runner: ${{ needs.security-classification.outputs.publish-runner }}
+    secrets:
+      release_automation_app_private_key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+
+  modulix-validation-window-3:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'lightning-it-release-automation[bot]' &&
+      github.actor_id == '307565056' &&
+      needs.publish.outputs.validation-required == 'true'
+    name: Bound ModuLix validation window 3/4
+    needs: [security-classification, release-validation, publish, modulix-validation-window-2]
+    uses: ./.github/workflows/modulix-validation-window.yml
+    permissions:
+      actions: read
+      contents: read
+    with:
+      release_sha: ${{ inputs.release_sha }}
+      release_version: ${{ needs.publish.outputs.release-version }}
+      ci_run_id: ${{ needs.release-validation.outputs.ci-run-id }}
+      ci_run_attempt: ${{ needs.release-validation.outputs.ci-run-attempt }}
+      security_evidence_id: ${{ needs.security-classification.outputs.security-evidence-id }}
+      handoff_sha256: ${{ needs.publish.outputs.handoff-sha256 }}
+      controller_sha: ${{ needs.publish.outputs.controller-sha }}
+      request_id: ${{ needs.publish.outputs.request-id }}
+      prior_run_id: ${{ needs.modulix-validation-window-2.outputs.controller-run-id }}
+      prior_run_attempt: ${{ needs.modulix-validation-window-2.outputs.controller-run-attempt }}
+      wait_seconds: 4500
+      final_window: false
+      publish_runner: ${{ needs.security-classification.outputs.publish-runner }}
+    secrets:
+      release_automation_app_private_key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+
+  modulix-validation-window-4:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'lightning-it-release-automation[bot]' &&
+      github.actor_id == '307565056' &&
+      needs.publish.outputs.validation-required == 'true'
+    name: Bound ModuLix validation window 4/4
+    needs: [security-classification, release-validation, publish, modulix-validation-window-3]
+    uses: ./.github/workflows/modulix-validation-window.yml
+    permissions:
+      actions: read
+      contents: read
+    with:
+      release_sha: ${{ inputs.release_sha }}
+      release_version: ${{ needs.publish.outputs.release-version }}
+      ci_run_id: ${{ needs.release-validation.outputs.ci-run-id }}
+      ci_run_attempt: ${{ needs.release-validation.outputs.ci-run-attempt }}
+      security_evidence_id: ${{ needs.security-classification.outputs.security-evidence-id }}
+      handoff_sha256: ${{ needs.publish.outputs.handoff-sha256 }}
+      controller_sha: ${{ needs.publish.outputs.controller-sha }}
+      request_id: ${{ needs.publish.outputs.request-id }}
+      prior_run_id: ${{ needs.modulix-validation-window-3.outputs.controller-run-id }}
+      prior_run_attempt: ${{ needs.modulix-validation-window-3.outputs.controller-run-attempt }}
+      wait_seconds: 2700
+      final_window: true
+      publish_runner: ${{ needs.security-classification.outputs.publish-runner }}
+    secrets:
+      release_automation_app_private_key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+
+  publish-security-finalize:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'lightning-it-release-automation[bot]' &&
+      github.actor_id == '307565056' &&
+      needs.publish.outputs.validation-required == 'true' &&
+      needs.modulix-validation-window-4.outputs.complete == 'true'
+    name: Finalize exact Security collection release
+    needs: [security-classification, release-validation, publish, modulix-validation-window-4]
+    runs-on: ${{ fromJSON(needs.security-classification.outputs.publish-runner) }}
+    timeout-minutes: 90
+    environment: mlx90-security-publish
+    concurrency:
+      group: collection-release-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      actions: write
+      attestations: write
+      contents: write
+      id-token: write
+      pull-requests: read
+    env:
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      RELEASE_VERSION: ${{ needs.publish.outputs.release-version }}
+      RELEASE_TAG: v${{ needs.publish.outputs.release-version }}
+      CANDIDATE_NAME: lit-supplementary-${{ needs.publish.outputs.release-version }}.tar.gz
+      SECURITY_RELEASE: 'true'
+      GALAXY_REQUIRED: 'true'
+      SECURITY_METADATA: .lit/security-releases/${{ needs.publish.outputs.release-version }}.json
+      CI_RUN_ID: ${{ needs.release-validation.outputs.ci-run-id }}
+      CI_RUN_ATTEMPT: ${{ needs.release-validation.outputs.ci-run-attempt }}
+    steps:
+      - name: Checkout exact source for Security finalization
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          persist-credentials: false
+
+      - name: Re-prove protected release and reviewed merge
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_HEAD_SHA: ${{ inputs.reviewed_head_sha }}
+          REVIEWED_BASE_SHA: ${{ inputs.reviewed_base_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$REVIEWED_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$REVIEWED_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          test "$(git ls-remote origin refs/heads/main | awk '{print $1}')" = "$RELEASE_SHA"
+          read -r parent_base parent_head extra < <(git show -s --format='%P' "$RELEASE_SHA")
+          test "$parent_base" = "$REVIEWED_BASE_SHA"
+          test "$parent_head" = "$REVIEWED_HEAD_SHA"
+          test -z "${extra:-}"
+          git diff --quiet "$REVIEWED_HEAD_SHA" "$RELEASE_SHA" -- .
+          bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
+          echo "sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Python for Security finalization
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install exact release validation tools for finalization
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            ansible-core==2.18.18 \
+            PyYAML==6.0.3
+
+      - name: Download the bound staged release
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7
+        with:
+          name: release-stage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .
+
+      - name: Verify the bound staged release before finalization
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SECURITY_EVIDENCE_ID: ${{ needs.security-classification.outputs.security-evidence-id }}
+          HANDOFF_SHA256: ${{ needs.publish.outputs.handoff-sha256 }}
+        run: |
+          set -euo pipefail
+          test -s release-stage-handoff.json
+          test -s dist/validation/nexus-stage.json
+          test -s "$SECURITY_METADATA"
+          version="$(python - <<'PY'
+          import re
+          from pathlib import Path
+          match = re.search(r'(?m)^version:\s*["\x27]?([^\s"\x27]+)', Path('galaxy.yml').read_text())
+          if match is None:
+              raise SystemExit('galaxy.yml has no version')
+          print(match.group(1))
+          PY
+          )"
+          test "$version" = "$RELEASE_VERSION"
+          binding="$RUNNER_TEMP/release-stage-binding.json"
+          jq -S -c -n \
+            --arg candidateName "$CANDIDATE_NAME" \
+            --argjson ciRunAttempt "$CI_RUN_ATTEMPT" \
+            --argjson ciRunId "$CI_RUN_ID" \
+            --arg releaseVersion "$RELEASE_VERSION" \
+            --arg securityEvidenceId "$SECURITY_EVIDENCE_ID" \
+            --argjson sourceRunAttempt "$GITHUB_RUN_ATTEMPT" \
+            --argjson sourceRunId "$GITHUB_RUN_ID" \
+            --arg sourceSha "$RELEASE_SHA" \
+            '{candidateName: $candidateName, ciRunAttempt: $ciRunAttempt,
+              ciRunId: $ciRunId, galaxyRequired: true,
+              releaseVersion: $releaseVersion, securityEvidenceId: $securityEvidenceId,
+              securityRelease: true, sourceRunAttempt: $sourceRunAttempt,
+              sourceRunId: $sourceRunId, sourceSha: $sourceSha}' > "$binding"
+          python scripts/release-stage-handoff.py verify \
+            --root . --binding "$binding" --manifest release-stage-handoff.json \
+            --expected-sha256 "$HANDOFF_SHA256"
+          bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
+
+      - name: Install Cosign for Security receipt finalization
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+
+      - name: Mint exact ModuLix App token for finalization
+        id: modulix-validation-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: modulix-validation
+          permission-actions: write
+          permission-contents: read
+
+      - name: Reverify the same signed ModuLix receipt
+        env:
+          APP_SLUG: ${{ steps.modulix-validation-app.outputs.app-slug }}
+          APP_INSTALLATION_ID: ${{ steps.modulix-validation-app.outputs.installation-id }}
+          GH_TOKEN: ${{ steps.modulix-validation-app.outputs.token }}
+          SECURITY_EVIDENCE_ID: ${{ needs.security-classification.outputs.security-evidence-id }}
+          CONTROLLER_SHA: ${{ needs.publish.outputs.controller-sha }}
+          REQUEST_ID: ${{ needs.publish.outputs.request-id }}
+          BOUND_RUN_ID: ${{ needs.modulix-validation-window-4.outputs.controller-run-id }}
+          BOUND_RUN_ATTEMPT: ${{ needs.modulix-validation-window-4.outputs.controller-run-attempt }}
+        run: |
+          set -euo pipefail
+          test "$APP_SLUG" = lightning-it-release-automation
+          test "$APP_INSTALLATION_ID" = 148019054
+          [[ "$BOUND_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$BOUND_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          result="$RUNNER_TEMP/modulix-final-receipt.json"
+          python scripts/modulix-validation-receipt.py \
+            --phase window --final-window --timeout-seconds 120 \
             --nexus-manifest dist/validation/nexus-stage.json \
             --source-sha "$RELEASE_SHA" \
             --source-run-id "$GITHUB_RUN_ID" \
@@ -1365,21 +2499,24 @@ jobs:
             --version "$RELEASE_VERSION" \
             --app-slug "$APP_SLUG" \
             --installation-id "$APP_INSTALLATION_ID" \
+            --controller-sha "$CONTROLLER_SHA" \
+            --request-id "$REQUEST_ID" \
+            --bound-run-id "$BOUND_RUN_ID" \
+            --bound-run-attempt "$BOUND_RUN_ATTEMPT" \
             --output-directory dist/validation/modulix > "$result"
+          test "$(jq -er '.state' "$result")" = complete
+          test "$(jq -er '.controllerRunId' "$result")" = "$BOUND_RUN_ID"
+          test "$(jq -er '.controllerRunAttempt' "$result")" = "$BOUND_RUN_ATTEMPT"
           receipt="$(jq -er '.receipt' "$result")"
-          receipt_sha256="$(jq -er '.receiptSha256' "$result")"
-          validation_run_id="$(jq -er '.controllerRunId' "$result")"
-          validation_run_attempt="$(jq -er '.controllerRunAttempt' "$result")"
-          request_id="$(jq -er '.requestId' "$result")"
           test "$receipt" = dist/validation/modulix/mlx90-collection-validation-receipt.json
           test -s "$receipt"
           test -s "${receipt}.sigstore.json"
           {
             echo "MODULIX_VALIDATION_RECEIPT=$receipt"
-            echo "MODULIX_VALIDATION_RECEIPT_SHA256=$receipt_sha256"
-            echo "MODULIX_VALIDATION_RUN_ID=$validation_run_id"
-            echo "MODULIX_VALIDATION_RUN_ATTEMPT=$validation_run_attempt"
-            echo "MODULIX_VALIDATION_REQUEST_ID=$request_id"
+            echo "MODULIX_VALIDATION_RECEIPT_SHA256=$(jq -er '.receiptSha256' "$result")"
+            echo "MODULIX_VALIDATION_RUN_ID=$BOUND_RUN_ID"
+            echo "MODULIX_VALIDATION_RUN_ATTEMPT=$BOUND_RUN_ATTEMPT"
+            echo "MODULIX_VALIDATION_REQUEST_ID=$REQUEST_ID"
           } >> "$GITHUB_ENV"
 
       - name: Finalize immutable release attachments and notes

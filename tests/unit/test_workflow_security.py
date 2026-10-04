@@ -1930,13 +1930,21 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
 
     def test_security_publish_requires_nexus_and_signed_validation_before_galaxy(self) -> None:
         workflow = (WORKFLOWS / "collection-publish.yml").read_text(encoding="utf-8")
-        publish_steps = yaml.safe_load(workflow)["jobs"]["publish"]["steps"]
-        step_names = [step.get("name") for step in publish_steps]
-        nexus_index = step_names.index("Stage exact Security candidate in native Nexus Galaxy v3")
-        receipt_index = step_names.index("Require signed successful ModuLix validation receipt")
-        publish_index = step_names.index("Publish or verify validated artifact on Ansible Galaxy")
-        self.assertLess(nexus_index, receipt_index)
-        self.assertLess(receipt_index, publish_index)
+        jobs = yaml.safe_load(workflow)["jobs"]
+        stage_names = [step.get("name") for step in jobs["publish"]["steps"]]
+        finalize_names = [step.get("name") for step in jobs["publish-security-finalize"]["steps"]]
+        self.assertLess(
+            stage_names.index("Stage exact Security candidate in native Nexus Galaxy v3"),
+            stage_names.index("Dispatch exact ModuLix validation request once"),
+        )
+        self.assertLess(
+            finalize_names.index("Reverify the same signed ModuLix receipt"),
+            finalize_names.index("Publish or verify validated artifact on Ansible Galaxy"),
+        )
+        self.assertIn("modulix-validation-window-4", jobs["publish-security-finalize"]["needs"])
+        self.assertIn(
+            "needs.modulix-validation-window-4.outputs.complete == 'true'", jobs["publish-security-finalize"]["if"]
+        )
         self.assertIn("RELEASE_AUTOMATION_APP_CLIENT_ID", workflow)
         self.assertIn("RELEASE_AUTOMATION_APP_PRIVATE_KEY", workflow)
         self.assertIn("permission-actions: write", workflow)
@@ -1949,24 +1957,32 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
     def test_publish_security_release_is_metadata_bound_and_dispatches_after_acceptance(self) -> None:
         workflow_path = WORKFLOWS / "collection-publish.yml"
         workflow_text = workflow_path.read_text(encoding="utf-8")
-        publish = load_yaml(workflow_path)["jobs"]["publish"]
+        jobs = load_yaml(workflow_path)["jobs"]
+        publish = jobs["publish"]
+        finalizer = jobs["publish-security-finalize"]
         self.assertEqual("write", publish["permissions"]["attestations"])
+        self.assertEqual(90, publish["timeout-minutes"])
+        self.assertEqual(90, finalizer["timeout-minutes"])
         step_names = [step.get("name") for step in publish["steps"]]
         classify_index = step_names.index("Classify exact-SHA Security release metadata")
         prepare_index = step_names.index("Prepare deterministic signed Security release evidence")
         attest_index = step_names.index("Attest Security release evidence")
-        finalize_index = step_names.index("Finalize immutable release attachments and notes")
-        release_index = step_names.index("Create or verify GitHub Release and immutable assets")
-        verify_index = step_names.index("Verify GitHub Release download, install, and smoke")
-        receipt_index = step_names.index("Attach signed post-publication verification receipt")
-        dispatch_index = step_names.index("Dispatch immutable Security evidence after Producer acceptance")
+        stage_dispatch_index = step_names.index("Dispatch exact ModuLix validation request once")
+        final_names = [step.get("name") for step in finalizer["steps"]]
+        receipt_index = final_names.index("Reverify the same signed ModuLix receipt")
+        finalize_index = final_names.index("Finalize immutable release attachments and notes")
+        release_index = final_names.index("Create or verify GitHub Release and immutable assets")
+        verify_index = final_names.index("Verify GitHub Release download, install, and smoke")
+        post_receipt_index = final_names.index("Attach signed post-publication verification receipt")
+        dispatch_index = final_names.index("Dispatch immutable Security evidence after Producer acceptance")
         self.assertLess(classify_index, prepare_index)
         self.assertLess(prepare_index, attest_index)
-        self.assertLess(attest_index, finalize_index)
+        self.assertLess(attest_index, stage_dispatch_index)
+        self.assertLess(receipt_index, finalize_index)
         self.assertLess(finalize_index, release_index)
         self.assertLess(release_index, verify_index)
-        self.assertLess(verify_index, receipt_index)
-        self.assertLess(receipt_index, dispatch_index)
+        self.assertLess(verify_index, post_receipt_index)
+        self.assertLess(post_receipt_index, dispatch_index)
 
         steps = {step.get("name"): step for step in publish["steps"]}
         self.assertEqual(
@@ -1980,13 +1996,17 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertNotIn("attest_needed", workflow_text)
         self.assertIn('test -n "$ATTESTATION_ID"', workflow_text)
         self.assertIn('test -s "$ATTESTATION_BUNDLE"', workflow_text)
+        final_steps = {step.get("name"): step for step in finalizer["steps"]}
         self.assertEqual(
             "env.SECURITY_RELEASE == 'true'",
-            steps["Dispatch immutable Security evidence after Producer acceptance"]["if"],
+            final_steps["Dispatch immutable Security evidence after Producer acceptance"]["if"],
         )
         self.assertEqual(
             "env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'",
-            steps["Require signed successful ModuLix validation receipt"]["if"],
+            steps["Dispatch exact ModuLix validation request once"]["if"],
+        )
+        self.assertIn(
+            "env.SECURITY_RELEASE != 'true'", steps["Publish or verify validated artifact on Ansible Galaxy"]["if"]
         )
         self.assertNotIn('test "$GALAXY_REQUIRED" = true', workflow_text)
         self.assertIn("No exact-version Security metadata", workflow_text)

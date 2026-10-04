@@ -21,6 +21,9 @@ class SecurityPublicationGoldenPathTests(unittest.TestCase):
         cls.publish = cls.workflow["jobs"]["publish"]
         cls.steps = {step.get("name"): step for step in cls.publish["steps"]}
         cls.step_names = [step.get("name") for step in cls.publish["steps"]]
+        cls.finalize = cls.workflow["jobs"]["publish-security-finalize"]
+        cls.finalize_steps = {step.get("name"): step for step in cls.finalize["steps"]}
+        cls.finalize_names = [step.get("name") for step in cls.finalize["steps"]]
 
     def test_security_classification_selects_exact_self_hosted_runner_labels(self) -> None:
         classification = self.workflow["jobs"]["security-classification"]
@@ -189,19 +192,25 @@ print(json.dumps(result))
 
     def test_security_order_is_nexus_then_signed_modulix_then_galaxy(self) -> None:
         nexus = self.step_names.index("Stage exact Security candidate in native Nexus Galaxy v3")
-        receipt = self.step_names.index("Require signed successful ModuLix validation receipt")
-        finalize = self.step_names.index("Finalize immutable release attachments and notes")
-        galaxy = self.step_names.index("Publish or verify validated artifact on Ansible Galaxy")
-        self.assertLess(nexus, receipt)
+        dispatch = self.step_names.index("Dispatch exact ModuLix validation request once")
+        receipt = self.finalize_names.index("Reverify the same signed ModuLix receipt")
+        finalize = self.finalize_names.index("Finalize immutable release attachments and notes")
+        galaxy = self.finalize_names.index("Publish or verify validated artifact on Ansible Galaxy")
+        self.assertLess(nexus, dispatch)
         self.assertLess(receipt, finalize)
         self.assertLess(finalize, galaxy)
+        self.assertIn("modulix-validation-window-4", self.finalize["needs"])
+        self.assertIn("needs.modulix-validation-window-4.outputs.complete == 'true'", self.finalize["if"])
+        self.assertIn(
+            "--phase window --final-window", self.finalize_steps["Reverify the same signed ModuLix receipt"]["run"]
+        )
 
         for name in (
             "Stage exact Security candidate in native Nexus Galaxy v3",
             "Mint read-only release automation installation audit token",
             "Verify exact release automation installation and allowlist",
             "Mint exact ModuLix validation App token",
-            "Require signed successful ModuLix validation receipt",
+            "Dispatch exact ModuLix validation request once",
         ):
             self.assertEqual(
                 "env.SECURITY_RELEASE == 'true' && env.GALAXY_REQUIRED == 'true'",
@@ -230,7 +239,7 @@ print(json.dumps(result))
         stage = self.step_names.index("Stage exact Security candidate in native Nexus Galaxy v3")
         handoff = self.step_names.index("Create exact staged-release handoff")
         upload = self.step_names.index("Upload bound staged release")
-        receipt = self.step_names.index("Require signed successful ModuLix validation receipt")
+        receipt = self.step_names.index("Dispatch exact ModuLix validation request once")
         self.assertLess(stage, handoff)
         self.assertLess(handoff, upload)
         self.assertLess(upload, receipt)
@@ -254,6 +263,7 @@ print(json.dumps(result))
         self.assertEqual("mlx90-security-publish", window["environment"])
         self.assertIn("github.actor_id == '307565056'", window["if"])
         steps = {step["name"]: step for step in window["steps"]}
+        self.assertIn("3.14", steps["Setup Python for bound validation"]["with"]["python-version"])
         verify = steps["Rebuild and verify exact staged-release handoff"]["run"]
         self.assertIn("scripts/release-stage-handoff.py verify", verify)
         self.assertIn('--expected-sha256 "$HANDOFF_SHA256"', verify)
@@ -268,6 +278,57 @@ print(json.dumps(result))
         self.assertIn("--bound-run-attempt", poll)
         self.assertIn("--final-window", poll)
         self.assertNotIn("--phase dispatch", poll)
+
+    def test_bound_windows_and_finalizer_preserve_one_release_identity(self) -> None:
+        jobs = self.workflow["jobs"]
+        for job in (self.publish, self.finalize):
+            self.assertEqual("collection-release-${{ github.repository }}", job["concurrency"]["group"])
+            self.assertFalse(job["concurrency"]["cancel-in-progress"])
+        previous = "publish"
+        for index, wait_seconds in enumerate((4500, 4500, 4500, 2700), start=1):
+            job = jobs[f"modulix-validation-window-{index}"]
+            self.assertEqual("./.github/workflows/modulix-validation-window.yml", job["uses"])
+            self.assertIn(previous, job["needs"])
+            self.assertEqual(wait_seconds, job["with"]["wait_seconds"])
+            self.assertEqual(index == 4, job["with"]["final_window"])
+            self.assertEqual("${{ inputs.release_sha }}", job["with"]["release_sha"])
+            self.assertEqual("${{ needs.publish.outputs.handoff-sha256 }}", job["with"]["handoff_sha256"])
+            self.assertEqual("${{ needs.publish.outputs.controller-sha }}", job["with"]["controller_sha"])
+            self.assertEqual("${{ needs.publish.outputs.request-id }}", job["with"]["request_id"])
+            if index > 1:
+                self.assertEqual(f"${{{{ needs.{previous}.outputs.controller-run-id }}}}", job["with"]["prior_run_id"])
+                self.assertEqual(
+                    f"${{{{ needs.{previous}.outputs.controller-run-attempt }}}}",
+                    job["with"]["prior_run_attempt"],
+                )
+            previous = f"modulix-validation-window-{index}"
+        self.assertIn(previous, self.finalize["needs"])
+        self.assertIn(f"needs.{previous}.outputs.complete == 'true'", self.finalize["if"])
+        self.assertEqual(
+            "${{ needs.publish.outputs.handoff-sha256 }}",
+            self.finalize_steps["Verify the bound staged release before finalization"]["env"]["HANDOFF_SHA256"],
+        )
+        receipt = self.finalize_steps["Reverify the same signed ModuLix receipt"]
+        self.assertEqual(f"${{{{ needs.{previous}.outputs.controller-run-id }}}}", receipt["env"]["BOUND_RUN_ID"])
+        self.assertEqual(
+            f"${{{{ needs.{previous}.outputs.controller-run-attempt }}}}", receipt["env"]["BOUND_RUN_ATTEMPT"]
+        )
+        self.assertEqual("${{ needs.publish.outputs.request-id }}", receipt["env"]["REQUEST_ID"])
+        self.assertEqual("${{ needs.publish.outputs.controller-sha }}", receipt["env"]["CONTROLLER_SHA"])
+
+        deferred_names = self.step_names[self.step_names.index("Finalize immutable release attachments and notes") :]
+        final_names = self.finalize_names[
+            self.finalize_names.index("Finalize immutable release attachments and notes") :
+        ]
+        self.assertEqual(deferred_names, final_names)
+        for name in deferred_names:
+            stage = {key: value for key, value in self.steps[name].items() if key != "if"}
+            final = {key: value for key, value in self.finalize_steps[name].items() if key != "if"}
+            self.assertEqual(stage, final, name)
+            if name != "Upload exact release attachment set":
+                self.assertIn("env.SECURITY_RELEASE != 'true'", self.steps[name]["if"])
+        self.assertIn("failure()", self.steps["Upload exact release attachment set"]["if"])
+        self.assertIn("env.GALAXY_REQUIRED != 'true'", self.steps["Upload exact release attachment set"]["if"])
 
     def test_modulix_dispatch_is_exact_app_scoped_and_receipt_gated(self) -> None:
         audit_token = self.steps["Mint read-only release automation installation audit token"]
@@ -287,11 +348,15 @@ print(json.dumps(result))
         self.assertNotIn("permission-environments", token["with"])
         self.assertNotIn("permission-secrets", token["with"])
 
-        gate = self.steps["Require signed successful ModuLix validation receipt"]["run"]
+        gate = self.steps["Dispatch exact ModuLix validation request once"]["run"]
         self.assertIn('test "$APP_INSTALLATION_ID" = 148019054', gate)
         self.assertIn("scripts/modulix-validation-receipt.py", gate)
+        self.assertIn("--phase dispatch", gate)
         self.assertIn('--source-run-attempt "$GITHUB_RUN_ATTEMPT"', gate)
         self.assertNotIn("set -x", gate)
+        self.assertIn(
+            "--phase window --final-window", self.finalize_steps["Reverify the same signed ModuLix receipt"]["run"]
+        )
 
     def test_security_path_binds_both_app_login_and_numeric_actor_id(self) -> None:
         self.assertIn("github.actor == 'lightning-it-release-automation[bot]'", self.publish["if"])
@@ -299,7 +364,7 @@ print(json.dumps(result))
         self.assertIn("github.actor_id == '307565056'", self.publish["environment"]["name"])
 
     def test_galaxy_cannot_publish_security_candidate_without_exact_receipt(self) -> None:
-        galaxy = self.steps["Publish or verify validated artifact on Ansible Galaxy"]["run"]
+        galaxy = self.finalize_steps["Publish or verify validated artifact on Ansible Galaxy"]["run"]
         receipt_check = galaxy.index("MODULIX_VALIDATION_RECEIPT_SHA256")
         publish = galaxy.index("ansible-galaxy collection publish")
         readback = galaxy.index("galaxy_download_url")
