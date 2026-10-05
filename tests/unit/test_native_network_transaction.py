@@ -72,7 +72,11 @@ class ActionModule(ActionBase):
                 state['phase'] = ('original' if payload['content'] == state['original'][target] else 'desired')
                 result['changed'] = current != payload['content']
         elif op == 'stat':
-            result['stat'] = {'isreg': True, 'islnk': False, 'uid': 0, 'gid': 0,
+            if payload['path'] == '/fixture':
+                result['stat'] = {'isdir': True, 'islnk': False, 'uid': 0,
+                                  'wgrp': False, 'woth': False, 'dev': 1, 'inode': state['parent_inode']}
+            else:
+                result['stat'] = {'isreg': True, 'islnk': False, 'uid': 0, 'gid': 0,
                               'mode': state['modes'][payload['path']],
                               'checksum': hashlib.sha256(state['files'][payload['path']].encode()).hexdigest()}
         elif op == 'command':
@@ -88,10 +92,16 @@ class ActionModule(ActionBase):
                 component = 'postgres' if argv[3] == 'postgres-postgres' else 'keycloak'
                 result.update(rc=0, stdout=json.dumps([state['records'][state['phase']][component]]))
         elif op == 'uri':
-            failed = failure in ('keycloak-ready', 'external-drift') and state['phase'] == 'desired'
+            drift = failure.startswith(('external-drift:', 'parent-drift:'))
+            failed = (failure == 'keycloak-ready' or drift) and state['phase'] == 'desired'
             state['fault_observed'] = state['fault_observed'] or failed
-            if failed and failure == 'external-drift':
-                state['files']['/fixture/keycloak.kube'] = 'foreign configuration\n'
+            if failed and drift:
+                if failure.startswith('external-drift:'):
+                    state['files'][failure.split(':', 1)[1]] = 'foreign configuration\n'
+                else:
+                    state['parent_inode'] = 99
+                state['before_restore'] = dict(state['files'])
+                state['restore_boundary'] = len(state['trace'])
             result.update(status=503 if failed else 200, failed=failed, msg='Fixture health')
         with open(path, 'w') as stream:
             json.dump(state, stream)
@@ -161,7 +171,7 @@ class NativeNetworkTransactionTests(unittest.TestCase):
                         "desired": f"desired {name} {kind}\n",
                         "checksum": hashlib.sha256(content.encode()).hexdigest(),
                         "mode": "0644" if kind == "quadlet" else "0600",
-                        "parent_identities": {},
+                        "parent_identities": {"/fixture": {"device": 1, "inode": 2}},
                     }
                 )
         source = yaml.safe_load((TASKS / "native_network_migration.yml").read_text())[0]
@@ -173,7 +183,11 @@ class NativeNetworkTransactionTests(unittest.TestCase):
             plugins = directory / "action_plugins"
             plugins.mkdir()
             (plugins / "fixture_io.py").write_text(ACTION)
-            for name in ("native_network_start.yml", "native_network_restore.yml"):
+            for name in (
+                "native_network_start.yml",
+                "native_network_restore.yml",
+                "native_network_validate_restore.yml",
+            ):
                 (directory / name).write_text(yaml.safe_dump(instrument(yaml.safe_load((TASKS / name).read_text()))))
             collection = directory / "collections/ansible_collections/lit/supplementary"
             collection.parent.mkdir(parents=True)
@@ -186,6 +200,7 @@ class NativeNetworkTransactionTests(unittest.TestCase):
                         "failure": failure,
                         "injected": False,
                         "fault_observed": False,
+                        "parent_inode": 2,
                         "trace": [],
                         "phase": "original",
                         "files": original,
@@ -263,13 +278,14 @@ class NativeNetworkTransactionTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=90,
+                check=False,
             )
             state = json.loads(state_path.read_text())
             # Failures must remain failures even when recovery succeeds.
             self.assertEqual(result.returncode == 0, not failure, result.stdout + result.stderr)
             self.assertTrue(json.loads(cleanup_proof.read_text()), "Actual always tasks must discard snapshots")
             self.assertEqual(state["fault_observed"], bool(failure), "Reach the exact selected fault boundary")
-            if failure != "external-drift":
+            if not failure.startswith(("external-drift:", "parent-drift:")):
                 expected = (
                     original
                     if failure or not changed
@@ -283,7 +299,9 @@ class NativeNetworkTransactionTests(unittest.TestCase):
                 self.assertEqual(state["files"], expected)
                 self.assertEqual(set(state["services"].values()), {"started"})
             else:
-                self.assertEqual(state["files"]["/fixture/keycloak.kube"], "foreign configuration\n")
+                self.assertEqual(state["files"], state["before_restore"])
+                restore_trace = state["trace"][state["restore_boundary"] :]
+                self.assertFalse(any(event.startswith("write:") for event in restore_trace))
                 self.assertEqual(set(state["services"].values()), {"stopped"})
             return state
 
@@ -311,7 +329,12 @@ class NativeNetworkTransactionTests(unittest.TestCase):
                 self.run_case(failure)
 
     def test_external_drift_stays_stopped_without_overwrite(self):
-        self.run_case("external-drift")
+        for target in ("keycloak.kube", "keycloak.yml", "postgres.kube", "postgres.yml"):
+            with self.subTest(target=target):
+                self.run_case("external-drift:/fixture/" + target)
+
+    def test_parent_identity_drift_stays_stopped_without_any_restore(self):
+        self.run_case("parent-drift:/fixture")
 
     def test_unchanged_plan_has_zero_io(self):
         self.assertEqual(self.run_case(changed=False)["trace"], [])

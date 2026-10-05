@@ -136,7 +136,13 @@
             state: stopped
           loop: [keycloak, postgres]
 
-        - name: Restore both configurations only if their identity and transaction contents still match
+        - name: Validate every rollback target before restoring any configuration
+          ansible.builtin.include_tasks: native_network_validate_restore.yml
+          loop: "{{ keycloak_deploy_migration_files }}"
+          loop_control:
+            loop_var: keycloak_deploy_migration_restore_file
+
+        - name: Restore the validated pair with final per-write identity and checksum checks
           ansible.builtin.include_tasks: native_network_restore.yml
           loop: "{{ keycloak_deploy_migration_files }}"
           loop_control:

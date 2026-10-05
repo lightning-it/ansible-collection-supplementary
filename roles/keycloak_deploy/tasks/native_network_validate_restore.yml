@@ -1,0 +1,41 @@
+---
+- name: Inspect one paired rollback target without following links
+  ansible.builtin.stat:
+    path: "{{ keycloak_deploy_migration_restore_file.path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: keycloak_deploy_migration_restore_stat
+
+- name: Inspect the bound rollback parent without following links
+  ansible.builtin.stat:
+    path: "{{ keycloak_deploy_migration_restore_file.path | dirname }}"
+    follow: false
+  register: keycloak_deploy_migration_restore_parent_stat
+
+- name: Refuse rollback over external content or parent drift
+  ansible.builtin.assert:
+    that:
+      - keycloak_deploy_migration_restore_stat.stat.isreg | default(false)
+      - not keycloak_deploy_migration_restore_stat.stat.islnk | default(false)
+      - keycloak_deploy_migration_restore_stat.stat.uid == 0
+      - keycloak_deploy_migration_restore_stat.stat.gid == 0
+      - keycloak_deploy_migration_restore_stat.stat.mode == keycloak_deploy_migration_restore_file.mode
+      - >-
+        keycloak_deploy_migration_restore_stat.stat.checksum
+        in [keycloak_deploy_migration_restore_file.checksum,
+            keycloak_deploy_migration_restore_file.desired | hash('sha256')]
+      - keycloak_deploy_migration_restore_parent_stat.stat.isdir | default(false)
+      - not keycloak_deploy_migration_restore_parent_stat.stat.islnk | default(false)
+      - keycloak_deploy_migration_restore_parent_stat.stat.uid == 0
+      - not keycloak_deploy_migration_restore_parent_stat.stat.wgrp
+      - not keycloak_deploy_migration_restore_parent_stat.stat.woth
+      - >-
+        keycloak_deploy_migration_restore_parent_stat.stat.dev
+        == keycloak_deploy_migration_restore_file.parent_identities[
+          keycloak_deploy_migration_restore_file.path | dirname].device
+      - >-
+        keycloak_deploy_migration_restore_parent_stat.stat.inode
+        == keycloak_deploy_migration_restore_file.parent_identities[
+          keycloak_deploy_migration_restore_file.path | dirname].inode
+    quiet: true
+    fail_msg: Paired rollback detected external drift; services remain stopped rather than overwrite it.

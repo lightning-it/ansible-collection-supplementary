@@ -104,7 +104,11 @@ class NativeNetworkMigrationBoundaryTests(unittest.TestCase):
                 )
             )
             result = subprocess.run(  # noqa: S603 -- pinned executable and generated local fixture, no shell.
-                [executable, "-i", "localhost,", "-c", "local", str(play)], capture_output=True, text=True, timeout=120
+                [executable, "-i", "localhost,", "-c", "local", str(play)],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 

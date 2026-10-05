@@ -5,6 +5,9 @@ bugfixes:
     that preserves images and data paths and restores both Keycloak and its
     managed PostgreSQL configuration when cutover readiness fails.
   - >-
+    keycloak_deploy - validate all paired rollback targets and their parent
+    identities before any restore write, retaining final per-write checks.
+  - >-
     keycloak_deploy - accept the exact managed PostgreSQL pod DNS name while
     retaining its declared private network and peer-address binding; reject
     arbitrary external database names.
