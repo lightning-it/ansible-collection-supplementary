@@ -62,6 +62,27 @@ def fixtures():
 
 
 class KeycloakNativeMigrationPlanTests(unittest.TestCase):
+    def test_all_port_bindings_must_be_literal_loopback_addresses(self):
+        for address in ("127.0.0.1", "127.0.0.2", "127.255.255.254", "::1"):
+            components = fixtures()
+            for component in components.values():
+                component["manifest"]["spec"]["containers"][0]["ports"][0]["hostIP"] = address
+            with self.subTest(address=address):
+                result = NATIVE.prepare_transition(components, "postgres", 5432)
+                for name in components:
+                    self.assertEqual(
+                        result["components"][name]["manifest"]["spec"]["containers"][0]["ports"],
+                        components[name]["manifest"]["spec"]["containers"][0]["ports"],
+                    )
+        rejected = ("0.0.0.0", "::", "10.0.0.2", "fe80::1", "localhost", "", None, 2130706433)  # noqa: S104 -- rejection fixture.
+        for address in rejected:
+            for name in ("keycloak", "postgres"):
+                components = fixtures()
+                ports = components[name]["manifest"]["spec"]["containers"][0]["ports"]
+                ports.append({"containerPort": 9000, "hostPort": 9000, "hostIP": address})
+                with self.subTest(address=address, component=name), self.assertRaises(AnsibleFilterError):
+                    NATIVE.prepare_transition(components, "postgres", 5432)
+
     def test_dynamic_database_peer_keeps_exact_network_and_private_endpoint_binding(self):
         components = fixtures()
         components["keycloak"]["networks"] = ["database.network", "proxy.network"]

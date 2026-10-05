@@ -73,6 +73,13 @@ or mixed prior/desired controllers. Controller termination is not a durable
 automatic rollback guarantee; recovery requires retained authoritative source
 configuration. Do not claim live migration acceptance from preparation tests.
 
+Subsequent native reconciliation compares the complete current manifest with
+the normally rendered role template, including scalar types and sequence order.
+Formatting-only differences preserve the existing bytes and reconcile private
+file permissions without restarting. Real configuration changes retain the
+ordinary transactional render/restart/rollback path. Invalid or ambiguous YAML
+fails comparison rather than being treated as equal.
+
 `tests/unit/test_native_network_transaction.py` executes the production Ansible
 cutover/rescue/always control flow with isolated, fault-injected I/O. It verifies
 the exact failure boundary, paired recovery after stop/write/readiness failures,

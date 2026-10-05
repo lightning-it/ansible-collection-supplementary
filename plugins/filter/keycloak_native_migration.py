@@ -134,7 +134,10 @@ def prepare_transition(components, database_host, database_port):
             volumes = [volume for volume in spec['volumes'] if volume['name'] == data_mounts[0]['name']]
             if len(volumes) != 1 or volumes[0].get('hostPath', {}).get('path') != component['host_data_dir']:
                 raise ValueError('network transition cannot change data directory')
-            if not container.get('ports') or any(port.get('hostIP') != '127.0.0.1' for port in container['ports']):
+            if not container.get('ports') or any(
+                    not isinstance(port.get('hostIP'), str)
+                    or not ipaddress.ip_address(port['hostIP']).is_loopback
+                    for port in container['ports']):
                 raise ValueError('loopback-only host bindings required')
             prepared[name] = {'quadlet_content': new, 'manifest': deepcopy(manifest)}
         if len(set(states)) != 1:

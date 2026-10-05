@@ -376,6 +376,9 @@ class KeycloakRoleContractTests(unittest.TestCase):
             fixture_role = collection / "roles/keycloak_deploy"
             fixture_role.parent.mkdir(parents=True)
             shutil.copytree(role, fixture_role)
+            fixture_filters = collection / "plugins/filter"
+            fixture_filters.mkdir(parents=True)
+            shutil.copy2(ROOT / "plugins/filter/native_manifest.py", fixture_filters / "native_manifest.py")
             fixture_foundational_tasks = (
                 root / "collections/ansible_collections/lit/foundational/roles/podman_systemd/tasks"
             )
@@ -471,7 +474,7 @@ class KeycloakRoleContractTests(unittest.TestCase):
             (state / f"{native_state}.active").write_text("inactive", encoding="utf-8")
             log = root / "systemctl.log"
             manifest = root / "keycloak.yml"
-            original = b"original-keycloak-manifest\nwith-exact-bytes\n"
+            original = b"kind: Pod\nmetadata: {name: original-keycloak}\nspec: {containers: []}\n"
             manifest.write_bytes(original)
             manifest.chmod(0o640)
             quadlet_dir = root / "quadlets"

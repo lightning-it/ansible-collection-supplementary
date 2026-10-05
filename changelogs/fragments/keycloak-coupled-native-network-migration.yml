@@ -1,6 +1,13 @@
 ---
 bugfixes:
   - >-
+    keycloak_deploy and postgres_deploy - compare complete native Pod manifests
+    with scalar types preserved, preventing formatting-only follow-on restarts
+    while retaining transactional reconciliation for real configuration changes.
+  - >-
+    keycloak_deploy - preserve all literal IPv4 and IPv6 loopback host bindings
+    during native migration while rejecting wildcard and non-loopback exposure.
+  - >-
     keycloak_deploy - reject unreconstructable implicit prior network attachments
     before stopping either service during paired migration.
   - >-
