@@ -62,6 +62,14 @@ def fixtures():
 
 
 class KeycloakNativeMigrationPlanTests(unittest.TestCase):
+    def test_dns_binding_selects_only_the_unique_shared_static_database_network(self):
+        keycloak = ["database.network:ip=192.0.2.2"]
+        postgres = ["database.network:ip=192.0.2.3", "backup.network:ip=198.51.100.3"]
+        self.assertTrue(NATIVE.private_database_endpoint_valid("postgres", keycloak, postgres, "postgres"))
+        for peers in (["other.network"], keycloak + ["backup.network"]):
+            with self.subTest(peers=peers), self.assertRaises(AnsibleFilterError):
+                NATIVE.private_database_endpoint_valid("postgres", peers, postgres, "postgres")
+
     def test_all_port_bindings_must_be_literal_loopback_addresses(self):
         for address in ("127.0.0.1", "127.0.0.2", "127.255.255.254", "::1"):
             components = fixtures()

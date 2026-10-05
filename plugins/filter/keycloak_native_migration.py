@@ -31,7 +31,8 @@ def database_binding(components, database_host):
     if database_host == pod_name:
         if not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', pod_name):
             raise ValueError('invalid managed pod DNS name')
-        candidates = [network for network, address in bindings['postgres'].items() if address is not None]
+        candidates = [network for network, address in bindings['postgres'].items()
+                      if address is not None and network in bindings['keycloak']]
     else:
         ipaddress.IPv4Address(database_host)
         candidates = [network for network, address in bindings['postgres'].items() if address == database_host]

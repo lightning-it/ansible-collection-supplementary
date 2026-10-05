@@ -1,6 +1,13 @@
 ---
 bugfixes:
   - >-
+    keycloak_deploy - select the unique shared private database network for
+    managed DNS endpoints without rejecting unrelated PostgreSQL attachments.
+  - >-
+    keycloak_deploy - reject duplicate captured Pod mapping keys before migration
+    parsing and accept rollback target bytes only for files actually writable by
+    the transaction, preserving external PostgreSQL manifest changes.
+  - >-
     keycloak_deploy and postgres_deploy - compare complete native Pod manifests
     with scalar types preserved, preventing formatting-only follow-on restarts
     while retaining transactional reconciliation for real configuration changes.

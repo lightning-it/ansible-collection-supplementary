@@ -22,8 +22,11 @@
       - keycloak_deploy_migration_restore_stat.stat.mode == keycloak_deploy_migration_restore_file.mode
       - >-
         keycloak_deploy_migration_restore_stat.stat.checksum
-        in [keycloak_deploy_migration_restore_file.checksum,
-            keycloak_deploy_migration_restore_file.desired | hash('sha256')]
+        in ([keycloak_deploy_migration_restore_file.checksum]
+            + ([keycloak_deploy_migration_restore_file.desired | hash('sha256')]
+               if (keycloak_deploy_migration_restore_file.kind == 'quadlet'
+                   or keycloak_deploy_migration_restore_file.component == 'keycloak')
+               else []))
       - keycloak_deploy_migration_restore_parent_stat.stat.isdir | default(false)
       - not keycloak_deploy_migration_restore_parent_stat.stat.islnk | default(false)
       - keycloak_deploy_migration_restore_parent_stat.stat.uid == 0

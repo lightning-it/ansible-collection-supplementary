@@ -60,6 +60,49 @@ def canonical_manifest(component):
 
 
 class NativeManifestReconciliationTests(unittest.TestCase):
+    def test_actual_snapshot_rejects_ambiguous_bytes_before_conversion(self):
+        executable = shutil.which("ansible-playbook")
+        self.assertIsNotNone(executable, "Run inside pinned Devtools")
+        source = yaml.safe_load((ROOT / "roles/keycloak_deploy/tasks/native_network_snapshot.yml").read_text())
+        selected = deepcopy(source[-2:])
+        self.assertIn("native_manifest_equal", str(selected[0]))
+        selected[1]["no_log"] = True
+        valid = canonical_manifest("keycloak")
+        cases = (
+            valid,
+            "kind: Pod\nspec: {}\nspec: {secret-canary: bad}\n",
+            "kind: Pod\nspec:\n  containers: []\n  containers: []\n",
+            "secret-canary: [",
+        )
+        for index, content in enumerate(cases):
+            with self.subTest(index=index), tempfile.TemporaryDirectory() as temporary:
+                target = Path(temporary)
+                collection = target / "collections/ansible_collections/lit/supplementary"
+                (collection / "plugins/filter").mkdir(parents=True)
+                shutil.copy2(ROOT / "plugins/filter/native_manifest.py", collection / "plugins/filter")
+                values = {
+                    "keycloak_deploy_migration_component": "keycloak",
+                    "keycloak_deploy_migration_components": {},
+                    "keycloak_deploy_migration_specs": {"keycloak": {}},
+                    "keycloak_deploy_migration_quadlet_read": {"content": base64.b64encode(b"fixture").decode()},
+                    "keycloak_deploy_migration_manifest_read": {"content": base64.b64encode(content.encode()).decode()},
+                }
+                play = target / "play.yml"
+                play.write_text(
+                    yaml.safe_dump([{"hosts": "localhost", "gather_facts": False, "vars": values, "tasks": selected}])
+                )
+                result = subprocess.run(  # noqa: S603 -- resolved Ansible executable and generated local fixture, no shell.
+                    [executable, "-i", "localhost,", "-c", "local", str(play)],
+                    env=dict(os.environ, ANSIBLE_COLLECTIONS_PATH=str(target / "collections")),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=30,
+                )
+                output = result.stdout + result.stderr
+                self.assertNotIn("secret-canary", output)
+                self.assertEqual(result.returncode == 0, index == 0, output)
+
     def test_actual_ansible_preview_render_permissions_and_lifecycle_selection(self):
         executable = shutil.which("ansible-playbook")
         self.assertIsNotNone(executable, "Run inside pinned Devtools")

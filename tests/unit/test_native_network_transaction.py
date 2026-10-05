@@ -72,6 +72,11 @@ class ActionModule(ActionBase):
                 state['phase'] = ('original' if payload['content'] == state['original'][target] else 'desired')
                 result['changed'] = current != payload['content']
         elif op == 'stat':
+            if payload['path'] == '/fixture/postgres.yml':
+                state['postgres_stats'] += 1
+                if failure == 'late-desired' and state['postgres_stats'] == 2:
+                    state['files'][payload['path']] = state['desired'][payload['path']]
+                    state['late_injected'] = True
             if payload['path'] == '/fixture':
                 result['stat'] = {'isdir': True, 'islnk': False, 'uid': 0,
                                   'wgrp': False, 'woth': False, 'dev': 1, 'inode': state['parent_inode']}
@@ -92,13 +97,17 @@ class ActionModule(ActionBase):
                 component = 'postgres' if argv[3] == 'postgres-postgres' else 'keycloak'
                 result.update(rc=0, stdout=json.dumps([state['records'][state['phase']][component]]))
         elif op == 'uri':
-            drift = failure.startswith(('external-drift:', 'parent-drift:'))
+            drift = (failure.startswith(('external-drift:', 'external-desired:', 'parent-drift:'))
+                     or failure == 'late-desired')
             failed = (failure == 'keycloak-ready' or drift) and state['phase'] == 'desired'
             state['fault_observed'] = state['fault_observed'] or failed
             if failed and drift:
-                if failure.startswith('external-drift:'):
+                if failure.startswith('external-desired:'):
+                    target = failure.split(':', 1)[1]
+                    state['files'][target] = state['desired'][target]
+                elif failure.startswith('external-drift:'):
                     state['files'][failure.split(':', 1)[1]] = 'foreign configuration\n'
-                else:
+                elif failure.startswith('parent-drift:'):
                     state['parent_inode'] = 99
                 state['before_restore'] = dict(state['files'])
                 state['restore_boundary'] = len(state['trace'])
@@ -205,10 +214,13 @@ class NativeNetworkTransactionTests(unittest.TestCase):
                         "injected": False,
                         "fault_observed": False,
                         "parent_inode": 2,
+                        "postgres_stats": 0,
+                        "late_injected": False,
                         "trace": [],
                         "phase": "original",
                         "files": original,
                         "original": original,
+                        "desired": {item["path"]: item["desired"] for item in files},
                         "modes": {item["path"]: item["mode"] for item in files},
                         "services": {"keycloak.service": "started", "postgres.service": "started"},
                         "records": {"original": records, "desired": desired_records},
@@ -289,7 +301,13 @@ class NativeNetworkTransactionTests(unittest.TestCase):
             self.assertEqual(result.returncode == 0, not failure, result.stdout + result.stderr)
             self.assertTrue(json.loads(cleanup_proof.read_text()), "Actual always tasks must discard snapshots")
             self.assertEqual(state["fault_observed"], bool(failure), "Reach the exact selected fault boundary")
-            if not failure.startswith(("external-drift:", "parent-drift:")):
+            if failure == "late-desired":
+                self.assertTrue(state["late_injected"])
+                self.assertEqual(state["files"]["/fixture/postgres.yml"], state["desired"]["/fixture/postgres.yml"])
+                restore_trace = state["trace"][state["restore_boundary"] :]
+                self.assertNotIn("write:/fixture/postgres.yml", restore_trace)
+                self.assertEqual(set(state["services"].values()), {"stopped"})
+            elif not failure.startswith(("external-drift:", "external-desired:", "parent-drift:")):
                 expected = (
                     original
                     if failure or not changed
@@ -339,6 +357,12 @@ class NativeNetworkTransactionTests(unittest.TestCase):
 
     def test_parent_identity_drift_stays_stopped_without_any_restore(self):
         self.run_case("parent-drift:/fixture")
+
+    def test_unwritten_postgres_desired_bytes_are_external_drift(self):
+        self.run_case("external-desired:/fixture/postgres.yml")
+
+    def test_final_write_guard_rejects_late_unwritten_postgres_desired_bytes(self):
+        self.run_case("late-desired")
 
     def test_unchanged_plan_has_zero_io(self):
         self.assertEqual(self.run_case(changed=False)["trace"], [])

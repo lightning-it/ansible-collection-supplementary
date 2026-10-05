@@ -68,6 +68,10 @@ stops Keycloak before PostgreSQL, and writes only bound configuration through
 descriptor-relative `atomic_path`. PostgreSQL readiness precedes Keycloak health
 acceptance. A failed cutover restores both original configurations; external
 content or parent-identity drift fails closed rather than being overwritten.
+Captured Pod bytes are checked for duplicate mapping keys before YAML conversion.
+Rollback accepts computed target bytes only for files the cutover can write;
+the untouched PostgreSQL manifest must retain its original checksum. Both the
+batch preflight and final per-file check enforce this ownership boundary.
 The transition does not support inactive, legacy, rootless, administrator-edited
 or mixed prior/desired controllers. Controller termination is not a durable
 automatic rollback guarantee; recovery requires retained authoritative source

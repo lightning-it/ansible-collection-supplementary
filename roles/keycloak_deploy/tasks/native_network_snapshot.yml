@@ -40,6 +40,16 @@
   loop_control:
     loop_var: keycloak_deploy_migration_snapshot_file
 
+- name: Reject ambiguous captured Pod bytes before any lossy YAML conversion
+  ansible.builtin.assert:
+    that:
+      - >-
+        keycloak_deploy_migration_manifest_read.content | b64decode
+        | lit.supplementary.native_manifest_equal(
+          keycloak_deploy_migration_manifest_read.content | b64decode)
+    quiet: true
+  no_log: true
+
 - name: Complete the component input from its private snapshots
   ansible.builtin.set_fact:
     keycloak_deploy_migration_components: >-
