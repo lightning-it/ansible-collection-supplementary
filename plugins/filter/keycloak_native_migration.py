@@ -23,12 +23,15 @@ def database_binding(components, database_host):
         networks = components[name]['networks']
         # Validate grammar and real IPv4 addresses even when the endpoint is a DNS name.
         quadlet_text('Binding validation', '/etc/fixture.yml', networks)
-        bindings[name] = dict(entry.split(':ip=', 1) for entry in networks if ':ip=' in entry)
+        bindings[name] = {}
+        for entry in networks:
+            network, separator, address = entry.partition(':ip=')
+            bindings[name][network] = address if separator else None
     pod_name = components['postgres']['pod_name']
     if database_host == pod_name:
         if not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', pod_name):
             raise ValueError('invalid managed pod DNS name')
-        candidates = list(bindings['postgres'])
+        candidates = [network for network, address in bindings['postgres'].items() if address is not None]
     else:
         ipaddress.IPv4Address(database_host)
         candidates = [network for network, address in bindings['postgres'].items() if address == database_host]
@@ -224,6 +227,11 @@ def capture_original_runtime(components, records):
                 bound = expected_runtime_networks(component, 'previous_networks')
             else:
                 raise ValueError('unproven current network controller')
+            # Podman's non-host kube default when no Network option is supplied.
+            # An arbitrary singleton or extra manual attachments cannot be
+            # reconstructed by restoring the original empty Quadlet list.
+            if not bound and set(actual) != {'podman-default-kube-network'}:
+                raise ValueError('unreconstructable implicit original network')
             if bound and not runtime_networks_match(actual, bound):
                 raise ValueError('current runtime network drift')
             component['original_runtime'] = {'network_names': sorted(actual),

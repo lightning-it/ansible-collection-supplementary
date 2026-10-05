@@ -62,6 +62,26 @@ def fixtures():
 
 
 class KeycloakNativeMigrationPlanTests(unittest.TestCase):
+    def test_dynamic_database_peer_keeps_exact_network_and_private_endpoint_binding(self):
+        components = fixtures()
+        components["keycloak"]["networks"] = ["database.network", "proxy.network"]
+        for host in ("postgres", "192.0.2.3"):
+            with self.subTest(host=host):
+                self.assertTrue(
+                    NATIVE.private_database_endpoint_valid(
+                        host, components["keycloak"]["networks"], components["postgres"]["networks"], "postgres"
+                    )
+                )
+                self.assertTrue(NATIVE.prepare_transition(components, host, 5432)["changed"])
+        for keycloak, postgres in (
+            (["other.network"], ["database.network:ip=192.0.2.3"]),
+            (["database.network:ip=192.0.2.3"], ["database.network:ip=192.0.2.3"]),
+            (["database.network"], ["database.network:ip=8.8.8.8"]),
+            (["database.network"], ["database.network"]),
+        ):
+            with self.subTest(keycloak=keycloak, postgres=postgres), self.assertRaises(AnsibleFilterError):
+                NATIVE.private_database_endpoint_valid("postgres", keycloak, postgres, "postgres")
+
     def test_dynamic_additional_networks_keep_name_binding_without_pinning_address(self):
         components = fixtures()
         records = {}
@@ -314,7 +334,9 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
                     }
                 ],
                 "NetworkSettings": {
-                    "Networks": {"original-default": {"IPAddress": "192.0.2." + ("7" if name == "keycloak" else "8")}}
+                    "Networks": {
+                        "podman-default-kube-network": {"IPAddress": "192.0.2." + ("7" if name == "keycloak" else "8")}
+                    }
                 },
                 "Config": {"Env": ["KC_DB_URL_HOST=fixture-database", "KC_DB_URL_PORT=5432"]},
             }
@@ -323,8 +345,13 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
         self.assertEqual(components, original)
         self.assertTrue(NATIVE.runtime_valid(captured, records, "postgres", 5432, False))
         moved = deepcopy(records)
-        moved["postgres"]["NetworkSettings"]["Networks"]["original-default"]["IPAddress"] = "192.0.2.9"
+        moved["postgres"]["NetworkSettings"]["Networks"]["podman-default-kube-network"]["IPAddress"] = "192.0.2.9"
         self.assertTrue(NATIVE.runtime_valid(captured, moved, "postgres", 5432, False))
+        for name in ("keycloak", "postgres"):
+            extra = deepcopy(records)
+            extra[name]["NetworkSettings"]["Networks"]["manual-extra"] = {"IPAddress": "192.0.2.10"}
+            with self.subTest(implicit_extra=name), self.assertRaises(AnsibleFilterError):
+                NATIVE.capture_original_runtime(components, extra)
         for drift in ("image", "mount", "endpoint", "network-name"):
             changed = deepcopy(records)
             if drift == "image":
@@ -337,9 +364,8 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
                 changed["postgres"]["NetworkSettings"]["Networks"] = {"other": {"IPAddress": "192.0.2.8"}}
             with self.subTest(drift=drift), self.assertRaises(AnsibleFilterError):
                 NATIVE.runtime_valid(captured, changed, "postgres", 5432, False)
-            if drift != "network-name":
-                with self.subTest(pre_stop=drift), self.assertRaises(AnsibleFilterError):
-                    NATIVE.capture_original_runtime(components, changed)
+            with self.subTest(pre_stop=drift), self.assertRaises(AnsibleFilterError):
+                NATIVE.capture_original_runtime(components, changed)
 
     def test_unmapped_network_and_unproven_rollback_are_rejected(self):
         components = fixtures()

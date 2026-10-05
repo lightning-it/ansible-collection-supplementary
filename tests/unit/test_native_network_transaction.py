@@ -147,7 +147,11 @@ class NativeNetworkTransactionTests(unittest.TestCase):
                     }
                 ],
                 "NetworkSettings": {
-                    "Networks": {"old-network": {"IPAddress": "192.0.2." + ("12" if name == "keycloak" else "13")}}
+                    "Networks": {
+                        "podman-default-kube-network": {
+                            "IPAddress": "192.0.2." + ("12" if name == "keycloak" else "13")
+                        }
+                    }
                 },
                 "Config": {"Env": ["KC_DB_URL_HOST=fixture-database", "KC_DB_URL_PORT=5432"]},
             }

@@ -56,6 +56,11 @@ alone. Before stopping either service, actual images, data mounts and database
 endpoint must match the proven original configuration. Rollback verifies the
 original network names and database endpoint; explicit prior addresses remain
 pinned, while addresses on implicit default networks may legitimately change.
+An empty prior Network list is supported only when runtime inspection proves
+exactly `podman-default-kube-network`, the Podman non-host kube default. Arbitrary
+single attachments or additional manually attached networks fail before either
+service stops: an empty restored Quadlet cannot reconstruct them. This implicit
+contract is verified against Podman 4.9.3, not a claim of live migration acceptance.
 
 The transition runs before either ordinary deploy role. It snapshots both
 manifests and Quadlets in memory under `no_log`, preserves images and data paths,
