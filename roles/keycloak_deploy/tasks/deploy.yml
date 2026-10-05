@@ -18,6 +18,10 @@
     - not keycloak_deploy_skip_deploy | bool
     - not ansible_check_mode
   block:
+    - name: Jointly migrate existing native Keycloak and database networks
+      ansible.builtin.include_tasks: native_network_migration.yml
+      when: keycloak_deploy_native_network_migration | bool
+
     - name: Ensure required packages are installed
       ansible.builtin.include_tasks: install_packages.yml
       when: keycloak_deploy_install_packages | bool

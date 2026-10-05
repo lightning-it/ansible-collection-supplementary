@@ -1,0 +1,179 @@
+"""Exercise real native ownership assertions before a coupled migration fix."""
+
+from __future__ import annotations
+
+import base64
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+class NativeNetworkMigrationBoundaryTests(unittest.TestCase):
+    def test_managed_database_unit_precheck_matches_delegated_role_contract(self):
+        source = yaml.safe_load((ROOT / "roles/keycloak_deploy/tasks/assert.yml").read_text())
+        guard = next(task for task in source if task["name"] == "Validate managed PostgreSQL native unit identity")
+        delegated = yaml.safe_load((ROOT / "roles/postgres_deploy/tasks/assert.yml").read_text())[0]
+        expression = next(
+            value
+            for value in delegated["ansible.builtin.assert"]["that"]
+            if "postgres_deploy_systemd_unit_name is string" in value
+        )
+        tasks = []
+        for unit, valid in (
+            ("postgres", True),
+            ("postgres-db.1", True),
+            ("a" * 240, True),
+            ("a" * 241, False),
+            ("postgres@db", False),
+            (".postgres", False),
+            ("", False),
+            (None, False),
+            (7, False),
+        ):
+            for label, assertion in (
+                ("keycloak", guard),
+                ("delegated", {"ansible.builtin.assert": {"that": [expression], "quiet": True}}),
+            ):
+                tasks.extend(
+                    [
+                        {"ansible.builtin.set_fact": {"fixture_rejected": False}},
+                        {
+                            "name": "Real unit contract " + label,
+                            "vars": {
+                                "keycloak_deploy_postgres_systemd_unit_name": unit,
+                                "keycloak_deploy_manage_postgres": True,
+                                "keycloak_deploy_manage_systemd": True,
+                                "postgres_deploy_systemd_unit_name": unit,
+                                "postgres_deploy_manage_systemd": True,
+                            },
+                            "block": [assertion],
+                            "rescue": [{"ansible.builtin.set_fact": {"fixture_rejected": True}}],
+                        },
+                        {
+                            "ansible.builtin.assert": {
+                                "that": ["fixture_rejected is " + ("false" if valid else "true")],
+                                "quiet": True,
+                            }
+                        },
+                    ]
+                )
+        executable = shutil.which("ansible-playbook")
+        self.assertIsNotNone(executable, "Use the pinned Devtools container")
+        with tempfile.TemporaryDirectory(prefix="native-unit-contract-") as temporary:
+            play = Path(temporary) / "units.yml"
+            play.write_text(yaml.safe_dump([{"hosts": "localhost", "gather_facts": False, "tasks": tasks}]))
+            result = subprocess.run(  # noqa: S603 -- pinned executable and generated local fixture, no shell.
+                [executable, "-i", "localhost,", "-c", "local", str(play)],
+                capture_output=True,
+                text=True,
+                timeout=90,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_real_ownership_rejects_changed_networks_and_foreign_units(self):
+        executable = shutil.which("ansible-playbook")
+        self.assertIsNotNone(executable, "Use the pinned Devtools container")
+        tasks = []
+        for role, label in (("keycloak_deploy", "Keycloak"), ("postgres_deploy", "PostgreSQL")):
+            source = yaml.safe_load((ROOT / f"roles/{role}/tasks/systemd.yml").read_text())
+            ownership = next(
+                task
+                for task in source[0]["block"]
+                if task["name"] == f"Refuse unproven drift in an existing native {label} Quadlet"
+            )
+            for case, existing_networks, foreign_description, expected_rejected in (
+                ("unchanged", ["private.network:ip=192.0.2.3"], False, False),
+                ("old-default-network", [], False, True),
+                ("foreign-unit", ["private.network:ip=192.0.2.3"], True, True),
+            ):
+                unit = "fixture-identity" if role == "keycloak_deploy" else "fixture-database"
+                description = "Fixture service"
+                manifest = f"/etc/podman/pods/{unit}.yml"
+                lines = [
+                    "[Unit]",
+                    "Description=" + ("Foreign service" if foreign_description else description),
+                    "After=network-online.target",
+                    "Wants=network-online.target",
+                    "[Kube]",
+                    "Yaml=" + manifest,
+                ]
+                lines += ["Network=" + network for network in existing_networks]
+                lines += ["[Install]", "WantedBy=multi-user.target"]
+                variables = {
+                    role + "_native_quadlet_file": {
+                        "stat": {
+                            "exists": True,
+                            "isreg": True,
+                            "islnk": False,
+                            "mode": "0644",
+                            "pw_name": "root",
+                            "gr_name": "root",
+                        }
+                    },
+                    role + "_native_quadlet_read": {
+                        "content": base64.b64encode(("\n".join(lines) + "\n").encode()).decode()
+                    },
+                    role + "_native_drop_in_paths": {"rc": 0, "stdout": ""},
+                    role + "_native_systemd_active": {"rc": 0, "stdout": "active"},
+                    role + "_native_systemd_enabled": {"rc": 0, "stdout": "generated"},
+                    role + "_native_fragment_path": {"rc": 0, "stdout": f"/run/systemd/generator/{unit}.service"},
+                    role + "_systemd_unit_name": unit,
+                    role + "_systemd_description": description,
+                    role + "_pod_manifest_path": manifest,
+                    role + "_systemd_enabled": True,
+                    role + "_networks": ["private.network:ip=192.0.2.3"],
+                }
+                tasks += [
+                    {"name": f"Reset rejection {role}/{case}", "ansible.builtin.set_fact": {"fixture_rejected": False}},
+                    {
+                        "name": f"Real ownership {role}/{case}",
+                        "vars": variables,
+                        "block": [ownership],
+                        "rescue": [
+                            {
+                                "name": "Record expected rejection",
+                                "ansible.builtin.set_fact": {"fixture_rejected": True},
+                            }
+                        ],
+                    },
+                    {
+                        "name": f"Require exact outcome {role}/{case}",
+                        "ansible.builtin.assert": {
+                            "that": ["fixture_rejected is " + ("true" if expected_rejected else "false")],
+                            "quiet": True,
+                        },
+                    },
+                ]
+        with tempfile.TemporaryDirectory(prefix="native-network-boundary-") as temporary:
+            play = Path(temporary) / "ownership.yml"
+            play.write_text(
+                yaml.safe_dump(
+                    [
+                        {
+                            "name": "Native network ownership regression",
+                            "hosts": "localhost",
+                            "gather_facts": False,
+                            "tasks": tasks,
+                        }
+                    ]
+                )
+            )
+            result = subprocess.run(  # noqa: S603 -- pinned executable and generated local fixture, no shell.
+                [executable, "-i", "localhost,", "-c", "local", str(play)],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()
