@@ -14,13 +14,14 @@ import subprocess
 PRODUCER = ".github/workflows/copilot-review.yml"
 REFRESH = "copilot-review-refresh.yml"
 HELPER = "current-revision-rerun.yml"
+CONTINUATION = "review-request-continuation.yml"
 PILOTS = {
     "lightning-it/.github",
     "lightning-it/shared-assets-lit",
     "lightning-it/ansible-collection-supplementary",
 }
 TTL = dt.timedelta(days=7)
-# Shared by both dispatch workflows, including split probes. The Actions API
+# Shared by all three dispatch workflows, including split probes. The Actions API
 # caps filtered searches at 1000 results, independently of our page limit.
 DISPATCH_INVENTORY_REQUESTS = 256
 REVIEWERS = {"copilot-pull-request-reviewer", "copilot-pull-request-reviewer[bot]"}
@@ -113,7 +114,11 @@ def dispatch_inventory(prefix, now):
                 raise ValueError("dispatch inventory saturated within one second")
             middle = lower + dt.timedelta(seconds=int((upper - lower).total_seconds()) // 2)
             items = window(workflow, lower, middle) + window(workflow, middle + second, upper)
-            if len(items) != total:
+            # Saturated parent total_count is only a lower bound: native GitHub
+            # clips it (observed at 2500), even when disjoint children sum higher.
+            # Exact counts are required only for unsaturated leaves. Retain the
+            # lower-bound check to reject observable loss between split reads.
+            if len(items) < total:
                 raise ValueError("dispatch inventory changed while splitting")
             return items
         items = batch
@@ -142,7 +147,7 @@ def dispatch_inventory(prefix, now):
                 raise ValueError("unbound dispatch inventory")
         return items
 
-    return window(REFRESH, start, end) + window(HELPER, start, end)
+    return window(REFRESH, start, end) + window(HELPER, start, end) + window(CONTINUATION, start, end)
 
 
 def clean_review(review, comments, head):
@@ -193,6 +198,46 @@ def recent_dispatch(runs, path, title, now=None):
     return False
 
 
+def required_locator(run, repository, pr):
+    """Locate only the native organization authority; never authorize a rerun."""
+    central = repository == "lightning-it/.github"
+    path = ("dot-github-current-revision-required.yml" if central
+            else "supplementary-current-revision-required.yml")
+    title = "Cross-protect .github" if central else "Protected current revision"
+    name = ("Protected dot-github current-revision verifier" if central
+            else "Protected current-revision evidence verifier")
+    api_url = f"https://api.github.com/repos/{repository}"
+    entries = run.get("pull_requests")
+    if not isinstance(entries, list) or len(entries) != 1:
+        return False
+    recorded = entries[0]
+    workflow_id = run.get("workflow_id")
+    return (
+        type(run.get("id")) is int and run["id"] > 0
+        and type(workflow_id) is int and workflow_id > 0
+        and run.get("event") == "pull_request_target"
+        and run.get("path") == f".github/workflows/{path}"
+        and run.get("workflow_url") == f"{api_url}/actions/required_workflows/{workflow_id}"
+        and run.get("repository", {}).get("full_name") == repository
+        and run.get("head_repository", {}).get("full_name") == repository
+        and run.get("head_sha") == pr["head"]["sha"]
+        and run.get("head_branch") == pr["head"]["ref"]
+        and recorded.get("number") == pr["number"]
+        and recorded.get("url") == f"{api_url}/pulls/{pr['number']}"
+        and recorded.get("head", {}).get("sha") == pr["head"]["sha"]
+        and recorded.get("head", {}).get("ref") == pr["head"]["ref"]
+        and recorded.get("head", {}).get("repo", {}).get("url") == api_url
+        and recorded.get("base", {}).get("sha") == pr["base"]["sha"]
+        and recorded.get("base", {}).get("ref") == pr["base"]["ref"]
+        and recorded.get("base", {}).get("repo", {}).get("url") == api_url
+        and run.get("display_title") in {
+            f"{title} PR #{pr['number']} {action} {pr['head']['sha']}"
+            for action in ("opened", "synchronize", "reopened", "ready_for_review", "edited")
+        }
+        and run.get("name") in (name, run.get("display_title"))
+    )
+
+
 def reconcile(repository, now):
     if repository not in PILOTS or os.environ.get("LI219_EVENT_MODE") != "enabled":
         return
@@ -229,7 +274,10 @@ def reconcile(repository, now):
         producers = [
             run
             for run in runs
-            if run.get("path") == PRODUCER
+            if run.get("event") == "pull_request_target"
+            and run.get("repository", {}).get("full_name") == repository
+            and run.get("head_repository", {}).get("full_name") == repository
+            and run.get("path") == PRODUCER
             and run.get("head_sha") == head
             and run.get("head_branch") == pr["head"]["ref"]
             and (
@@ -306,12 +354,14 @@ def reconcile(repository, now):
             ref = pr["base"]["ref"]
             # Let the native admission terminate; never spend the retry while its
             # first attempt is still running or while producer jobs are invisible.
-            targets = [
-                run
-                for run in runs
-                if run.get("path", "").endswith("current-revision-required.yml")
-            ]
-            if not targets or any(run["status"] != "completed" for run in targets):
+            # Required discovery must not depend on producer event filtering.
+            # Keep the producer query separate and verify authority on each
+            # unfiltered-by-event result; a local workflow is not the Required gate.
+            required_runs = pages(
+                f"{prefix}/actions/runs?head_sha={head}", "workflow_runs"
+            )
+            targets = [run for run in required_runs if required_locator(run, repository, pr)]
+            if len(targets) != 1 or targets[0]["status"] != "completed":
                 continue
             if all(run.get("conclusion") == "success" for run in targets):
                 continue
@@ -329,16 +379,30 @@ def reconcile(repository, now):
                     if clean_review(review, comments, head):
                         usable.append(review)
             if not usable:
-                continue
-            review = max(usable, key=lambda item: item["id"])
-            path, ref = REFRESH, branch
-            title = f"Reconcile review PR #{number} head {head}"
-            inputs = {
-                "pr_number": str(number),
-                "expected_head": head,
-                "expected_base": base,
-                "review_id": str(review["id"]),
-            }
+                # The existing periodic locator also covers delayed job/pending
+                # visibility. It never requests AI or grants a verifier attempt.
+                if not reviews or any(item.get("commit_id") == head and item.get("user", {}).get("login") in REVIEWERS for item in reviews):
+                    continue
+                import importlib.util
+                from pathlib import Path
+                spec = importlib.util.spec_from_file_location("continuation", Path(__file__).with_name("review_request_continuation.py"))
+                continuation = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(continuation)
+                try:
+                    inputs = continuation.reconcile_candidate(repository, str(metadata["id"]), number, head, now)
+                except (KeyError, TypeError, ValueError, OSError, subprocess.SubprocessError) as exc:
+                    print(f"PR {number}: deferred locator remains closed: {exc}")
+                    continue
+                if inputs is None:
+                    continue
+                path, ref = CONTINUATION, branch
+                title = f"First review PR #{number} head {head} owner {inputs['owner_run']} old review {inputs['old_review']}"
+            else:
+                review = max(usable, key=lambda item: item["id"])
+                path, ref = REFRESH, branch
+                title = f"Reconcile review PR #{number} head {head}"
+                inputs = dict(pr_number=str(number), expected_head=head, expected_base=base,
+                              review_id=str(review["id"]))
         if recent_dispatch(dispatches, path, title, now):
             continue
         # Re-read after inventory. No mutation on a changed/closed/draft PR.

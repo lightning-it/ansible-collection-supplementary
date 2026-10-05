@@ -305,7 +305,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("github.event_name == 'pull_request_target'", request_job)
         self.assertIn("github.event.pull_request.user.login == 'litroc'", request_job)
         self.assertNotIn("workflow_dispatch", request_job.split("    permissions:", 1)[0])
-        self.assertNotIn("synchronize", request_job)
+        self.assertIn("vars.LI219_EVENT_MODE == 'enabled'", request_job)
         self.assertIn('test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"', request_job)
         self.assertIn('test "$(jq -r .user.login <<<"${pr}")" = litroc', request_job)
         self.assertNotIn('if [ "${author}" != litroc ]', request_job)
@@ -324,7 +324,8 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             "The one exact-head Copilot request was already consumed; automatic retry is forbidden.",
             request_job,
         )
-        self.assertIn("Copilot review is already pending for the exact finalized head", request_job)
+        self.assertIn("A review is pending; awaiting head-bound evidence without another request.", request_job)
+        self.assertNotIn("Copilot review is already pending for the exact finalized head", request_job)
         self.assertIn("Copilot review request accepted for finalized head", request_job)
         self.assertNotIn('gh api --method DELETE "${requested_reviewers_url}"', request_job)
         self.assertNotIn("review_is_visible_for_head()", request_job)
@@ -461,7 +462,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             request_condition,
         )
         self.assertNotIn("lightning-it-release-automation[bot]", request_condition)
-        self.assertNotIn("github.event.action == 'synchronize'", request_condition)
+        self.assertIn("vars.LI219_EVENT_MODE == 'enabled'", request_condition)
 
         trusted_automation = workflow.split(
             "      - name: Classify trusted automation pull request",
@@ -538,14 +539,16 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("Do not manufacture a no-op", prompt)
         self.assertIn("only one final Current-Head", prompt)
 
-    def test_ten_intermediate_synchronize_events_cannot_request_copilot(self) -> None:
+    def test_synchronize_request_requires_enabled_pilot_and_same_head_cas(self) -> None:
         workflow = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
         request_job = workflow.split("  request-current-revision-review:", 1)[1].split(
             "  verify-current-revision-policy:", 1
         )[0]
         condition = request_job.split("    if: >-", 1)[1].split("    permissions:", 1)[0]
         self.assertIn("github.event.action == 'ready_for_review'", condition)
-        self.assertNotIn("synchronize", condition)
+        self.assertIn("github.event.action == 'synchronize'", condition)
+        self.assertIn("vars.LI219_EVENT_MODE == 'enabled'", condition)
+        self.assertIn("contains(fromJSON", condition)
         self.assertEqual(1, request_job.count('gh api --method POST "${requested_reviewers_url}"'))
         events = [{"action": "synchronize", "commit": index} for index in range(10)]
         self.assertFalse(any(event["action"] == "ready_for_review" for event in events))

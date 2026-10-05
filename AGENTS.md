@@ -119,6 +119,27 @@ the request job is attempt-one-only. The helper validates the completed producer
 attempt and full Required inventory before the sole verifier rerun. CAS receipts
 never replace native review evidence. Terminal review content consumes no retry.
 
+The immutable preparation donor is Source `5876d213be5bd03ff6ecb24e15246599775b1c9f`
+(tree `1f4915d3008c74fc19b939d3dc96ecb195a07c1d`). This is a local preparation
+binding; `protected_source_commit` remains null until actual protected Source main
+adoption. The original Supplementary request job keeps its six-job producer
+context and exact source/author/actor predicate. Only the enabled three pilots
+admit `synchronize`. PR-wide Pending writes a separate immutable deferred intent,
+never an accepted-head marker or a consumed request claim. An unconfirmed original
+POST also must not publish an accepted marker; a consumed claim remains consumed.
+
+The protected first-request continuation validates that original intent and native
+request steps, the completed old-head review, current PR/source identity and all
+existing budgets. Its schema-2 receipt consumes the SAME repository-ID/PR/head
+request key; either schema-1 or schema-2 presence blocks another request. Review
+and owner-completion events only locate work; the existing ten-minute reconciler
+is the bounded delayed-visibility fallback. All three dispatch workflow families
+share the existing 256-GET inventory budget and native cooldown. The original
+producer remains the owner; no third verifier attempt or LI-259 route is added.
+The adjacent continuation module and read-only provenance module are explicit
+scoped managed assets. Locator jobs receive read access plus dispatch authority;
+only the protected consumer receives the audited request/CAS write scopes.
+
 The required static Contents/Checks write scopes apply only to the audited jobs;
 legacy helper jobs retain read scopes. Workflow token permissions remain
 repository-wide. Enable only after protected source/target controllers and the

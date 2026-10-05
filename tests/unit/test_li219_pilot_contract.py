@@ -15,6 +15,9 @@ ASSETS = {
     ".github/workflows/review-event-reconcile.yml",
     ".github/workflows/dot-github-current-revision-required.yml",
     "scripts/review-event-reconcile.py",
+    ".github/workflows/review-request-continuation.yml",
+    "scripts/review_request_continuation.py",
+    "scripts/review_request_provenance.py",
     "scripts/review_content_markers.py",
     "scripts/verify-dot-github-current-revision.py",
     "scripts/lit-push-ready.py",
@@ -78,6 +81,35 @@ class PilotContractTests(unittest.TestCase):
         for scope in ("contents", "checks"):
             self.assertEqual("read", helper["rerun-protected-verifier"]["permissions"][scope])
             self.assertEqual("write", helper["event-rerun"]["permissions"][scope])
+
+    def test_continuation_keeps_local_topology_and_narrow_permissions(self):
+        producer = yaml.safe_load((ROOT / ".github/workflows/copilot-review.yml").read_text())
+        self.assertEqual(6, len(producer["jobs"]))
+        request = producer["jobs"]["request-current-revision-review"]
+        self.assertNotIn("needs", request)
+        self.assertEqual(2, len(request["steps"]))
+        self.assertEqual(
+            {"actions": "read", "contents": "write", "issues": "write", "pull-requests": "write"},
+            request["permissions"],
+        )
+        continuation = yaml.safe_load((ROOT / ".github/workflows/review-request-continuation.yml").read_text())
+        self.assertEqual({"locate", "resume"}, set(continuation["jobs"]))
+        self.assertEqual(
+            {"actions": "write", "contents": "read", "pull-requests": "read", "issues": "read"},
+            continuation["jobs"]["locate"]["permissions"],
+        )
+        self.assertEqual(
+            {"actions": "read", "contents": "write", "pull-requests": "write", "issues": "read"},
+            continuation["jobs"]["resume"]["permissions"],
+        )
+        self.assertEqual(2, len(continuation["jobs"]["resume"]["steps"]))
+        reconcile = yaml.safe_load((ROOT / ".github/workflows/review-event-reconcile.yml").read_text())
+        self.assertEqual("read", reconcile["permissions"]["issues"])
+        provenance = (ROOT / "scripts/review_request_provenance.py").read_text()
+        self.assertNotIn('"--method", "POST"', provenance)
+        self.assertNotIn("def resume(", provenance)
+        self.assertNotIn("def defer(", provenance)
+        self.assertNotIn("createCommitOnBranch", provenance)
 
     def test_v3_classification_and_promotion_aggregation_remain_local(self):
         config = json.loads((ROOT / ".lit/push-ready.json").read_text())

@@ -51,24 +51,26 @@ class ReviewEventTests(unittest.TestCase):
         history=(),
         pr_count=1,
         transform=None,
+        neutral=False,
+        required=None,
     ):
-        prefix = "repos/lightning-it/ansible-collection-supplementary"
+        prefix = "repos/lightning-it/.github"
         pr = {
             "id": 23,
             "number": 23,
             "draft": False,
             "state": "open",
             "user": {"login": "litroc", "type": "User"},
-            "head": {
-                "sha": self.head,
-                "ref": "fix/final",
-                "repo": {"full_name": "lightning-it/ansible-collection-supplementary"},
-            },
+            "head": {"sha": self.head, "ref": "fix/final", "repo": {"full_name": "lightning-it/.github"}},
             "base": {"sha": self.base, "ref": "develop"},
         }
         run = {
             "id": 77,
             "path": EVENT.PRODUCER,
+            "event": "pull_request_target",
+            "repository": {"full_name": "lightning-it/.github"},
+            "head_repository": {"full_name": "lightning-it/.github"},
+            "run_attempt": 1,
             "head_sha": self.head,
             "head_branch": "fix/final",
             "pull_requests": [{"number": 23 + i} for i in range(pr_count)],
@@ -78,7 +80,25 @@ class ReviewEventTests(unittest.TestCase):
         inventories = {
             f"{prefix}/pulls?state=open": [{**pr, "id": 23 + i, "number": 23 + i} for i in range(pr_count)],
             f"{prefix}/actions/runs?event=pull_request_target&head_sha={self.head}": [run],
-            f"{prefix}/commits/{self.head}/check-runs?filter=all": [],
+            f"{prefix}/actions/runs?head_sha={self.head}": [
+                run,
+                *(required if required is not None else [self.required_run()]),
+            ],
+            f"{prefix}/actions/runs/77/attempts/1/jobs": [
+                {"id": 78, "name": "Verify current revision policy", "status": "completed", "conclusion": "success"}
+            ],
+            f"{prefix}/commits/{self.head}/check-runs?filter=all": [
+                {
+                    "id": 79,
+                    "name": "Current revision review",
+                    "app": {"id": 15368, "slug": "github-actions"},
+                    "status": "completed",
+                    "conclusion": "success",
+                    "output": {"summary": '{"producer_run_id":77}'},
+                }
+            ]
+            if neutral
+            else [],
             f"{prefix}/pulls/23/reviews": [] if missing else [self.review(body=body)],
             f"{prefix}/pulls/23/reviews/17/comments": [],
         }
@@ -93,6 +113,8 @@ class ReviewEventTests(unittest.TestCase):
             if "/actions/workflows/" in route:
                 response = self.inventory_response(history, route)
                 return transform(route, response) if transform else response
+            if route == f"{prefix}/actions/runs/77":
+                return run
             if route == prefix:
                 return {"default_branch": "develop"}
             if route.startswith(f"{prefix}/pulls/"):
@@ -115,9 +137,9 @@ class ReviewEventTests(unittest.TestCase):
         ):
             if uncertain:
                 with self.assertRaises(TimeoutError):
-                    EVENT.reconcile("lightning-it/ansible-collection-supplementary", self.now)
+                    EVENT.reconcile("lightning-it/.github", self.now)
             else:
-                EVENT.reconcile("lightning-it/ansible-collection-supplementary", self.now)
+                EVENT.reconcile("lightning-it/.github", self.now)
         return mutations
 
     def test_late_review_after_ten_minutes_dispatches_same_pr_without_review_request(self):
@@ -152,6 +174,91 @@ class ReviewEventTests(unittest.TestCase):
         self.assertTrue(EVENT.recent_dispatch([run], EVENT.REFRESH, "bound"))
         self.assertFalse(EVENT.recent_dispatch([run], EVENT.REFRESH, "foreign"))
 
+    def required_run(self):
+        repo = "lightning-it/.github"
+        api_url = f"https://api.github.com/repos/{repo}"
+        return {
+            "id": 88,
+            "workflow_id": 999,
+            "event": "pull_request_target",
+            "path": ".github/workflows/dot-github-current-revision-required.yml",
+            "workflow_url": f"{api_url}/actions/required_workflows/999",
+            "repository": {"full_name": repo},
+            "head_repository": {"full_name": repo},
+            "head_sha": self.head,
+            "head_branch": "fix/final",
+            "status": "completed",
+            "conclusion": "failure",
+            "name": "Protected dot-github current-revision verifier",
+            "display_title": f"Cross-protect .github PR #23 opened {self.head}",
+            "pull_requests": [
+                {
+                    "number": 23,
+                    "url": f"{api_url}/pulls/23",
+                    "head": {"sha": self.head, "ref": "fix/final", "repo": {"url": api_url}},
+                    "base": {"sha": self.base, "ref": "develop", "repo": {"url": api_url}},
+                }
+            ],
+        }
+
+    def test_required_recovery_uses_unfiltered_native_authority_inventory(self):
+        # The event-filtered inventory contains ONLY the producer. The no-event
+        # inventory also contains the actual organization Required run.
+        calls = self.reconcile(neutral=True)
+        self.assertEqual(1, len(calls))
+        self.assertTrue(calls[0][0].endswith("current-revision-rerun.yml/dispatches"))
+        self.assertEqual("77", calls[0][1]["inputs"]["producer_run_id"])
+        self.assertEqual([], self.reconcile(neutral=True, required=[]))
+        run = self.required_run()
+        run["conclusion"] = "success"
+        self.assertEqual([], self.reconcile(neutral=True, required=[run]))
+
+    def test_local_foreign_stale_or_ambiguous_runs_never_stand_in_for_required(self):
+        for field, value in (
+            ("workflow_url", "https://api.github.com/repos/lightning-it/.github/actions/workflows/999"),
+            ("path", ".github/workflows/supplementary-current-revision-required.yml"),
+            ("event", "push"),
+            ("head_sha", self.base),
+            ("head_branch", "foreign"),
+            ("repository", {"full_name": "lightning-it/foreign"}),
+            ("head_repository", {"full_name": "lightning-it/foreign"}),
+            ("display_title", f"Cross-protect .github PR #24 opened {self.head}"),
+            ("workflow_id", True),
+            ("status", "in_progress"),
+        ):
+            with self.subTest(field=field):
+                run = self.required_run()
+                run[field] = value
+                self.assertEqual([], self.reconcile(neutral=True, required=[run]))
+        for side in ("base", "head"):
+            run = self.required_run()
+            run["pull_requests"][0][side]["sha"] = "c" * 40
+            self.assertEqual([], self.reconcile(neutral=True, required=[run]))
+        run = self.required_run()
+        run["pull_requests"][0]["number"] = 24
+        self.assertEqual([], self.reconcile(neutral=True, required=[run]))
+        self.assertEqual(
+            [], self.reconcile(neutral=True, required=[self.required_run(), {**self.required_run(), "id": 89}])
+        )
+
+    def test_other_pilots_bind_the_central_organization_required_path(self):
+        for repo in ("lightning-it/shared-assets-lit", "lightning-it/ansible-collection-supplementary"):
+            run = self.required_run()
+            import json
+
+            run = json.loads(json.dumps(run).replace("lightning-it/.github", repo))
+            run["path"] = ".github/workflows/supplementary-current-revision-required.yml"
+            run["name"] = "Protected current-revision evidence verifier"
+            run["display_title"] = f"Protected current revision PR #23 opened {self.head}"
+            pr = {
+                "number": 23,
+                "head": {"sha": self.head, "ref": "fix/final"},
+                "base": {"sha": self.base, "ref": "develop"},
+            }
+            self.assertTrue(EVENT.required_locator(run, repo, pr))
+            run["workflow_url"] = run["workflow_url"].replace("required_workflows", "workflows")
+            self.assertFalse(EVENT.required_locator(run, repo, pr))
+
     def locator(self, index, *, pr=99, workflow=EVENT.REFRESH, **changes):
         created = self.now - dt.timedelta(seconds=1 + index * 600)
         return {
@@ -182,7 +289,11 @@ class ReviewEventTests(unittest.TestCase):
         )
         page = int(query["page"][0])
         # Emulate the server's 1000-result ceiling, not an unlimited list.
-        return {"total_count": len(selected), "workflow_runs": selected[:1000][(page - 1) * 100 : page * 100]}
+        # Native filtered-search totals can be clipped independently of pages.
+        return {
+            "total_count": min(2500, len(selected)),
+            "workflow_runs": selected[:1000][(page - 1) * 100 : page * 100],
+        }
 
     def inventory(self, history, transform=None):
         routes = []
@@ -194,7 +305,7 @@ class ReviewEventTests(unittest.TestCase):
             return transform(route, response) if transform else response
 
         with patch.object(EVENT, "api", side_effect=api):
-            result = EVENT.dispatch_inventory("repos/lightning-it/ansible-collection-supplementary", self.now)
+            result = EVENT.dispatch_inventory("repos/lightning-it/.github", self.now)
         self.assertLessEqual(len(routes), EVENT.DISPATCH_INVENTORY_REQUESTS)
         self.assertTrue(all(int(parse_qs(urlsplit(route).query)["page"][0]) <= 10 for route in routes))
         return result
@@ -211,6 +322,12 @@ class ReviewEventTests(unittest.TestCase):
             for i in range(1008)
         ]
         self.assertEqual(10080, len(self.inventory(history)))
+
+    def test_clipped_parent_2500_retains_all_10080_disjoint_child_results(self):
+        history = [self.locator(i, id=10000 + pr * 1008 + i, pr=pr) for pr in range(10) for i in range(1008)]
+        result = self.inventory(history)
+        self.assertEqual(10080, len(result))
+        self.assertEqual({run["id"] for run in history}, {run["id"] for run in result})
 
     def test_large_history_reaches_real_caller_and_keeps_per_pr_event_dedup(self):
         history = [self.locator(i) for i in range(1008)]

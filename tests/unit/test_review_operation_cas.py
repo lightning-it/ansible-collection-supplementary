@@ -2,7 +2,6 @@
 
 import json
 import os
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -18,7 +17,6 @@ MOCK = r"""
 import datetime as dt
 import json
 import os
-import shutil
 from pathlib import Path
 import sys
 args = sys.argv[1:]
@@ -35,9 +33,8 @@ rc, result = 0, None
 if route == 'graphql' and '--input' in args:
     request = json.load(sys.stdin)['variables']['input']
     call.update(cas=True, input=request)
-    assert request['branch'] == {
-        'repositoryNameWithOwner': 'lightning-it/ansible-collection-supplementary',
-        'branchName': 'lit-review-operations'}
+    assert request['branch'] == {'repositoryNameWithOwner': 'lightning-it/ansible-collection-supplementary',
+                                 'branchName': 'lit-review-operations'}
     assert len(request['fileChanges']['additions']) == 1
     assert 'deletions' not in request['fileChanges']
     old = request['expectedHeadOid']
@@ -101,8 +98,9 @@ elif post and route.endswith('/check-runs'):
 elif route.endswith('/requested_reviewers'):
     if post:
         call['request'] = True
-        if mode == 'request-success':
+        if mode in ('request-success', 'lost-request-response'):
             s['requested'] = True
+            if mode == 'lost-request-response': rc = 42
         else:
             rc = 42
     else:
@@ -120,10 +118,10 @@ elif '/reviews?' in route:
                 'user': {'login': 'copilot-pull-request-reviewer[bot]'}}] if mode == 'existing-review' else []]
 elif route.endswith('/pulls/23'):
     result = {'number': 23, 'state': 'open', 'draft': False, 'user': {'login': 'litroc'},
-              'head': {'sha': os.environ['EXPECTED_HEAD'],
-                       'repo': {'full_name': 'lightning-it/ansible-collection-supplementary'}},
-              'base': {'sha': os.environ['EXPECTED_BASE'],
-                       'repo': {'full_name': 'lightning-it/ansible-collection-supplementary'}}}
+              'head': {'sha': os.environ['EXPECTED_HEAD'], 'repo': {
+                  'full_name': 'lightning-it/ansible-collection-supplementary'}},
+              'base': {'sha': os.environ['EXPECTED_BASE'], 'repo': {
+                  'full_name': 'lightning-it/ansible-collection-supplementary'}}}
 elif post and route.endswith('/rerun'):
     call['rerun'] = True
     rc = 42
@@ -205,8 +203,8 @@ read_refresh_review_state() { printf '%s' '{"event_current":true,"incomplete":0,
                     "refresh_expected_snapshot": "null",
                     **changes,
                 }
-                result = subprocess.run(  # noqa: S603 -- fixed local workflow fixture and stub transport.
-                    [shutil.which("bash") or "/bin/bash", "-c", script],
+                result = subprocess.run(  # noqa: S603 -- Fixed workflow fixture with local mock transport.
+                    ["/bin/bash", "-c", script],
                     env=env,
                     capture_output=True,
                     text=True,
@@ -355,6 +353,12 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
             )
             mock.write_text(MOCK)
             (Path(tmp) / "request-operation.sh").write_text(claim)
+            # Missing original native authorization must fail closed in the new
+            # deferred path. Full successful intent/consumer transport is covered
+            # by test_review_request_continuation, not fabricated in this CAS probe.
+            (Path(tmp) / "review_request_continuation.py").write_text(
+                (ROOT / "scripts/review_request_continuation.py").read_text()
+            )
             workers = [("500", BASE, HEAD), ("501", "d" * 40, HEAD)]
             if new_head:
                 workers.append(("502", "d" * 40, "e" * 40))
@@ -391,8 +395,8 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                 }
                 if event_mode is None:
                     env.pop("LI219_EVENT_MODE", None)
-                result = subprocess.run(  # noqa: S603 -- fixed local workflow fixture and stub transport.
-                    [shutil.which("bash") or "/bin/bash", "-c", shell],
+                result = subprocess.run(  # noqa: S603 -- Fixed workflow fixture with local mock transport.
+                    ["/bin/bash", "-c", shell],
                     env=env,
                     capture_output=True,
                     text=True,
@@ -457,7 +461,12 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                             kinds[: kinds.index("request") + 1],
                         )
                         self.assertEqual(1, kinds.count("request"))
-                        self.assertEqual("comment", kinds[-1])
+                        if interrupt:
+                            # A later PR-scoped pending reviewer cannot prove
+                            # which head the interrupted POST requested.
+                            self.assertNotIn("comment", kinds)
+                        else:
+                            self.assertEqual("comment", kinds[-1])
                         if interrupt:
                             self.assertFalse(any(c.get("comment") for c in state["observations"][0]["calls"]))
 
@@ -498,3 +507,103 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                 self.assertFalse(any(c.get("request") for c in state["calls"]))
                 if mode in ("existing-review", "pending-review"):
                     self.assertFalse(any(c.get("cas") for c in state["calls"]))
+
+    def test_pending_old_head_never_marks_or_consumes_new_head_in_local_producer(self):
+        for prefix in ("",):
+            for flag in ("enabled", "disabled"):
+                with self.subTest(source=prefix, flag=flag):
+                    state = self.probe("pending-review", new_head=True, event_mode=flag, source_prefix=prefix)
+                    self.assertEqual(INITIAL, state["oid"])
+                    self.assertFalse(
+                        any(call.get("cas") or call.get("request") or call.get("comment") for call in state["calls"])
+                    )
+
+    def test_actual_job_predicate_allows_only_enabled_pilot_new_head_synchronize(self):
+        from types import SimpleNamespace as NS
+
+        import yaml
+
+        for prefix in ("",):
+            workflow = yaml.safe_load((ROOT / prefix / ".github/workflows/copilot-review.yml").read_text())
+            condition = workflow["jobs"]["request-current-revision-review"]["if"]
+            expression = condition.replace("needs.classify-main-trust-root-handoff", "handoff")
+            expression = expression.replace("&&", " and ").replace("||", " or ")
+            expression = " ".join(expression.split())
+
+            def allowed(
+                repo="lightning-it/shared-assets-lit",
+                flag="enabled",
+                action="synchronize",
+                expression=expression,
+                **changes,
+            ):
+                values = {
+                    "author": "litroc",
+                    "actor": "litroc",
+                    "trigger": "litroc",
+                    "attempt": 1,
+                    "draft": False,
+                    "same_repo": True,
+                    "event": "pull_request_target",
+                    **changes,
+                }
+                github = NS(
+                    repository=repo,
+                    event_name=values["event"],
+                    run_attempt=values["attempt"],
+                    actor=values["actor"],
+                    triggering_actor=values["trigger"],
+                    event=NS(
+                        action=action,
+                        pull_request=NS(
+                            draft=values["draft"],
+                            user=NS(login=values["author"]),
+                            head=NS(repo=NS(full_name=repo if values["same_repo"] else "other/fork")),
+                        ),
+                    ),
+                )
+                return eval(  # noqa: S307 -- Fixed local predicate and restricted fixture namespace.
+                    expression,
+                    {"__builtins__": {}},
+                    {
+                        "github": github,
+                        "vars": NS(LI219_EVENT_MODE=flag),
+                        "false": False,
+                        "true": True,
+                        "handoff": NS(result="skipped", outputs=NS(repository_producers_authorized="false")),
+                        "always": lambda: True,
+                        "contains": lambda sequence, value: value in sequence,
+                        "fromJSON": json.loads,
+                    },
+                )
+
+            for repo in (
+                "lightning-it/.github",
+                "lightning-it/shared-assets-lit",
+                "lightning-it/ansible-collection-supplementary",
+            ):
+                self.assertTrue(allowed(repo=repo))
+            for flag in ("", "disabled", "Enabled"):
+                self.assertFalse(allowed(flag=flag))
+                self.assertTrue(allowed(flag=flag, action="opened"))
+                self.assertTrue(allowed(flag=flag, action="ready_for_review"))
+            self.assertFalse(allowed(repo="lightning-it/ansible-role-docker"))
+            for changes in (
+                {"author": "other"},
+                {"actor": "github-actions[bot]"},
+                {"trigger": "other"},
+                {"attempt": 2},
+                {"draft": True},
+                {"same_repo": False},
+                {"event": "workflow_dispatch"},
+            ):
+                self.assertFalse(allowed(**changes))
+            for action in ("edited", "labeled", "reopened"):
+                self.assertFalse(allowed(action=action))
+
+    def test_lost_original_post_response_never_publishes_accepted_marker(self):
+        state = self.probe("lost-request-response")
+        self.assertTrue(state["requested"])
+        self.assertEqual(1, sum(bool(c.get("cas")) for c in state["calls"]))
+        self.assertEqual(1, sum(bool(c.get("request")) for c in state["calls"]))
+        self.assertFalse(any(c.get("comment") for c in state["calls"]))

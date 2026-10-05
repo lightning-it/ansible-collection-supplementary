@@ -16,13 +16,13 @@
     {
       "path": ".github/workflows/review-event-reconcile.yml",
       "category": "central-managed",
-      "sha256": "0ace774677f54e1e44ab5c6b9df7c8501ee2abec0441f1ee57e4f86d1ae3f08c",
+      "sha256": "ef25b29811d1cf8f347f8bd30e25fa022b93f80a9e88736ecba63069726b4805",
       "source": "shared-assets-lit/default/.github/workflows/review-event-reconcile.yml"
     },
     {
       "path": "scripts/review-event-reconcile.py",
       "category": "central-managed",
-      "sha256": "f7e3bfd04bc91c7bc57239b8ad8d673e597aaaad1c6f0ee44e70e13a9af49feb",
+      "sha256": "994222315d8cff4a3c0461088a59afc3c0505e632d7177dede4d5bda570f0438",
       "source": "shared-assets-lit/default/scripts/review-event-reconcile.py"
     },
     {
@@ -54,7 +54,7 @@
     {
       "path": ".github/workflows/copilot-review.yml",
       "category": "local-required",
-      "sha256": "5b0323dfe8f85a32e7b333eb46a177556555f8754dcf41fbd1fcb329d4735d5b",
+      "sha256": "c9ac1710fb2c70c7a13a01a567237e21b490fcbb328fbd75acc2b96000c6464f",
       "owner": "ansible-collection-supplementary",
       "purpose": "Locally adapted LI-219 contract; preserve Supplementary semantics."
     },
@@ -64,6 +64,24 @@
       "sha256": "fdaab1a101fd85cef3e606cb8f4107ffda1f73934cc0ff510ab440673c7d33c8",
       "owner": "ansible-collection-supplementary",
       "purpose": "Locally adapted LI-219 contract; preserve Supplementary semantics."
+    },
+    {
+      "path": ".github/workflows/review-request-continuation.yml",
+      "category": "central-managed",
+      "source": "shared-assets-lit/default/.github/workflows/review-request-continuation.yml",
+      "sha256": "d86f4147e8a4fc8996621ae60bb38d7dc803842ad68525a531cdd8b808b7cc49"
+    },
+    {
+      "path": "scripts/review_request_continuation.py",
+      "category": "central-managed",
+      "source": "shared-assets-lit/default/scripts/review_request_continuation.py",
+      "sha256": "5cdb0409c39f68cd7941db1fe854f6bf7ee0a92eff1a8e92d4524a33a469d49b"
+    },
+    {
+      "path": "scripts/review_request_provenance.py",
+      "category": "central-managed",
+      "source": "shared-assets-lit/default/scripts/review_request_provenance.py",
+      "sha256": "4f66eb97af799edd22a19f9ab4f17bba9647ae62086e73538b3bf3d6dcc378d9"
     }
   ],
   "scope": "li219-three-pilot",

@@ -6,3 +6,7 @@ bugfixes:
   - >-
     Make normal Copilot diff sizing advisory while retaining all deterministic
     validation and protected-policy checks.
+  - >-
+    Prepare a protected deferred first-request continuation using the same request
+    budget, preserving original Supplementary authorization and refusing accepted
+    markers for unconfirmed requests.
