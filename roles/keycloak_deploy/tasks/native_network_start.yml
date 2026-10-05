@@ -26,6 +26,33 @@
     name: "{{ keycloak_deploy_migration_specs.keycloak.unit }}.service"
     state: started
 
+- name: Resolve the managed database name from the actual Keycloak container
+  ansible.builtin.command:
+    argv:
+      - podman
+      - exec
+      - "{{ keycloak_deploy_pod_name }}-{{ keycloak_deploy_container_name }}"
+      - getent
+      - ahostsv4
+      - "{{ keycloak_deploy_db_host }}"
+  register: keycloak_deploy_migration_database_dns
+  changed_when: false
+  when:
+    - keycloak_deploy_migration_validate_desired | default(true) | bool
+    - not keycloak_deploy_db_host is match('^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$')
+
+- name: Require database DNS to resolve only to its bound private network address
+  ansible.builtin.assert:
+    that:
+      - >-
+        keycloak_deploy_migration_database_dns.stdout | lit.supplementary.keycloak_database_resolution_valid(
+          keycloak_deploy_migration_components, keycloak_deploy_db_host)
+    quiet: true
+    fail_msg: The managed database name did not resolve exclusively to its bound private address.
+  when:
+    - keycloak_deploy_migration_validate_desired | default(true) | bool
+    - not keycloak_deploy_db_host is match('^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$')
+
 - name: Require Keycloak readiness and liveness after paired service start
   ansible.builtin.uri:
     url: "{{ item }}"

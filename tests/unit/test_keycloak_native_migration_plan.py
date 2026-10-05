@@ -62,6 +62,40 @@ def fixtures():
 
 
 class KeycloakNativeMigrationPlanTests(unittest.TestCase):
+    def test_managed_container_alias_does_not_require_renaming_the_database_pod(self):
+        components = fixtures()
+        components["postgres"]["pod_name"] = "keycloak-postgres"
+        components["postgres"]["manifest"]["metadata"]["name"] = "keycloak-postgres"
+        self.assertTrue(
+            NATIVE.private_database_endpoint_valid(
+                "postgres",
+                components["keycloak"]["networks"],
+                components["postgres"]["networks"],
+                "keycloak-postgres",
+                "postgres",
+            )
+        )
+        result = NATIVE.prepare_transition(components, "postgres", 5432)
+        self.assertEqual(result["components"]["postgres"]["manifest"], components["postgres"]["manifest"])
+        for host in ("other", "postgres.example.invalid", "POSTGRES", "postgres\n", "8.8.8.8"):
+            with self.subTest(host=host), self.assertRaises(AnsibleFilterError):
+                NATIVE.prepare_transition(components, host, 5432)
+
+    def test_dns_runtime_requires_exclusively_the_bound_private_peer(self):
+        components = fixtures()
+        output = "192.0.2.3 STREAM postgres\n192.0.2.3 DGRAM\n192.0.2.3 RAW\n"
+        self.assertTrue(NATIVE.database_resolution_valid(output, components, "postgres"))
+        for invalid in (
+            "",
+            "192.0.2.4 STREAM postgres",
+            output + "8.8.8.8 STREAM postgres\n",
+            "::1 STREAM postgres",
+            "192.0.2.3",
+            None,
+        ):
+            with self.subTest(output=invalid), self.assertRaises(AnsibleFilterError):
+                NATIVE.database_resolution_valid(invalid, components, "postgres")
+
     def test_dns_binding_selects_only_the_unique_shared_static_database_network(self):
         keycloak = ["database.network:ip=192.0.2.2"]
         postgres = ["database.network:ip=192.0.2.3", "backup.network:ip=198.51.100.3"]
