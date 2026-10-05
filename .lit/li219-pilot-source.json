@@ -1,9 +1,9 @@
 {
   "schema": 1,
   "repository": "lightning-it/ansible-collection-supplementary",
-  "preparation_source_commit": "f1e3c99edfe6fe68f00fd43ba02f805d9f7d5239",
+  "preparation_source_commit": "53f1a3077cbf29a5b697497ed7291b8237f3ac1d",
   "protected_source_commit": null,
-  "status": "pre-P1-local-preparation-awaits-reviewed-reconciler-successor-and-protected-source-binding",
+  "status": "local-reconciler-fix-prepared-awaits-independent-review-auto-requester-contract-and-protected-source-binding",
   "target_base": "c983bb3c8aa26114f682d825bfaca6fa1be187e4",
   "bindings": [
     {
@@ -33,10 +33,10 @@
     {
       "source_path": "default/scripts/review-event-reconcile.py",
       "target_path": "scripts/review-event-reconcile.py",
-      "source_sha256": "171b3804b3ff84c621a31e1858a76cd895069e66f08a33002756a17b55f99cb2",
-      "source_blob": "d40f3958e5f5336a3bc7efec0841e1bbd867dadd",
+      "source_sha256": "f7e3bfd04bc91c7bc57239b8ad8d673e597aaaad1c6f0ee44e70e13a9af49feb",
+      "source_blob": "3f26562dba4536b89bda5e78264d5ce6b28a5092",
       "mode": "byte-identical",
-      "target_sha256": "171b3804b3ff84c621a31e1858a76cd895069e66f08a33002756a17b55f99cb2"
+      "target_sha256": "f7e3bfd04bc91c7bc57239b8ad8d673e597aaaad1c6f0ee44e70e13a9af49feb"
     },
     {
       "source_path": ".github/workflows/dot-github-current-revision-required.yml",
@@ -101,8 +101,8 @@
     },
     {
       "path": "tests/test_review_event_reconcile.py",
-      "sha256": "dbe3a3c5d51f7c7b7ea44a6161da8c3cb671d3a1ddff0dbb76080c5d6f6c8c36",
-      "adaptation": "Local package paths and Supplementary identities; topology selector subset replaces old static assertions."
+      "sha256": "fcbebfae00bd135b6b7b10413a1c887bbf6f8f904a612a43cf89e0ebbcec86ed",
+      "adaptation": "Supplementary package path and identities; bind producer PR associations and live PR numbers; omit Source-only optional mirror check; repository formatting."
     },
     {
       "path": "tests/test_review_event_port.py",
@@ -114,5 +114,6 @@
       "sha256": "6293e6228b71efb363a79040fec9820b1eee5a6e6aaefff28dcc3637b29033e6",
       "adaptation": "Local package paths and Supplementary identities; topology selector subset replaces old static assertions."
     }
-  ]
+  ],
+  "preparation_source_tree": "91a11a23703e154f02f61684758a6a6a83a4cc9b"
 }

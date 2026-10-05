@@ -20,6 +20,9 @@ PILOTS = {
     "lightning-it/ansible-collection-supplementary",
 }
 TTL = dt.timedelta(days=7)
+# Shared by both dispatch workflows, including split probes. The Actions API
+# caps filtered searches at 1000 results, independently of our page limit.
+DISPATCH_INVENTORY_REQUESTS = 256
 REVIEWERS = {"copilot-pull-request-reviewer", "copilot-pull-request-reviewer[bot]"}
 # Match the canonical producer/refresh terminal marker vocabulary.
 MARKERS = (
@@ -68,6 +71,80 @@ def pages(route, key=None):
     raise ValueError("incomplete inventory")
 
 
+def dispatch_inventory(prefix, now):
+    """Read the complete seven-day locator history before any dispatch.
+
+    Split saturated searches into disjoint inclusive UTC-second ranges, never
+    page beyond GitHub's 1000-result search ceiling. Every leaf must have fewer
+    than 1000 results and stable counts, exact page lengths, unique IDs and
+    matching timestamps/workflow/event. No partial result escapes on failure.
+    A saturated single second or exhausted shared request budget fails closed;
+    the caller's existing five-minute job timeout remains the wall-time bound.
+    """
+    remaining = DISPATCH_INVENTORY_REQUESTS
+    seen = set()
+    end = now.astimezone(dt.timezone.utc).replace(microsecond=0)
+    start = end - TTL
+    second = dt.timedelta(seconds=1)
+
+    def read(workflow, lower, upper, page):
+        nonlocal remaining
+        if remaining <= 0:
+            raise ValueError("dispatch inventory request budget exhausted")
+        remaining -= 1
+        interval = f"{lower:%Y-%m-%dT%H:%M:%SZ}..{upper:%Y-%m-%dT%H:%M:%SZ}"
+        response = api(
+            f"{prefix}/actions/workflows/{workflow}/runs"
+            f"?event=workflow_dispatch&created={interval}&per_page=100&page={page}"
+        )
+        if not isinstance(response, dict):
+            raise ValueError("invalid dispatch inventory")
+        total, batch = response.get("total_count"), response.get("workflow_runs")
+        if type(total) is not int or total < 0 or not isinstance(batch, list):
+            raise ValueError("invalid dispatch inventory")
+        if len(batch) != min(100, max(0, total - (page - 1) * 100)):
+            raise ValueError("incomplete dispatch inventory")
+        return total, batch
+
+    def window(workflow, lower, upper):
+        total, batch = read(workflow, lower, upper, 1)
+        if total >= 1000:
+            if lower == upper:
+                raise ValueError("dispatch inventory saturated within one second")
+            middle = lower + dt.timedelta(seconds=int((upper - lower).total_seconds()) // 2)
+            items = window(workflow, lower, middle) + window(workflow, middle + second, upper)
+            if len(items) != total:
+                raise ValueError("dispatch inventory changed while splitting")
+            return items
+        items = batch
+        for page in range(2, (total + 99) // 100 + 1):
+            current_total, batch = read(workflow, lower, upper, page)
+            if current_total != total:
+                raise ValueError("dispatch inventory changed while paging")
+            items += batch
+        for run in items:
+            if not isinstance(run, dict) or type(run.get("id")) is not int or run["id"] <= 0:
+                raise ValueError("invalid dispatch identity")
+            if run["id"] in seen:
+                raise ValueError("duplicate dispatch inventory")
+            seen.add(run["id"])
+            timestamp = run.get("created_at")
+            if not isinstance(timestamp, str) or not re.fullmatch(
+                r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", timestamp
+            ):
+                raise ValueError("invalid dispatch timestamp")
+            created = dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            if (
+                not lower <= created <= upper
+                or run.get("path") != f".github/workflows/{workflow}"
+                or run.get("event") != "workflow_dispatch"
+            ):
+                raise ValueError("unbound dispatch inventory")
+        return items
+
+    return window(REFRESH, start, end) + window(HELPER, start, end)
+
+
 def clean_review(review, comments, head):
     if (
         review.get("commit_id") != head
@@ -94,7 +171,7 @@ def clean_review(review, comments, head):
     )
 
 
-def recent_dispatch(runs, path, title):
+def recent_dispatch(runs, path, title, now=None):
     matching = [
         run
         for run in runs
@@ -111,7 +188,7 @@ def recent_dispatch(runs, path, title):
         timestamp = dt.datetime.fromisoformat(
             latest["updated_at"].replace("Z", "+00:00")
         )
-        if dt.datetime.now(dt.timezone.utc) - timestamp < dt.timedelta(minutes=10):
+        if (now or dt.datetime.now(dt.timezone.utc)) - timestamp < dt.timedelta(minutes=10):
             return True
     return False
 
@@ -128,14 +205,7 @@ def reconcile(repository, now):
         or os.environ["GITHUB_REF_PROTECTED"] != "true"
     ):
         raise ValueError("unprotected reconciliation source")
-    dispatches = []
-    since = (now - TTL).strftime("%Y-%m-%dT%H:%M:%SZ")
-    for workflow in (REFRESH, HELPER):
-        dispatches += pages(
-            f"{prefix}/actions/workflows/{workflow}/runs"
-            f"?event=workflow_dispatch&created=%3E%3D{since}",
-            "workflow_runs",
-        )
+    dispatches = dispatch_inventory(prefix, now)
     for pr in pages(f"{prefix}/pulls?state=open"):
         number, head, base = pr["number"], pr["head"]["sha"], pr["base"]["sha"]
         if (
@@ -269,7 +339,7 @@ def reconcile(repository, now):
                 "expected_base": base,
                 "review_id": str(review["id"]),
             }
-        if recent_dispatch(dispatches, path, title):
+        if recent_dispatch(dispatches, path, title, now):
             continue
         # Re-read after inventory. No mutation on a changed/closed/draft PR.
         live = api(f"{prefix}/pulls/{number}")
