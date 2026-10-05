@@ -1,9 +1,9 @@
 {
   "schema": 1,
   "repository": "lightning-it/ansible-collection-supplementary",
-  "preparation_source_commit": "53f1a3077cbf29a5b697497ed7291b8237f3ac1d",
+  "preparation_source_commit": "5876d213be5bd03ff6ecb24e15246599775b1c9f",
   "protected_source_commit": null,
-  "status": "local-reconciler-fix-prepared-awaits-independent-review-auto-requester-contract-and-protected-source-binding",
+  "status": "local-continuation-port-prepared-awaits-final-review-and-actual-protected-source-main",
   "target_base": "c983bb3c8aa26114f682d825bfaca6fa1be187e4",
   "bindings": [
     {
@@ -25,18 +25,18 @@
     {
       "source_path": "default/.github/workflows/review-event-reconcile.yml",
       "target_path": ".github/workflows/review-event-reconcile.yml",
-      "source_sha256": "0ace774677f54e1e44ab5c6b9df7c8501ee2abec0441f1ee57e4f86d1ae3f08c",
-      "source_blob": "9fe3168697fec75cda764dee0a5dd7edc8b352b3",
+      "source_sha256": "ef25b29811d1cf8f347f8bd30e25fa022b93f80a9e88736ecba63069726b4805",
+      "source_blob": "092451ac1f9d8c14b152c1df22d35bac8fe0dfc9",
       "mode": "byte-identical",
-      "target_sha256": "0ace774677f54e1e44ab5c6b9df7c8501ee2abec0441f1ee57e4f86d1ae3f08c"
+      "target_sha256": "ef25b29811d1cf8f347f8bd30e25fa022b93f80a9e88736ecba63069726b4805"
     },
     {
       "source_path": "default/scripts/review-event-reconcile.py",
       "target_path": "scripts/review-event-reconcile.py",
-      "source_sha256": "f7e3bfd04bc91c7bc57239b8ad8d673e597aaaad1c6f0ee44e70e13a9af49feb",
-      "source_blob": "3f26562dba4536b89bda5e78264d5ce6b28a5092",
+      "source_sha256": "994222315d8cff4a3c0461088a59afc3c0505e632d7177dede4d5bda570f0438",
+      "source_blob": "31e7cce816df91039639b7874048bb71ab143566",
       "mode": "byte-identical",
-      "target_sha256": "f7e3bfd04bc91c7bc57239b8ad8d673e597aaaad1c6f0ee44e70e13a9af49feb"
+      "target_sha256": "994222315d8cff4a3c0461088a59afc3c0505e632d7177dede4d5bda570f0438"
     },
     {
       "source_path": ".github/workflows/dot-github-current-revision-required.yml",
@@ -74,10 +74,11 @@
     {
       "source_path": "default/.github/workflows/copilot-review.yml",
       "target_path": ".github/workflows/copilot-review.yml",
-      "source_sha256": "4125704f24258c3100b16ff25521ba4cfebabe2d20af421bc89fe54d0c37d70e",
-      "source_blob": "95f33f3bbcc16956034f04176ea47ad69b509719",
+      "source_sha256": "713abc341eb51593ed8050d7740ff30b184b1084addc9390801755536ae1f0a6",
+      "source_blob": "b70ca241d88a4e8ea48d5951618ea97d9ce8fb1c",
       "mode": "adapted-local",
-      "target_sha256": "5b0323dfe8f85a32e7b333eb46a177556555f8754dcf41fbd1fcb329d4735d5b"
+      "target_sha256": "c9ac1710fb2c70c7a13a01a567237e21b490fcbb328fbd75acc2b96000c6464f",
+      "adaptation": "Preserve six Supplementary jobs and exact original trust; add enabled sync and canonical intent helper in existing step; uncertain original POST stops without accepted marker."
     },
     {
       "source_path": "default/scripts/lit-push-ready.py",
@@ -86,6 +87,30 @@
       "source_blob": "f9ddd6dc164474ae1791e27fd48b7ffc93bd0c92",
       "mode": "adapted-local",
       "target_sha256": "fdaab1a101fd85cef3e606cb8f4107ffda1f73934cc0ff510ab440673c7d33c8"
+    },
+    {
+      "source_path": "default/.github/workflows/review-request-continuation.yml",
+      "target_path": ".github/workflows/review-request-continuation.yml",
+      "mode": "byte-identical",
+      "source_sha256": "d86f4147e8a4fc8996621ae60bb38d7dc803842ad68525a531cdd8b808b7cc49",
+      "source_blob": "ef13ff186198289ed1bd60c593de5d8b461d2203",
+      "target_sha256": "d86f4147e8a4fc8996621ae60bb38d7dc803842ad68525a531cdd8b808b7cc49"
+    },
+    {
+      "source_path": "default/scripts/review_request_continuation.py",
+      "target_path": "scripts/review_request_continuation.py",
+      "mode": "byte-identical",
+      "source_sha256": "5cdb0409c39f68cd7941db1fe854f6bf7ee0a92eff1a8e92d4524a33a469d49b",
+      "source_blob": "3a70562d783f3c74596d3152ef3d76fe6b411096",
+      "target_sha256": "5cdb0409c39f68cd7941db1fe854f6bf7ee0a92eff1a8e92d4524a33a469d49b"
+    },
+    {
+      "source_path": "default/scripts/review_request_provenance.py",
+      "target_path": "scripts/review_request_provenance.py",
+      "mode": "byte-identical",
+      "source_sha256": "4f66eb97af799edd22a19f9ab4f17bba9647ae62086e73538b3bf3d6dcc378d9",
+      "source_blob": "2f1c043235032a2764a123464eb0c9fb77f49c3e",
+      "target_sha256": "4f66eb97af799edd22a19f9ab4f17bba9647ae62086e73538b3bf3d6dcc378d9"
     }
   ],
   "test_sources": [
@@ -96,12 +121,12 @@
     },
     {
       "path": "tests/test_review_operation_cas.py",
-      "sha256": "6460354074ce282d72faf2b2edc07d7f452cded84efcc238ed3a6ca44395c653",
+      "sha256": "3772f53dce6fb8f44e0ad06cc2320665e4417c1de50f585885fa68391a3490dd",
       "adaptation": "Local package paths and Supplementary identities; topology selector subset replaces old static assertions."
     },
     {
       "path": "tests/test_review_event_reconcile.py",
-      "sha256": "fcbebfae00bd135b6b7b10413a1c887bbf6f8f904a612a43cf89e0ebbcec86ed",
+      "sha256": "baa3c50d27eee628ef1a99f7f6c1cb73f6111c929cf31c1b9deb164d2919c925",
       "adaptation": "Supplementary package path and identities; bind producer PR associations and live PR numbers; omit Source-only optional mirror check; repository formatting."
     },
     {
@@ -113,7 +138,12 @@
       "path": "tests/test_current_revision_rerun_topology.py",
       "sha256": "6293e6228b71efb363a79040fec9820b1eee5a6e6aaefff28dcc3637b29033e6",
       "adaptation": "Local package paths and Supplementary identities; topology selector subset replaces old static assertions."
+    },
+    {
+      "path": "tests/test_review_request_continuation.py",
+      "sha256": "ebc0c2e29f31d6980050517c19686f399a9d6593a9a63649134ce98c89f0b8bf",
+      "adaptation": "Supplementary identity/package and actual six-job owner topology; read-only schema2 provenance acceptance and native source/step/time/locator rejection."
     }
   ],
-  "preparation_source_tree": "91a11a23703e154f02f61684758a6a6a83a4cc9b"
+  "preparation_source_tree": "1f4915d3008c74fc19b939d3dc96ecb195a07c1d"
 }
