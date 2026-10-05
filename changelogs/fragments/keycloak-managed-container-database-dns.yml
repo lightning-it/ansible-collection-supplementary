@@ -1,7 +1,0 @@
----
-bugfixes:
-  - >-
-    keycloak_deploy accepts the exact managed PostgreSQL container name as a
-    private network-local DNS endpoint without renaming its pod or storage;
-    native migration verifies actual resolution from Keycloak against the
-    uniquely bound private database address.
