@@ -45,6 +45,10 @@ keycloak_deploy_postgres_host_ip: >-
     | default(keycloak_deploy_host_ip)
   }}
 keycloak_deploy_postgres_host_network: false
+# Explicit, default-off transition for existing active native units only.
+keycloak_deploy_native_network_migration: false
+keycloak_deploy_native_previous_networks: {}
+keycloak_deploy_native_network_runtime_names: {}
 keycloak_deploy_api_scheme: "http"
 keycloak_deploy_api_url: ""
 keycloak_deploy_api_url_effective: >-
@@ -187,6 +191,7 @@ keycloak_deploy_kubeplay_run: false
 
 # Systemd
 keycloak_deploy_systemd_unit_name: "{{ keycloak_deploy_pod_name }}-pod"
+keycloak_deploy_postgres_systemd_unit_name: "{{ keycloak_deploy_postgres_pod_name }}-pod"
 keycloak_deploy_systemd_description: "Keycloak container service"
 keycloak_deploy_systemd_scope: system
 keycloak_deploy_quadlet_dir: /etc/containers/systemd

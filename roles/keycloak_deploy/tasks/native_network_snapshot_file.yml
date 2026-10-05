@@ -1,0 +1,60 @@
+---
+- name: Inspect one exact native migration target without following links
+  ansible.builtin.stat:
+    path: "{{ keycloak_deploy_migration_snapshot_file.path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: keycloak_deploy_migration_file_stat
+
+- name: Inspect the target parent identity without following links
+  ansible.builtin.stat:
+    path: "{{ keycloak_deploy_migration_snapshot_file.path | dirname }}"
+    follow: false
+  register: keycloak_deploy_migration_parent_stat
+
+- name: Require root-exclusive parent and exact owned regular target
+  ansible.builtin.assert:
+    that:
+      - keycloak_deploy_migration_file_stat.stat.isreg | default(false)
+      - not keycloak_deploy_migration_file_stat.stat.islnk | default(false)
+      - keycloak_deploy_migration_file_stat.stat.uid == 0
+      - keycloak_deploy_migration_file_stat.stat.gid == 0
+      - keycloak_deploy_migration_file_stat.stat.mode == keycloak_deploy_migration_snapshot_file.mode
+      - keycloak_deploy_migration_parent_stat.stat.isdir | default(false)
+      - not keycloak_deploy_migration_parent_stat.stat.islnk | default(false)
+      - keycloak_deploy_migration_parent_stat.stat.uid == 0
+      - not keycloak_deploy_migration_parent_stat.stat.wgrp
+      - not keycloak_deploy_migration_parent_stat.stat.woth
+    quiet: true
+    fail_msg: Refusing unowned or mutable native migration target.
+
+- name: Read one private original configuration snapshot
+  ansible.builtin.slurp:
+    src: "{{ keycloak_deploy_migration_snapshot_file.path }}"
+  register: keycloak_deploy_migration_snapshot_read
+
+- name: Bind snapshot bytes to the observed target checksum
+  ansible.builtin.assert:
+    that:
+      - >-
+        keycloak_deploy_migration_snapshot_read.content | b64decode | hash('sha256')
+        == keycloak_deploy_migration_file_stat.stat.checksum
+    quiet: true
+    fail_msg: Native configuration changed during snapshot acquisition.
+
+- name: Retain private snapshot and descriptor-bound parent identity
+  ansible.builtin.set_fact:
+    keycloak_deploy_migration_snapshot_files: >-
+      {{ keycloak_deploy_migration_snapshot_files + [keycloak_deploy_migration_snapshot_file | combine({
+         'component': keycloak_deploy_migration_component,
+         'original': keycloak_deploy_migration_snapshot_read.content | b64decode,
+         'checksum': keycloak_deploy_migration_file_stat.stat.checksum,
+         'parent_identities': {keycloak_deploy_migration_snapshot_file.path | dirname: {
+           'device': keycloak_deploy_migration_parent_stat.stat.dev,
+           'inode': keycloak_deploy_migration_parent_stat.stat.inode}}})] }}
+    keycloak_deploy_migration_quadlet_read: >-
+      {{ keycloak_deploy_migration_snapshot_read if keycloak_deploy_migration_snapshot_file.kind == 'quadlet'
+         else keycloak_deploy_migration_quadlet_read }}
+    keycloak_deploy_migration_manifest_read: >-
+      {{ keycloak_deploy_migration_snapshot_read if keycloak_deploy_migration_snapshot_file.kind == 'manifest'
+         else keycloak_deploy_migration_manifest_read | default({}) }}

@@ -71,6 +71,18 @@ argument_specs:
           to the Keycloak networks without per-container options.
         type: list
         elements: str
+      keycloak_deploy_native_network_migration:
+        description: Jointly migrate existing active native Keycloak and managed PostgreSQL network bindings.
+        type: bool
+      keycloak_deploy_postgres_systemd_unit_name:
+        description: Exact native PostgreSQL unit basename shared by migration and normal deployment.
+        type: str
+      keycloak_deploy_native_previous_networks:
+        description: Exact prior native Network entries keyed by keycloak and postgres; required for migration.
+        type: dict
+      keycloak_deploy_native_network_runtime_names:
+        description: Exact mapping from native Network entry basenames to their actual Podman network names.
+        type: dict
       keycloak_deploy_postgres_host_ip:
         description: Host address on which the dedicated PostgreSQL port is published.
         type: str

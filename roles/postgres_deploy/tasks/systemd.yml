@@ -323,16 +323,21 @@
             quiet: true
           when: not (postgres_deploy_native_quadlet_file.stat.exists | default(false))
 
+        - name: Privately render the desired PostgreSQL manifest for comparison
+          ansible.builtin.set_fact:
+            postgres_deploy_desired_manifest_content: "{{ lookup('ansible.builtin.template', 'postgres-pod.yml.j2') }}"
+          no_log: true
+
         - name: Preview transactional PostgreSQL Pod manifest drift
-          ansible.builtin.template:
-            src: postgres-pod.yml.j2
-            dest: "{{ postgres_deploy_pod_manifest_path }}"
-            owner: root
-            group: root
-            mode: '0600'
+          ansible.builtin.set_fact:
+            postgres_deploy_manifest_preview:
+              changed: >-
+                {{ not (postgres_deploy_original_manifest_file.stat.exists | default(false))
+                   or not (postgres_deploy_original_manifest_read.content | b64decode
+                           | lit.supplementary.native_manifest_equal(postgres_deploy_desired_manifest_content)) }}
           check_mode: true
           diff: false
-          register: postgres_deploy_manifest_preview
+          changed_when: false
           no_log: true
 
         - name: Stop and disable the exact legacy PostgreSQL unit before Quadlet takeover
@@ -353,7 +358,9 @@
             - postgres_deploy_native_systemd_active.stdout | trim == 'active'
             - postgres_deploy_manifest_preview.changed | default(false) | bool
 
-        - name: Render the transactional PostgreSQL Pod manifest
+        # Must execute inside this rescue boundary, after stop and before takeover;
+        # a deferred handler cannot preserve transactional rollback ordering.
+        - name: Render the transactional PostgreSQL Pod manifest  # noqa: no-handler
           ansible.builtin.template:
             src: postgres-pod.yml.j2
             dest: "{{ postgres_deploy_pod_manifest_path }}"
@@ -361,6 +368,17 @@
             group: root
             mode: '0600'
           register: postgres_deploy_manifest_render
+          no_log: true
+          when: postgres_deploy_manifest_preview.changed | bool
+
+        - name: Preserve equal PostgreSQL manifest bytes and reconcile private permissions
+          ansible.builtin.file:
+            path: "{{ postgres_deploy_pod_manifest_path }}"
+            state: file
+            owner: root
+            group: root
+            mode: '0600'
+          when: not postgres_deploy_manifest_preview.changed | bool
           no_log: true
 
         - name: Manage the native PostgreSQL Quadlet service

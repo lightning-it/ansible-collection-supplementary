@@ -24,6 +24,11 @@ without a detected systemd service manager fails during prechecks.
 
 The generated Pod manifest is restricted to the owner (`0600`) because it
 contains the effective PostgreSQL password required by the container runtime.
+The native path compares the complete desired and existing Pod documents privately.
+Presentation-only YAML differences preserve the existing manifest bytes and do not
+restart the pod; owner and `0600` permissions are still reconciled. Changes to
+values, scalar types, or sequence ordering retain the transactional replacement
+and restart path. Malformed or ambiguous manifests fail before stopping the unit.
 
 Key variables:
 - `postgres_deploy_image`

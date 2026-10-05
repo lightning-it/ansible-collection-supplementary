@@ -37,8 +37,60 @@ attaches NGINX and Keycloak to a pinned private Quadlet network, and trusts only
 the NGINX pod address.
 
 Managed bridge PostgreSQL requires a private `keycloak_deploy_db_host` matching
-its pinned network IP; readiness uses the published host endpoint. DNS and
-Keycloak loopback are rejected.
+its pinned network IP or the exact managed PostgreSQL pod DNS name; readiness
+uses the published host endpoint. Arbitrary external DNS names and Keycloak
+loopback are rejected. DNS mode requires network-local Podman name resolution,
+an explicit resolver firewall allowance, and positive/negative DNS evidence;
+it does not replace static firewall addresses or trusted proxy CIDRs.
+
+`keycloak_deploy_native_network_migration` is a default-off, coupled transition
+for two already active, root-owned native Quadlets without drop-ins. Set
+`keycloak_deploy_native_previous_networks` to the exact prior `keycloak` and
+`postgres` Network lists, including explicit empty lists for default-network
+units. The database endpoint must be its declared IPv4 or exact managed pod
+DNS name; Keycloak must have its own address on the same database network.
+Bind `keycloak_deploy_native_network_runtime_names` explicitly from each Network
+entry basename (including a `.network` suffix where used) to its actual Podman
+network name. Runtime verification compares names and addresses, not addresses
+alone. Before stopping either service, actual images, data mounts and database
+endpoint must match the proven original configuration. Rollback verifies the
+original network names and database endpoint; explicit prior addresses remain
+pinned, while addresses on implicit default networks may legitimately change.
+An empty prior Network list is supported only when runtime inspection proves
+exactly `podman-default-kube-network`, the Podman non-host kube default. Arbitrary
+single attachments or additional manually attached networks fail before either
+service stops: an empty restored Quadlet cannot reconstruct them. This implicit
+contract is verified against Podman 4.9.3, not a claim of live migration acceptance.
+
+The transition runs before either ordinary deploy role. It snapshots both
+manifests and Quadlets in memory under `no_log`, preserves images and data paths,
+stops Keycloak before PostgreSQL, and writes only bound configuration through
+descriptor-relative `atomic_path`. PostgreSQL readiness precedes Keycloak health
+acceptance. A failed cutover restores both original configurations; external
+content or parent-identity drift fails closed rather than being overwritten.
+Captured Pod bytes are checked for duplicate mapping keys before YAML conversion.
+Rollback accepts computed target bytes only for files the cutover can write;
+the untouched PostgreSQL manifest must retain its original checksum. Both the
+batch preflight and final per-file check enforce this ownership boundary.
+The transition does not support inactive, legacy, rootless, administrator-edited
+or mixed prior/desired controllers. Controller termination is not a durable
+automatic rollback guarantee; recovery requires retained authoritative source
+configuration. Do not claim live migration acceptance from preparation tests.
+
+Subsequent native reconciliation compares the complete current manifest with
+the normally rendered role template, including scalar types and sequence order.
+Formatting-only differences preserve the existing bytes and reconcile private
+file permissions without restarting. Real configuration changes retain the
+ordinary transactional render/restart/rollback path. Invalid or ambiguous YAML
+fails comparison rather than being treated as equal.
+
+`tests/unit/test_native_network_transaction.py` executes the production Ansible
+cutover/rescue/always control flow with isolated, fault-injected I/O. It verifies
+the exact failure boundary, paired recovery after stop/write/readiness failures,
+external-drift refusal, and snapshot disposal. Its unchanged-plan case proves
+the cutover is skipped, not whole-role idempotence. These deterministic tests do
+not prove live Podman readiness, DNS resolution or atomic filesystem semantics;
+the actual component profiles and live acceptance remain required.
 
 Exactly one lifecycle controller owns the pod: native `.kube` Quadlet through
 `lit.foundational.podman_systemd`, or explicit fail-closed direct kubeplay.
@@ -67,7 +119,8 @@ the collection.
           - keycloak-access.network:ip=10.89.40.2
         keycloak_deploy_postgres_networks:
           - keycloak-access.network:ip=10.89.40.3
-        keycloak_deploy_db_host: 10.89.40.3
+        # Requires verified network-local DNS without external forwarding.
+        keycloak_deploy_db_host: keycloak-postgres
         keycloak_deploy_admin_user: admin
         keycloak_deploy_generate_secrets: false
         keycloak_deploy_admin_password: "{{ vault_keycloak_admin_password }}"
