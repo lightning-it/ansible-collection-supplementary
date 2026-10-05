@@ -97,7 +97,8 @@ INSTRUCTION_PATH_PATTERN = re.compile(
     r"^\.github/instructions/.+\.instructions\.md$"
 )
 MAX_CONFIG_BYTES = 1_000_000
-MAX_REVIEW_BYTES = 5_000_000
+MAX_LOCAL_REVIEW_FILE_BYTES = 5_000_000
+DEFAULT_REVIEW_WARNING_BYTES = 500_000
 MAX_TIMEOUT_SECONDS = 3_600
 CHECK_TIMEOUT_SECONDS = 3_600
 AUTHORITATIVE_BASE_REFS = {
@@ -748,18 +749,28 @@ def validate_review_path(value: Any, description: str, *, prefix: bool) -> str:
     return path
 
 
+def review_warning_bytes(review: dict[str, Any]) -> int | None:
+    """Read the advisory amendment while accepting historical v3 policy."""
+    if "max_diff_bytes" in review:
+        legacy = review["max_diff_bytes"]
+        if type(legacy) is not int or legacy <= 0:
+            raise RuntimeError("review.max_diff_bytes must be a positive integer")
+    warning = review.get("warn_diff_bytes", DEFAULT_REVIEW_WARNING_BYTES)
+    if warning is None:
+        return None
+    if type(warning) is not int or warning <= 0:
+        raise RuntimeError("review.warn_diff_bytes must be a positive integer or null")
+    return warning
+
+
 def validate_review_policy(value: Any) -> None:
-    if not isinstance(value, dict) or set(value) != {
-        "max_diff_bytes",
-        "profiles",
-        "classification",
-    }:
+    if not isinstance(value, dict):
+        raise RuntimeError("review policy must be an object")
+    required = {"profiles", "classification"}
+    sizing = set(value) - required
+    if not required.issubset(value) or sizing not in ({"max_diff_bytes"}, {"warn_diff_bytes"}):
         raise RuntimeError("review policy keys are invalid")
-    require_positive_integer(
-        value.get("max_diff_bytes"),
-        "review.max_diff_bytes",
-        maximum=MAX_REVIEW_BYTES,
-    )
+    review_warning_bytes(value)
     expected_profiles: dict[str, dict[str, list[str]]] = {
         name: {"agents": list(agents)} for name, agents in REVIEW_PROFILE_AGENTS.items()
     }
@@ -1557,38 +1568,21 @@ def planned_change(
     if "GIT binary patch\n" in tracked_diff or "\nBinary files " in tracked_diff:
         raise RuntimeError("tracked diff contains binary content")
     tracked_names = git_output("diff", "--name-only", "--no-renames", "-z", base_commit, "--").split("\0")
-    max_bytes = require_positive_integer(
-        config["review"]["max_diff_bytes"],
-        "review.max_diff_bytes",
-        maximum=MAX_REVIEW_BYTES,
-    )
     untracked_hashes: dict[str, str] = {}
     patches: list[str] = []
-    consumed = utf8_size(tracked_diff)
-    if consumed >= max_bytes:
-        raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
     for name in untracked_names():
-        remaining = max_bytes - consumed
-        if remaining <= 0:
-            raise RuntimeError(f"diff exceeds {max_bytes} bytes")
         payload, mode = read_repository_file(
             name,
             purpose="Local review",
-            max_bytes=remaining,
+            max_bytes=MAX_LOCAL_REVIEW_FILE_BYTES,
         )
         patch = render_untracked_patch(name, payload, mode)
-        patch_bytes = utf8_size(patch)
-        consumed += patch_bytes
-        if consumed >= max_bytes:
-            raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
         patches.append(patch)
         untracked_hashes[name] = sha256_bytes(payload)
     diff = tracked_diff + "".join(patches)
     review_bytes = utf8_size(diff)
     if review_bytes <= 0:
         raise RuntimeError("planned diff is empty")
-    if review_bytes >= max_bytes:
-        raise RuntimeError(f"planned diff exceeds local review limit of {max_bytes} bytes")
     paths = tuple(sorted({path for path in tracked_names if path} | set(untracked_hashes)))
     final_tree_fingerprint = tree_fingerprint()
     if final_tree_fingerprint != initial_tree_fingerprint:
@@ -1702,18 +1696,16 @@ def review_classification_evidence(classification: ReviewClassification) -> dict
     }
 
 
-def review_size_evidence(config: dict[str, Any], change: PlannedChange) -> dict[str, int]:
-    maximum = require_positive_integer(
-        config["review"]["max_diff_bytes"],
-        "review.max_diff_bytes",
-        maximum=MAX_REVIEW_BYTES,
-    )
+def review_size_evidence(config: dict[str, Any], change: PlannedChange) -> dict[str, Any]:
+    warning = review_warning_bytes(config["review"])
     measured = utf8_size(change.diff)
-    if measured <= 0 or measured >= maximum:
-        raise RuntimeError(f"planned diff exceeds local review limit of {maximum} bytes")
+    if measured <= 0:
+        raise RuntimeError("planned diff is empty")
     return {
+        "profile": "advisory/v1",
         "bytes": measured,
-        "limit_exclusive": maximum,
+        "warning_bytes": warning,
+        "warning_exceeded": warning is not None and measured >= warning,
         "path_count": len(change.paths),
     }
 
@@ -1721,11 +1713,15 @@ def review_size_evidence(config: dict[str, Any], change: PlannedChange) -> dict[
 def report_review_size(config: dict[str, Any], change: PlannedChange) -> None:
     measurement = review_size_evidence(config, change)
     print(
-        "Review input: "
-        f"{measurement['bytes']} < {measurement['limit_exclusive']} bytes; "
-        f"{measurement['path_count']} paths; sha256:{change.diff_sha256}",
+        f"Review input: {measurement['bytes']} bytes; {measurement['path_count']} paths; sha256:{change.diff_sha256}",
         flush=True,
     )
+    if measurement["warning_exceeded"]:
+        print(
+            "Planning notice: full diff exceeds the advisory threshold; "
+            "all deterministic checks still run. No automatic PR splitting.",
+            flush=True,
+        )
 
 
 def changed_paths() -> list[str]:

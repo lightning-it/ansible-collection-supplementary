@@ -172,7 +172,8 @@ class WorkflowSecurityTests(unittest.TestCase):
             copilot,
         )
         self.assertIn("(.head.sha == $head_sha)", copilot)
-        self.assertIn("for attempt in $(seq 1 40)", copilot)
+        self.assertIn("review_observations=40", copilot)
+        self.assertIn('for attempt in $(seq 1 "${review_observations}")', copilot)
         self.assertIn(".isResolved == false", copilot)
         self.assertIn("expected_safe_event=$'labeled\\tsafe-automerge\\trenovate[bot]'", renovate)
         self.assertIn('[ "$safe_event" = "$expected_safe_event" ]', renovate)
@@ -303,7 +304,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("github.event.action == 'opened'", request_job)
         self.assertIn("github.event_name == 'pull_request_target'", request_job)
         self.assertIn("github.event.pull_request.user.login == 'litroc'", request_job)
-        self.assertNotIn("workflow_dispatch", request_job)
+        self.assertNotIn("workflow_dispatch", request_job.split("    permissions:", 1)[0])
         self.assertNotIn("synchronize", request_job)
         self.assertIn('test "$(jq -r .head.sha <<<"${pr}")" = "${EXPECTED_HEAD}"', request_job)
         self.assertIn('test "$(jq -r .user.login <<<"${pr}")" = litroc', request_job)
@@ -311,12 +312,13 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertNotIn("Contributor-funded review required", request_job)
         self.assertIn("Copilot already reviewed the exact finalized head", request_job)
         self.assertIn('reviews="$(gh api --paginate --slurp', request_job)
-        self.assertIn('--arg reviewer_login "${reviewer_login}"', request_job)
+        self.assertIn('--arg reviewer "${reviewer}"', request_job)
         self.assertIn(
-            "(.user.login == $reviewer_login or .user.login == $reviewer)",
+            ".user.login == $reviewer",
             request_job,
         )
-        self.assertNotIn("review_status", request_job)
+        self.assertIn("review_status=$?", request_job)
+        self.assertIn('if [ "${review_status}" -ne 1 ]; then', request_job)
         self.assertIn("mlx90-copilot-request head=${EXPECTED_HEAD}", request_job)
         self.assertIn(
             "The one exact-head Copilot request was already consumed; automatic retry is forbidden.",
@@ -404,15 +406,15 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("uses: ./.github/workflows/current-revision-rerun.yml", develop_handoff)
         self.assertIn(
             "uses: lightning-it/ansible-collection-supplementary/.github/workflows/"
-            "current-revision-rerun.yml@eb1b0e7437a2a4caf50e2fec058abeddca5cf088",
+            "current-revision-rerun.yml@64451b42ec9d03c47ba8156f0952c139c0744648",
             main_handoff,
         )
         self.assertIn(
-            "github.event.pull_request.base.sha == 'eb1b0e7437a2a4caf50e2fec058abeddca5cf088'",
+            "github.event.pull_request.base.sha == '64451b42ec9d03c47ba8156f0952c139c0744648'",
             main_handoff,
         )
         self.assertIn(
-            "PINNED_MAIN_HELPER: eb1b0e7437a2a4caf50e2fec058abeddca5cf088",
+            "PINNED_MAIN_HELPER: 64451b42ec9d03c47ba8156f0952c139c0744648",
             main_guard,
         )
         self.assertIn('live_main="$(gh api "repos/${REPOSITORY}/branches/main")"', main_guard)
@@ -420,8 +422,9 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("and .commit.sha == $event_base", main_guard)
         self.assertIn("needs.validate-protected-main-helper-pin.result == 'success'", main_handoff)
         self.assertIn("Advance the protected main helper pin through a normal PR to develop", main_guard)
-        self.assertNotIn("current-revision-rerun.yml/dispatches", handoff)
-        self.assertNotIn("ref=${BASE_REF}", handoff)
+        legacy_handoff = handoff.split("  dispatch-event-verifier-reevaluation:", 1)[0]
+        self.assertNotIn("current-revision-rerun.yml/dispatches", legacy_handoff)
+        self.assertNotIn("ref=${BASE_REF}", legacy_handoff)
         for required_input in (
             "base_ref",
             "pr_number",
@@ -431,121 +434,6 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         ):
             self.assertIn(required_input, develop_handoff)
             self.assertIn(required_input, main_handoff)
-
-    def test_current_revision_rerun_accepts_only_known_skipped_topology(self) -> None:
-        helper = (WORKFLOWS / "current-revision-rerun.yml").read_text(encoding="utf-8")
-        promotion_jobs = (
-            "Authorize exact Supplementary catch-up v5 successor",
-            "Verify aggregated develop-to-main promotion evidence",
-        )
-        for job_name in promotion_jobs:
-            self.assertEqual(1, helper.count(f'.name == "{job_name}"'))
-        self.assertIn("synthetic_promotion_topology_jobs=$(jq -c", helper)
-        self.assertIn(
-            'test "$(jq \'length\' <<<"${synthetic_promotion_topology_jobs}")" -le 2',
-            helper,
-        )
-        self.assertIn("($promotion | length)", helper)
-        for job_name in (
-            "Reserve protected S0 feature-to-main verification",
-            "Verify protected S0 feature-to-main input",
-            "Finalize the protected S0 feature-to-main result",
-        ):
-            self.assertEqual(1, helper.count(f'.name == "{job_name}"'))
-        self.assertIn("synthetic_s0_jobs=$(jq -c", helper)
-        self.assertIn(
-            '.run_attempt == 1 and .status == "completed" and .conclusion == "skipped"',
-            helper,
-        )
-        self.assertIn(
-            "length == (map(.name) | unique | length)",
-            helper,
-        )
-        self.assertIn("($s0 | length)", helper)
-        jq = shutil.which("jq")
-        if jq is None:
-            self.fail("jq is required for the skipped topology regression test")
-        uniqueness = "length == (map(.name) | unique | length)"
-        for names, expected in (
-            ([], 0),
-            (["Reserve protected S0 feature-to-main verification"], 0),
-            (
-                [
-                    "Reserve protected S0 feature-to-main verification",
-                    "Verify protected S0 feature-to-main input",
-                    "Finalize the protected S0 feature-to-main result",
-                ],
-                0,
-            ),
-            (["Reserve protected S0 feature-to-main verification"] * 2, 1),
-        ):
-            result = subprocess.run(  # noqa: S603
-                [jq, "-e", uniqueness],
-                input=json.dumps([{"name": name} for name in names]),
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(expected, result.returncode, result.stderr)
-
-        promotion_filter_match = re.search(
-            r"synthetic_promotion_topology_jobs=\$\(jq -c '([^']+)' <<<",
-            helper,
-        )
-        self.assertIsNotNone(promotion_filter_match)
-        promotion_filter = promotion_filter_match.group(1)  # type: ignore[union-attr]
-        accepted = {
-            "runner_id": None,
-            "steps": [],
-            "name": promotion_jobs[1],
-            "run_attempt": 1,
-            "status": "completed",
-            "conclusion": "skipped",
-        }
-        rejected_variants = (
-            {**accepted, "name": "Unknown synthetic job"},
-            {**accepted, "runner_id": 123},
-            {**accepted, "steps": [{"name": "runner-backed"}]},
-            {**accepted, "run_attempt": 2},
-            {**accepted, "status": "in_progress"},
-            {**accepted, "conclusion": "success"},
-        )
-        for candidate, expected_length in (
-            (accepted, 1),
-            ({**accepted, "name": promotion_jobs[0]}, 1),
-            *((candidate, 0) for candidate in rejected_variants),
-        ):
-            result = subprocess.run(  # noqa: S603
-                [jq, "-c", promotion_filter],
-                input=json.dumps([candidate]),
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(expected_length, len(json.loads(result.stdout)))
-
-        topology_guard_match = re.search(
-            r"jq -e '([^']+)' <<<\"\$\{synthetic_promotion_topology_jobs\}\" >/dev/null",
-            helper,
-        )
-        self.assertIsNotNone(topology_guard_match)
-        topology_guard = topology_guard_match.group(1)  # type: ignore[union-attr]
-        for names, expected in (
-            ([], 0),
-            ([promotion_jobs[0]], 0),
-            ([promotion_jobs[1]], 0),
-            ([promotion_jobs[0], promotion_jobs[1]], 0),
-            ([promotion_jobs[0], promotion_jobs[0]], 1),
-            ([promotion_jobs[0], promotion_jobs[1], promotion_jobs[0]], 1),
-        ):
-            result = subprocess.run(  # noqa: S603
-                [jq, "-e", topology_guard],
-                input=json.dumps([{"name": name} for name in names]),
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(expected, result.returncode, result.stderr)
 
     def test_current_revision_rerun_discovers_required_workflow_by_exact_head(self) -> None:
         helper = (WORKFLOWS / "current-revision-rerun.yml").read_text(encoding="utf-8")

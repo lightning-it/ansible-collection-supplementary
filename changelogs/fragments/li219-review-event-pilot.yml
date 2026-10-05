@@ -1,0 +1,8 @@
+---
+bugfixes:
+  - >-
+    Stage the explicitly gated LI-219 review-event pilot with durable request and
+    rerun claims, preserving Supplementary release and promotion contracts.
+  - >-
+    Make normal Copilot diff sizing advisory while retaining all deterministic
+    validation and protected-policy checks.
