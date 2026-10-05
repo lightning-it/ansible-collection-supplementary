@@ -44,7 +44,7 @@
           - keycloak_deploy_migration_specs.keycloak.unit != keycloak_deploy_migration_specs.postgres.unit
           - >-
             keycloak_deploy_migration_specs.postgres.unit
-            is match('^[A-Za-z0-9][A-Za-z0-9_.@-]{0,239}$')
+            is match('^[A-Za-z0-9][A-Za-z0-9_.-]{0,239}$')
           - keycloak_deploy_pod_manifest_path != keycloak_deploy_postgres_pod_manifest_path
           - keycloak_deploy_host_data_dir != keycloak_deploy_postgres_data_dir
         quiet: true

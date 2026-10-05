@@ -15,6 +15,68 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class NativeNetworkMigrationBoundaryTests(unittest.TestCase):
+    def test_managed_database_unit_precheck_matches_delegated_role_contract(self):
+        source = yaml.safe_load((ROOT / "roles/keycloak_deploy/tasks/assert.yml").read_text())
+        guard = next(task for task in source if task["name"] == "Validate managed PostgreSQL native unit identity")
+        delegated = yaml.safe_load((ROOT / "roles/postgres_deploy/tasks/assert.yml").read_text())[0]
+        expression = next(
+            value
+            for value in delegated["ansible.builtin.assert"]["that"]
+            if "postgres_deploy_systemd_unit_name is string" in value
+        )
+        tasks = []
+        for unit, valid in (
+            ("postgres", True),
+            ("postgres-db.1", True),
+            ("a" * 240, True),
+            ("a" * 241, False),
+            ("postgres@db", False),
+            (".postgres", False),
+            ("", False),
+            (None, False),
+            (7, False),
+        ):
+            for label, assertion in (
+                ("keycloak", guard),
+                ("delegated", {"ansible.builtin.assert": {"that": [expression], "quiet": True}}),
+            ):
+                tasks.extend(
+                    [
+                        {"ansible.builtin.set_fact": {"fixture_rejected": False}},
+                        {
+                            "name": "Real unit contract " + label,
+                            "vars": {
+                                "keycloak_deploy_postgres_systemd_unit_name": unit,
+                                "keycloak_deploy_manage_postgres": True,
+                                "keycloak_deploy_manage_systemd": True,
+                                "postgres_deploy_systemd_unit_name": unit,
+                                "postgres_deploy_manage_systemd": True,
+                            },
+                            "block": [assertion],
+                            "rescue": [{"ansible.builtin.set_fact": {"fixture_rejected": True}}],
+                        },
+                        {
+                            "ansible.builtin.assert": {
+                                "that": ["fixture_rejected is " + ("false" if valid else "true")],
+                                "quiet": True,
+                            }
+                        },
+                    ]
+                )
+        executable = shutil.which("ansible-playbook")
+        self.assertIsNotNone(executable, "Use the pinned Devtools container")
+        with tempfile.TemporaryDirectory(prefix="native-unit-contract-") as temporary:
+            play = Path(temporary) / "units.yml"
+            play.write_text(yaml.safe_dump([{"hosts": "localhost", "gather_facts": False, "tasks": tasks}]))
+            result = subprocess.run(  # noqa: S603 -- pinned executable and generated local fixture, no shell.
+                [executable, "-i", "localhost,", "-c", "local", str(play)],
+                capture_output=True,
+                text=True,
+                timeout=90,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_real_ownership_rejects_changed_networks_and_foreign_units(self):
         executable = shutil.which("ansible-playbook")
         self.assertIsNotNone(executable, "Use the pinned Devtools container")

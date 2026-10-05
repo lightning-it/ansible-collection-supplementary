@@ -1,6 +1,10 @@
 ---
 bugfixes:
   - >-
+    keycloak_deploy - reject unsupported dedicated database unit identities before
+    cutover and preserve valid non-static additional network bindings during
+    pre-stop, desired-runtime and rollback validation.
+  - >-
     keycloak_deploy - add an explicit default-off paired native network transition
     that preserves images and data paths and restores both Keycloak and its
     managed PostgreSQL configuration when cutover readiness fails.

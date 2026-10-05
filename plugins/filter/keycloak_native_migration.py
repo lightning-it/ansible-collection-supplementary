@@ -162,15 +162,27 @@ def runtime_identity_valid(component, record):
 
 def expected_runtime_networks(component, field='networks'):
     """Require explicit Quadlet-unit to Podman-name binding, never guess it."""
+    quadlet_text('Runtime binding validation', '/etc/fixture.yml', component[field])
     expected = {}
     for entry in component[field]:
-        unit, address = entry.split(':ip=', 1)
+        unit, static, address = entry.partition(':ip=')
         name = component['network_runtime_names'][unit]
         if (not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', name)
                 or name in expected):
             raise ValueError('unproven network runtime identity')
-        expected[name] = str(ipaddress.IPv4Address(address))
+        expected[name] = str(ipaddress.IPv4Address(address)) if static else None
     return expected
+
+
+def runtime_networks_match(actual, expected):
+    """Bind every network name, but only pin explicitly declared addresses."""
+    if set(actual) != set(expected):
+        return False
+    for name, address in actual.items():
+        ipaddress.IPv4Address(address)
+        if expected[name] is not None and address != expected[name]:
+            return False
+    return True
 
 
 def database_environment(record):
@@ -212,7 +224,7 @@ def capture_original_runtime(components, records):
                 bound = expected_runtime_networks(component, 'previous_networks')
             else:
                 raise ValueError('unproven current network controller')
-            if bound and actual != bound:
+            if bound and not runtime_networks_match(actual, bound):
                 raise ValueError('current runtime network drift')
             component['original_runtime'] = {'network_names': sorted(actual),
                                              'static_networks': bound}
@@ -239,13 +251,13 @@ def runtime_valid(components, records, database_host, database_port, desired_net
             actual = {network: value['IPAddress']
                       for network, value in record['NetworkSettings']['Networks'].items()}
             if desired_networks:
-                if actual != expected_runtime_networks(component):
+                if not runtime_networks_match(actual, expected_runtime_networks(component)):
                     raise ValueError('runtime network drift')
             else:
                 original = component['original_runtime']
                 if sorted(actual) != original['network_names']:
                     raise ValueError('rollback network identity drift')
-                if original['static_networks'] and actual != original['static_networks']:
+                if original['static_networks'] and not runtime_networks_match(actual, original['static_networks']):
                     raise ValueError('rollback static address drift')
                 if any(not value for value in actual.values()):
                     raise ValueError('rollback address missing')

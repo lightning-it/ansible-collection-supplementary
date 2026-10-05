@@ -62,6 +62,58 @@ def fixtures():
 
 
 class KeycloakNativeMigrationPlanTests(unittest.TestCase):
+    def test_dynamic_additional_networks_keep_name_binding_without_pinning_address(self):
+        components = fixtures()
+        records = {}
+        for name, component in components.items():
+            component["networks"].append("proxy.network")
+            component["previous_networks"] = component["networks"].copy()
+            component["network_runtime_names"]["proxy.network"] = "proxy"
+            component["quadlet_content"] = NATIVE.quadlet_text(
+                component["description"], component["manifest_path"], component["networks"]
+            )
+            component["manifest"]["spec"]["containers"][0]["env"][0]["value"] = "postgres"
+            records[name] = {
+                "ImageName": component["image"],
+                "Mounts": [
+                    {
+                        "Source": component["host_data_dir"],
+                        "Destination": component["container_data_dir"],
+                        "Type": "bind",
+                        "RW": True,
+                    }
+                ],
+                "NetworkSettings": {
+                    "Networks": {
+                        "database": {"IPAddress": "192.0.2." + ("2" if name == "keycloak" else "3")},
+                        "proxy": {"IPAddress": "192.0.2.9"},
+                    }
+                },
+                "Config": {"Env": ["KC_DB_URL_HOST=postgres", "KC_DB_URL_PORT=5432"]},
+            }
+        captured = NATIVE.capture_original_runtime(components, records)
+        self.assertIsNone(captured["keycloak"]["original_runtime"]["static_networks"]["proxy"])
+        self.assertFalse(NATIVE.prepare_transition(components, "postgres", 5432)["changed"])
+        for desired in (True, False):
+            changed = deepcopy(records)
+            changed["keycloak"]["NetworkSettings"]["Networks"]["proxy"]["IPAddress"] = "192.0.2.10"
+            self.assertTrue(NATIVE.runtime_valid(captured, changed, "postgres", 5432, desired))
+            for drift in ("static", "missing", "extra", "empty", "invalid"):
+                altered = deepcopy(changed)
+                networks = altered["keycloak"]["NetworkSettings"]["Networks"]
+                if drift == "static":
+                    networks["database"]["IPAddress"] = "192.0.2.4"
+                elif drift == "missing":
+                    del networks["proxy"]
+                elif drift == "extra":
+                    networks["other"] = {"IPAddress": "192.0.2.11"}
+                else:
+                    networks["proxy"]["IPAddress"] = "" if drift == "empty" else "not-an-address"
+                with self.subTest(desired=desired, drift=drift), self.assertRaises(AnsibleFilterError):
+                    NATIVE.runtime_valid(captured, altered, "postgres", 5432, desired)
+                with self.subTest(pre_stop=drift), self.assertRaises(AnsibleFilterError):
+                    NATIVE.capture_original_runtime(components, altered)
+
     def test_exact_managed_database_dns_name_is_supported_without_loosening_bindings(self):
         components = fixtures()
         result = NATIVE.prepare_transition(components, "postgres", 5432)

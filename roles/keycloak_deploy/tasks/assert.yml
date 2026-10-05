@@ -200,6 +200,19 @@
     fail_msg: "Keycloak deploy variables are missing or invalid."
   tags: always
 
+- name: Validate managed PostgreSQL native unit identity
+  ansible.builtin.assert:
+    that:
+      - keycloak_deploy_postgres_systemd_unit_name is string
+      - keycloak_deploy_postgres_systemd_unit_name | length <= 240
+      - keycloak_deploy_postgres_systemd_unit_name is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+    quiet: true
+    fail_msg: Managed PostgreSQL requires a native unit identity accepted by its deployment role.
+  when:
+    - keycloak_deploy_manage_postgres | bool
+    - keycloak_deploy_manage_systemd | bool
+  tags: always
+
 - name: Validate explicit coupled native migration scope
   ansible.builtin.assert:
     that:
