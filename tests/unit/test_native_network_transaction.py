@@ -91,6 +91,10 @@ class ActionModule(ActionBase):
                 state['fault_observed'] = state['fault_observed'] or failed
                 result.update(rc=1 if failed else 0,
                               stdout='fixture readiness')
+            elif 'getent' in argv:
+                failed = failure == 'database-dns' and state['phase'] == 'desired'
+                state['fault_observed'] = state['fault_observed'] or failed
+                result.update(rc=0, stdout=('192.0.2.4' if failed else '192.0.2.3') + ' STREAM postgres')
             elif '--format' in argv:
                 result.update(rc=0, stdout=json.dumps(['KC_DB_URL_HOST=postgres', 'KC_DB_URL_PORT=5432']))
             else:
@@ -346,7 +350,7 @@ class NativeNetworkTransactionTests(unittest.TestCase):
                 self.run_case(failure)
 
     def test_readiness_failures_restore_pair_and_remain_failed(self):
-        for failure in ("postgres-ready", "keycloak-ready"):
+        for failure in ("postgres-ready", "database-dns", "keycloak-ready"):
             with self.subTest(failure=failure):
                 self.run_case(failure)
 
