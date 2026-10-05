@@ -1020,6 +1020,19 @@ roles:
     external_dependencies: []
     known_limitations:
       - >-
+        Default-off coupled native network migration remains experimental until
+        live paired rollback, DNS isolation and restart acceptance pass on the
+        exact candidate. Fault-injected unit control-flow tests do not establish
+        Podman readiness or whole-role migration idempotence.
+      - >-
+        Managed pod/container DNS names have strict offline binding and
+        cutover-resolution rollback coverage. Live resolver isolation and
+        exact private-address resolution remain required on the target.
+      - >-
+        Native manifest semantic reconciliation has offline actual-Ansible
+        regression coverage; live no-second-restart acceptance remains pending
+        on the exact migration candidate.
+      - >-
         Heavy scopes its destructive PostgreSQL restore drill to an isolated
         probe table; whole-database disaster recovery is not claimed.
       - "No supported-version upgrade path is currently claimed by this deployment role."
@@ -1651,6 +1664,10 @@ roles:
     known_limitations:
       - "Root scenario is a syntax stub; Keycloak exercises deployment only indirectly."
       - "Native Quadlet lifecycle is covered indirectly by the Keycloak Heavy scenario."
+      - >-
+        Native manifest semantic reconciliation has offline actual-Ansible
+        regression coverage; this does not establish standalone PostgreSQL
+        runtime or coupled migration acceptance.
     deprecation_state: "active"
     scenario_support:
       tiny:

@@ -322,16 +322,21 @@
             quiet: true
           when: not (keycloak_deploy_native_quadlet_file.stat.exists | default(false))
 
+        - name: Privately render the desired Keycloak manifest for comparison
+          ansible.builtin.set_fact:
+            keycloak_deploy_desired_manifest_content: "{{ lookup('ansible.builtin.template', 'keycloak-pod.yml.j2') }}"
+          no_log: true
+
         - name: Preview transactional Keycloak Pod manifest drift
-          ansible.builtin.template:
-            src: keycloak-pod.yml.j2
-            dest: "{{ keycloak_deploy_pod_manifest_path }}"
-            owner: root
-            group: root
-            mode: '0600'
+          ansible.builtin.set_fact:
+            keycloak_deploy_manifest_preview:
+              changed: >-
+                {{ not (keycloak_deploy_original_manifest_file.stat.exists | default(false))
+                   or not (keycloak_deploy_original_manifest_read.content | b64decode
+                           | lit.supplementary.native_manifest_equal(keycloak_deploy_desired_manifest_content)) }}
           check_mode: true
           diff: false
-          register: keycloak_deploy_manifest_preview
+          changed_when: false
           no_log: true
 
         - name: Stop and disable the exact legacy Keycloak unit before Quadlet takeover
@@ -352,7 +357,9 @@
             - keycloak_deploy_native_systemd_active.stdout | trim == 'active'
             - keycloak_deploy_manifest_preview.changed | default(false) | bool
 
-        - name: Render the transactional Keycloak Pod manifest
+        # Must execute inside this rescue boundary, after stop and before takeover;
+        # a deferred handler cannot preserve transactional rollback ordering.
+        - name: Render the transactional Keycloak Pod manifest  # noqa: no-handler
           ansible.builtin.template:
             src: keycloak-pod.yml.j2
             dest: "{{ keycloak_deploy_pod_manifest_path }}"
@@ -360,6 +367,17 @@
             group: root
             mode: '0600'
           register: keycloak_deploy_manifest_render
+          no_log: true
+          when: keycloak_deploy_manifest_preview.changed | bool
+
+        - name: Preserve equal Keycloak manifest bytes and reconcile private permissions
+          ansible.builtin.file:
+            path: "{{ keycloak_deploy_pod_manifest_path }}"
+            state: file
+            owner: root
+            group: root
+            mode: '0600'
+          when: not keycloak_deploy_manifest_preview.changed | bool
           no_log: true
 
         - name: Manage the native Keycloak Quadlet service

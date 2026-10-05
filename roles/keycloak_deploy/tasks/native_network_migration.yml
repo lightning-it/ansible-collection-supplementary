@@ -1,0 +1,193 @@
+---
+# This preparation precedes either deploy role. Secrets stay in memory/no_log.
+- name: Prepare and execute the bounded native network transition
+  no_log: true
+  block:
+    - name: Define the exact existing native component identities
+      ansible.builtin.set_fact:
+        keycloak_deploy_migration_specs:
+          keycloak:
+            unit: "{{ keycloak_deploy_systemd_unit_name }}"
+            description: "{{ keycloak_deploy_systemd_description }}"
+            manifest_path: "{{ keycloak_deploy_pod_manifest_path }}"
+            previous_networks: "{{ keycloak_deploy_native_previous_networks.keycloak }}"
+            networks: "{{ keycloak_deploy_networks }}"
+            network_runtime_names: "{{ keycloak_deploy_native_network_runtime_names }}"
+            pod_name: "{{ keycloak_deploy_pod_name }}"
+            container_name: "{{ keycloak_deploy_container_name }}"
+            image: "{{ keycloak_deploy_image }}"
+            host_data_dir: "{{ keycloak_deploy_host_data_dir }}"
+            container_data_dir: "{{ keycloak_deploy_container_data_dir }}"
+          postgres:
+            unit: "{{ keycloak_deploy_postgres_systemd_unit_name }}"
+            description: "{{ postgres_deploy_systemd_description | default('PostgreSQL container service') }}"
+            manifest_path: "{{ keycloak_deploy_postgres_pod_manifest_path }}"
+            previous_networks: "{{ keycloak_deploy_native_previous_networks.postgres }}"
+            networks: "{{ keycloak_deploy_postgres_networks }}"
+            network_runtime_names: "{{ keycloak_deploy_native_network_runtime_names }}"
+            pod_name: "{{ keycloak_deploy_postgres_pod_name }}"
+            container_name: "{{ keycloak_deploy_postgres_container_name }}"
+            image: "{{ keycloak_deploy_postgres_image }}"
+            host_data_dir: "{{ keycloak_deploy_postgres_data_dir }}"
+            container_data_dir: "{{ keycloak_deploy_container_postgres_data_dir }}"
+        keycloak_deploy_migration_components: {}
+        keycloak_deploy_migration_snapshot_files: []
+        keycloak_deploy_migration_files: []
+        keycloak_deploy_migration_quadlet_read: {}
+        keycloak_deploy_migration_manifest_read: {}
+        keycloak_deploy_migration_original_inspect: {}
+        keycloak_deploy_migration_original_records: {}
+
+    - name: Refuse shared or malformed native component targets
+      ansible.builtin.assert:
+        that:
+          - keycloak_deploy_migration_specs.keycloak.unit != keycloak_deploy_migration_specs.postgres.unit
+          - >-
+            keycloak_deploy_migration_specs.postgres.unit
+            is match('^[A-Za-z0-9][A-Za-z0-9_.-]{0,239}$')
+          - keycloak_deploy_pod_manifest_path != keycloak_deploy_postgres_pod_manifest_path
+          - keycloak_deploy_host_data_dir != keycloak_deploy_postgres_data_dir
+        quiet: true
+        fail_msg: Coupled native migration requires distinct controller, manifest and data identities.
+
+    - name: Snapshot and prove both existing native controllers before stopping either
+      ansible.builtin.include_tasks: native_network_snapshot.yml
+      loop: [keycloak, postgres]
+      loop_control:
+        loop_var: keycloak_deploy_migration_component
+
+    - name: Prepare the paired immutable-image and data-preserving transition
+      ansible.builtin.set_fact:
+        keycloak_deploy_migration_plan: >-
+          {{ keycloak_deploy_migration_components
+             | lit.supplementary.keycloak_native_migration_plan(
+                 keycloak_deploy_db_host, keycloak_deploy_db_port | int) }}
+
+    - name: Inspect both original native runtimes before any stop
+      ansible.builtin.command:
+        argv:
+          - podman
+          - container
+          - inspect
+          - "{{ item.value.pod_name }}-{{ item.value.container_name }}"
+      loop: "{{ keycloak_deploy_migration_specs | dict2items }}"
+      register: keycloak_deploy_migration_original_inspect
+      changed_when: false
+
+    - name: Collect the original runtime observations privately
+      ansible.builtin.set_fact:
+        keycloak_deploy_migration_original_records: >-
+          {{ keycloak_deploy_migration_original_records
+             | combine({item.item.key: item.stdout | from_json | first}) }}
+      loop: "{{ keycloak_deploy_migration_original_inspect.results }}"
+
+    - name: Prove original image data and endpoint identities before any stop
+      ansible.builtin.set_fact:
+        keycloak_deploy_migration_components: >-
+          {{ keycloak_deploy_migration_components
+             | lit.supplementary.keycloak_native_snapshot_runtime(keycloak_deploy_migration_original_records) }}
+
+    - name: Bind desired file contents to their original snapshots
+      ansible.builtin.set_fact:
+        keycloak_deploy_migration_files: >-
+          {{ keycloak_deploy_migration_files + [item | combine({'desired':
+             keycloak_deploy_migration_plan.components[item.component].quadlet_content
+             if item.kind == 'quadlet'
+             else (keycloak_deploy_migration_plan.components[item.component].manifest | to_nice_yaml)})] }}
+      loop: "{{ keycloak_deploy_migration_snapshot_files }}"
+
+    - name: Resolve whether a paired transition is necessary
+      ansible.builtin.set_fact:
+        keycloak_deploy_migration_needed: "{{ keycloak_deploy_migration_plan.changed | bool }}"
+
+    - name: Prove DNS lookup tooling in the pinned Keycloak container before either stop
+      ansible.builtin.command:
+        argv:
+          - podman
+          - exec
+          - "{{ keycloak_deploy_pod_name }}-{{ keycloak_deploy_container_name }}"
+          - getent
+          - --version
+      changed_when: false
+      when:
+        - keycloak_deploy_migration_needed | bool
+        - not keycloak_deploy_db_host is match('^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$')
+
+    - name: Cut over both native controllers with paired restoration
+      when: keycloak_deploy_migration_needed | bool
+      block:
+        - name: Stop Keycloak before its dedicated database
+          ansible.builtin.systemd_service:
+            name: "{{ keycloak_deploy_migration_specs[item].unit }}.service"
+            state: stopped
+          loop: [keycloak, postgres]
+
+        - name: Replace only the bound network and database-endpoint configuration
+          lit.supplementary.atomic_path:
+            path: "{{ item.path }}"
+            state: file
+            content: "{{ item.desired }}"
+            owner: root
+            group: root
+            mode: "{{ item.mode }}"
+            expected_checksum: "{{ item.checksum }}"
+            parent_identities: "{{ item.parent_identities }}"
+          loop: "{{ keycloak_deploy_migration_files }}"
+          when: item.kind == 'quadlet' or item.component == 'keycloak'
+
+        - name: Reload generated native units after paired configuration replacement
+          ansible.builtin.systemd_service:
+            daemon_reload: true
+
+        - name: Start and validate the dedicated database before Keycloak
+          ansible.builtin.include_tasks: native_network_start.yml
+
+      rescue:
+        - name: Stop both exact services before restoring either configuration
+          ansible.builtin.systemd_service:
+            name: "{{ keycloak_deploy_migration_specs[item].unit }}.service"
+            state: stopped
+          loop: [keycloak, postgres]
+
+        - name: Validate every rollback target before restoring any configuration
+          ansible.builtin.include_tasks: native_network_validate_restore.yml
+          loop: "{{ keycloak_deploy_migration_files }}"
+          loop_control:
+            loop_var: keycloak_deploy_migration_restore_file
+
+        - name: Restore the validated pair with final per-write identity and checksum checks
+          ansible.builtin.include_tasks: native_network_restore.yml
+          loop: "{{ keycloak_deploy_migration_files }}"
+          loop_control:
+            loop_var: keycloak_deploy_migration_restore_file
+
+        - name: Reload original paired native units
+          ansible.builtin.systemd_service:
+            daemon_reload: true
+
+        - name: Recover the original database and Keycloak readiness
+          ansible.builtin.include_tasks: native_network_start.yml
+          vars:
+            keycloak_deploy_migration_validate_desired: false
+
+        - name: Report failed cutover after successful original service restoration
+          ansible.builtin.fail:
+            msg: Native network transition failed; original paired configuration and readiness restored.
+
+  always:
+    - name: Discard in-memory manifest and configuration snapshots
+      ansible.builtin.set_fact:
+        keycloak_deploy_migration_specs: {}
+        keycloak_deploy_migration_components: {}
+        keycloak_deploy_migration_snapshot_files: []
+        keycloak_deploy_migration_files: []
+        keycloak_deploy_migration_plan: {}
+        keycloak_deploy_migration_manifest_read: {}
+        keycloak_deploy_migration_quadlet_read: {}
+        keycloak_deploy_migration_snapshot_read: {}
+        keycloak_deploy_migration_environment: {}
+        keycloak_deploy_migration_runtime_inspect: {}
+        keycloak_deploy_migration_runtime_records: {}
+        keycloak_deploy_migration_original_inspect: {}
+        keycloak_deploy_migration_original_records: {}
+      no_log: true
