@@ -1,0 +1,10 @@
+---
+bugfixes:
+  - >-
+    keycloak_deploy - add an explicit default-off paired native network transition
+    that preserves images and data paths and restores both Keycloak and its
+    managed PostgreSQL configuration when cutover readiness fails.
+  - >-
+    keycloak_deploy - accept the exact managed PostgreSQL pod DNS name while
+    retaining its declared private network and peer-address binding; reject
+    arbitrary external database names.

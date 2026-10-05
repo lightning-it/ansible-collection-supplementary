@@ -1,0 +1,49 @@
+---
+- name: Read the exact loaded native controller provenance
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - "{{ keycloak_deploy_migration_specs[keycloak_deploy_migration_component].unit }}.service"
+      - --property=ActiveState,UnitFileState,FragmentPath,SourcePath,DropInPaths
+  register: keycloak_deploy_migration_unit_read
+  changed_when: false
+
+- name: Require active generated units without extra drop-ins
+  ansible.builtin.assert:
+    that:
+      - "'ActiveState=active' in keycloak_deploy_migration_unit_read.stdout_lines"
+      - "'UnitFileState=generated' in keycloak_deploy_migration_unit_read.stdout_lines"
+      - "'DropInPaths=' in keycloak_deploy_migration_unit_read.stdout_lines"
+      - >-
+        ('SourcePath=' ~ keycloak_deploy_quadlet_dir ~ '/'
+        ~ keycloak_deploy_migration_specs[keycloak_deploy_migration_component].unit ~ '.kube')
+        in keycloak_deploy_migration_unit_read.stdout_lines
+      - >-
+        ('FragmentPath=/run/systemd/generator/'
+        ~ keycloak_deploy_migration_specs[keycloak_deploy_migration_component].unit ~ '.service')
+        in keycloak_deploy_migration_unit_read.stdout_lines
+    quiet: true
+    fail_msg: Existing native pair is not the explicitly supported active generated controller state.
+
+- name: Snapshot the exact native Quadlet and Pod manifest
+  ansible.builtin.include_tasks: native_network_snapshot_file.yml
+  loop:
+    - path: >-
+        {{ keycloak_deploy_quadlet_dir }}/{{ keycloak_deploy_migration_specs[
+           keycloak_deploy_migration_component].unit }}.kube
+      kind: quadlet
+      mode: '0644'
+    - path: "{{ keycloak_deploy_migration_specs[keycloak_deploy_migration_component].manifest_path }}"
+      kind: manifest
+      mode: '0600'
+  loop_control:
+    loop_var: keycloak_deploy_migration_snapshot_file
+
+- name: Complete the component input from its private snapshots
+  ansible.builtin.set_fact:
+    keycloak_deploy_migration_components: >-
+      {{ keycloak_deploy_migration_components | combine({keycloak_deploy_migration_component:
+         keycloak_deploy_migration_specs[keycloak_deploy_migration_component] | combine({
+           'quadlet_content': keycloak_deploy_migration_quadlet_read.content | b64decode,
+           'manifest': keycloak_deploy_migration_manifest_read.content | b64decode | from_yaml})}) }}

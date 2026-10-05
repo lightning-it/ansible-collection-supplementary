@@ -1,0 +1,95 @@
+---
+- name: Start the dedicated native PostgreSQL controller
+  ansible.builtin.systemd_service:
+    name: "{{ keycloak_deploy_migration_specs.postgres.unit }}.service"
+    state: started
+
+- name: Require PostgreSQL readiness inside its own pinned container
+  ansible.builtin.command:
+    argv:
+      - podman
+      - exec
+      - "{{ keycloak_deploy_postgres_pod_name }}-{{ keycloak_deploy_postgres_container_name }}"
+      - pg_isready
+      - -h
+      - 127.0.0.1
+      - -p
+      - "{{ keycloak_deploy_postgres_container_port | string }}"
+  register: keycloak_deploy_migration_postgres_ready
+  until: keycloak_deploy_migration_postgres_ready.rc == 0
+  retries: 30
+  delay: 2
+  changed_when: false
+
+- name: Start the native Keycloak controller after database readiness
+  ansible.builtin.systemd_service:
+    name: "{{ keycloak_deploy_migration_specs.keycloak.unit }}.service"
+    state: started
+
+- name: Require Keycloak readiness and liveness after paired service start
+  ansible.builtin.uri:
+    url: "{{ item }}"
+    validate_certs: "{{ keycloak_deploy_validate_certs }}"
+    status_code: 200
+  loop:
+    - "{{ keycloak_deploy_health_url_effective }}"
+    - "{{ keycloak_deploy_liveness_url_effective }}"
+  register: keycloak_deploy_migration_keycloak_health
+  until: keycloak_deploy_migration_keycloak_health.status | default(0) == 200
+  retries: 30
+  delay: 5
+  changed_when: false
+
+- name: Inspect the effective database endpoint after native cutover
+  ansible.builtin.command:
+    argv:
+      - podman
+      - container
+      - inspect
+      - "{{ keycloak_deploy_pod_name }}-{{ keycloak_deploy_container_name }}"
+      - --format
+      - "{{ '{{json .Config.Env}}' }}"
+  register: keycloak_deploy_migration_environment
+  changed_when: false
+  when: keycloak_deploy_migration_validate_desired | default(true) | bool
+
+- name: Require the declared database endpoint in the running container
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('KC_DB_URL_HOST=' ~ keycloak_deploy_db_host)
+        in (keycloak_deploy_migration_environment.stdout | from_json)
+      - >-
+        ('KC_DB_URL_PORT=' ~ keycloak_deploy_db_port | string)
+        in (keycloak_deploy_migration_environment.stdout | from_json)
+    quiet: true
+    fail_msg: Native cutover did not consume the declared database endpoint.
+  when: keycloak_deploy_migration_validate_desired | default(true) | bool
+
+- name: Inspect both running native containers without logging their private configuration
+  ansible.builtin.command:
+    argv:
+      - podman
+      - container
+      - inspect
+      - "{{ item.value.pod_name }}-{{ item.value.container_name }}"
+  loop: "{{ keycloak_deploy_migration_specs | dict2items }}"
+  register: keycloak_deploy_migration_runtime_inspect
+  changed_when: false
+
+- name: Collect paired runtime identities for final acceptance
+  ansible.builtin.set_fact:
+    keycloak_deploy_migration_runtime_records: >-
+      {{ keycloak_deploy_migration_runtime_records | default({})
+         | combine({item.item.key: item.stdout | from_json | first}) }}
+  loop: "{{ keycloak_deploy_migration_runtime_inspect.results }}"
+
+- name: Require preserved runtime images and data plus desired network addresses
+  ansible.builtin.assert:
+    that:
+      - >-
+        keycloak_deploy_migration_components | lit.supplementary.keycloak_native_runtime_valid(
+          keycloak_deploy_migration_runtime_records, keycloak_deploy_db_host,
+          keycloak_deploy_db_port | int, keycloak_deploy_migration_validate_desired | default(true) | bool)
+    quiet: true
+    fail_msg: Native runtime identities do not match the paired transition.

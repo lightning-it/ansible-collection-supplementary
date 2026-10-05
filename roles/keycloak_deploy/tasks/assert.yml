@@ -200,6 +200,22 @@
     fail_msg: "Keycloak deploy variables are missing or invalid."
   tags: always
 
+- name: Validate explicit coupled native migration scope
+  ansible.builtin.assert:
+    that:
+      - keycloak_deploy_native_network_migration is boolean
+      - keycloak_deploy_native_previous_networks is mapping
+      - keycloak_deploy_native_network_runtime_names is mapping
+      - >-
+        not keycloak_deploy_native_network_migration or
+        (keycloak_deploy_manage_postgres and keycloak_deploy_manage_systemd
+        and keycloak_deploy_systemd_scope == 'system' and keycloak_deploy_systemd_enabled
+        and not keycloak_deploy_host_network and not keycloak_deploy_postgres_host_network
+        and keycloak_deploy_native_previous_networks.keys() | sort == ['keycloak', 'postgres'])
+    fail_msg: Coupled migration requires explicit prior bindings and two managed native system services.
+    quiet: true
+  tags: always
+
 - name: Validate static IPv4 addresses in Keycloak Quadlet network entries
   ansible.builtin.command:
     argv:
@@ -218,20 +234,14 @@
   tags: always
 
 - name: Validate the managed private PostgreSQL endpoint
-  ansible.builtin.command:
-    argv:
-      - "{{ ansible_facts.get('python', {}).get('executable', '/usr/bin/python3') }}"
-      - -c
+  ansible.builtin.assert:
+    that:
       - >-
-        import ipaddress,json,sys; host=ipaddress.ip_address(sys.argv[1]);
-        keycloak={spec.split(':',1)[0] for spec in json.loads(sys.argv[2])};
-        postgres=json.loads(sys.argv[3]); sys.exit(not(host.is_private and any(spec.split(':',1)[0]
-        in keycloak and f':ip={host},' in spec+',' for spec in postgres)))
-      - "{{ keycloak_deploy_db_host }}"
-      - "{{ keycloak_deploy_networks | to_json }}"
-      - "{{ keycloak_deploy_postgres_networks | to_json }}"
-  changed_when: false
-  check_mode: false
+        keycloak_deploy_db_host | lit.supplementary.keycloak_private_database_endpoint_valid(
+          keycloak_deploy_networks, keycloak_deploy_postgres_networks,
+          keycloak_deploy_postgres_pod_name)
+    quiet: true
+    fail_msg: Managed PostgreSQL requires its exact pod DNS name or a bound private address on the shared network.
   when:
     - keycloak_deploy_manage_postgres | bool
     - not keycloak_deploy_host_network | bool

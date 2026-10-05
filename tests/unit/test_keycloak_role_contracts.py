@@ -699,8 +699,23 @@ exit 0
             self.assertIn(contract, assertions)
         tasks = yaml.safe_load(assertions)
         validation = next(task for task in tasks if task["name"] == "Validate the managed private PostgreSQL endpoint")
-        command = validation["ansible.builtin.command"]["argv"]
-        self.assertIn("host.is_private and any", command[2])
+        endpoint_contract = "\n".join(validation["ansible.builtin.assert"]["that"])
+        for binding in (
+            "lit.supplementary.keycloak_private_database_endpoint_valid",
+            "keycloak_deploy_db_host",
+            "keycloak_deploy_networks",
+            "keycloak_deploy_postgres_networks",
+            "keycloak_deploy_postgres_pod_name",
+        ):
+            self.assertIn(binding, endpoint_contract)
+        self.assertEqual(
+            validation["when"],
+            [
+                "keycloak_deploy_manage_postgres | bool",
+                "not keycloak_deploy_host_network | bool",
+                "not keycloak_deploy_postgres_host_network | bool",
+            ],
+        )
 
     def test_managed_bridge_database_requires_native_quadlet_network_handoff(self) -> None:
         tasks = yaml.safe_load(

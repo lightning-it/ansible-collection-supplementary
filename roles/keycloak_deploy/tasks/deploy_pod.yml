@@ -367,6 +367,7 @@
     postgres_deploy_install_packages: "{{ keycloak_deploy_install_packages }}"
     postgres_deploy_manage_systemd: "{{ keycloak_deploy_manage_systemd }}"
     postgres_deploy_systemd_scope: "{{ keycloak_deploy_systemd_scope }}"
+    postgres_deploy_systemd_unit_name: "{{ keycloak_deploy_postgres_systemd_unit_name }}"
     postgres_deploy_quadlet_dir: "{{ keycloak_deploy_quadlet_dir }}"
     postgres_deploy_systemd_enabled: "{{ keycloak_deploy_systemd_enabled }}"
     postgres_deploy_skip_runtime: "{{ keycloak_deploy_skip_runtime }}"

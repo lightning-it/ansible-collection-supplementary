@@ -1,0 +1,33 @@
+---
+- name: Inspect one paired rollback target without following links
+  ansible.builtin.stat:
+    path: "{{ keycloak_deploy_migration_restore_file.path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: keycloak_deploy_migration_restore_stat
+
+- name: Refuse rollback over content outside this transaction
+  ansible.builtin.assert:
+    that:
+      - keycloak_deploy_migration_restore_stat.stat.isreg | default(false)
+      - not keycloak_deploy_migration_restore_stat.stat.islnk | default(false)
+      - keycloak_deploy_migration_restore_stat.stat.uid == 0
+      - keycloak_deploy_migration_restore_stat.stat.gid == 0
+      - keycloak_deploy_migration_restore_stat.stat.mode == keycloak_deploy_migration_restore_file.mode
+      - >-
+        keycloak_deploy_migration_restore_stat.stat.checksum
+        in [keycloak_deploy_migration_restore_file.checksum,
+            keycloak_deploy_migration_restore_file.desired | hash('sha256')]
+    quiet: true
+    fail_msg: Paired rollback detected external drift; services remain stopped rather than overwrite it.
+
+- name: Restore the original configuration through its bound parent
+  lit.supplementary.atomic_path:
+    path: "{{ keycloak_deploy_migration_restore_file.path }}"
+    state: file
+    content: "{{ keycloak_deploy_migration_restore_file.original }}"
+    owner: root
+    group: root
+    mode: "{{ keycloak_deploy_migration_restore_file.mode }}"
+    expected_checksum: "{{ keycloak_deploy_migration_restore_stat.stat.checksum }}"
+    parent_identities: "{{ keycloak_deploy_migration_restore_file.parent_identities }}"
