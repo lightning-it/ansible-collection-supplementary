@@ -1,0 +1,118 @@
+{
+  "schema": 1,
+  "repository": "lightning-it/ansible-collection-supplementary",
+  "preparation_source_commit": "f1e3c99edfe6fe68f00fd43ba02f805d9f7d5239",
+  "protected_source_commit": null,
+  "status": "pre-P1-local-preparation-awaits-reviewed-reconciler-successor-and-protected-source-binding",
+  "target_base": "c983bb3c8aa26114f682d825bfaca6fa1be187e4",
+  "bindings": [
+    {
+      "source_path": "default/.github/workflows/copilot-review-refresh.yml",
+      "target_path": ".github/workflows/copilot-review-refresh.yml",
+      "source_sha256": "e80c892de0cd8d523179b533ef2fce1e660310c82650f2db1429c3af3ec0ce15",
+      "source_blob": "3b8ef461c7e03b7a0d062d98bc2b69e936e1b587",
+      "mode": "byte-identical",
+      "target_sha256": "e80c892de0cd8d523179b533ef2fce1e660310c82650f2db1429c3af3ec0ce15"
+    },
+    {
+      "source_path": "default/.github/workflows/current-revision-rerun.yml",
+      "target_path": ".github/workflows/current-revision-rerun.yml",
+      "source_sha256": "2febd480773ecbe19840c4c22bf147cd1fbe77abfe0c23b66b2f07a727e58c8f",
+      "source_blob": "86112dc304cbba9e2837e022605eff9f9ff03c97",
+      "mode": "byte-identical",
+      "target_sha256": "2febd480773ecbe19840c4c22bf147cd1fbe77abfe0c23b66b2f07a727e58c8f"
+    },
+    {
+      "source_path": "default/.github/workflows/review-event-reconcile.yml",
+      "target_path": ".github/workflows/review-event-reconcile.yml",
+      "source_sha256": "0ace774677f54e1e44ab5c6b9df7c8501ee2abec0441f1ee57e4f86d1ae3f08c",
+      "source_blob": "9fe3168697fec75cda764dee0a5dd7edc8b352b3",
+      "mode": "byte-identical",
+      "target_sha256": "0ace774677f54e1e44ab5c6b9df7c8501ee2abec0441f1ee57e4f86d1ae3f08c"
+    },
+    {
+      "source_path": "default/scripts/review-event-reconcile.py",
+      "target_path": "scripts/review-event-reconcile.py",
+      "source_sha256": "171b3804b3ff84c621a31e1858a76cd895069e66f08a33002756a17b55f99cb2",
+      "source_blob": "d40f3958e5f5336a3bc7efec0841e1bbd867dadd",
+      "mode": "byte-identical",
+      "target_sha256": "171b3804b3ff84c621a31e1858a76cd895069e66f08a33002756a17b55f99cb2"
+    },
+    {
+      "source_path": ".github/workflows/dot-github-current-revision-required.yml",
+      "target_path": ".github/workflows/dot-github-current-revision-required.yml",
+      "source_sha256": "734f922840311920ea0c78a3f2e4ded3a0a74c53381bec4671f89d5c5d8fa2a6",
+      "source_blob": "db644996d86fe14d9b9ccb4d8e8156b5180ddabf",
+      "mode": "byte-identical",
+      "target_sha256": "734f922840311920ea0c78a3f2e4ded3a0a74c53381bec4671f89d5c5d8fa2a6"
+    },
+    {
+      "source_path": "default/tests/test_dot_github_current_revision.py",
+      "target_path": "tests/unit/test_dot_github_current_revision.py",
+      "source_sha256": "e956c118a4c7ead60ab352df9266570f45e7a220373c94ba2917a95698aacdf4",
+      "source_blob": "0a97dd52adb77038698bf2bd4d04f92daa475dc3",
+      "mode": "adapted-local",
+      "target_sha256": "4bc64c849028106ece888291920429518e622ce083d65832a965c71eccc20241",
+      "adaptation": "Repository formatter only; test behavior retained."
+    },
+    {
+      "source_path": "scripts/review_content_markers.py",
+      "target_path": "scripts/review_content_markers.py",
+      "source_sha256": "aa2553dc3a388e6b2c413b53d92b0326094defe0645fd9bece25821e925e97fd",
+      "source_blob": "59b6b898bc0d63758c9c35cfa38e289c1f035e52",
+      "mode": "byte-identical",
+      "target_sha256": "aa2553dc3a388e6b2c413b53d92b0326094defe0645fd9bece25821e925e97fd"
+    },
+    {
+      "source_path": "scripts/verify-dot-github-current-revision.py",
+      "target_path": "scripts/verify-dot-github-current-revision.py",
+      "source_sha256": "4ac1573add6dd927b236966dc22ae68f23f6fbb89c4244f8e7f40d7ab1c95863",
+      "source_blob": "708db09e084a20e25ba0f980b05f076a1074119a",
+      "mode": "adapted-local",
+      "target_sha256": "7cdb3f5ee93ccd15055486807ed393c91cdeefddbbf561ef3d31bb9681ccd32d"
+    },
+    {
+      "source_path": "default/.github/workflows/copilot-review.yml",
+      "target_path": ".github/workflows/copilot-review.yml",
+      "source_sha256": "4125704f24258c3100b16ff25521ba4cfebabe2d20af421bc89fe54d0c37d70e",
+      "source_blob": "95f33f3bbcc16956034f04176ea47ad69b509719",
+      "mode": "adapted-local",
+      "target_sha256": "5b0323dfe8f85a32e7b333eb46a177556555f8754dcf41fbd1fcb329d4735d5b"
+    },
+    {
+      "source_path": "default/scripts/lit-push-ready.py",
+      "target_path": "scripts/lit-push-ready.py",
+      "source_sha256": "085d4c5666ce27539df818b43bb63f8f6f63ff91a9d42e1c0566f85b0e40237f",
+      "source_blob": "f9ddd6dc164474ae1791e27fd48b7ffc93bd0c92",
+      "mode": "adapted-local",
+      "target_sha256": "fdaab1a101fd85cef3e606cb8f4107ffda1f73934cc0ff510ab440673c7d33c8"
+    }
+  ],
+  "test_sources": [
+    {
+      "path": "tests/review_event_contract_helpers.py",
+      "sha256": "58ee565b70c37a42911a25112606e77d287fe857bc1f56424f93a5846842c742",
+      "adaptation": "Local package paths and Supplementary identities; topology selector subset replaces old static assertions."
+    },
+    {
+      "path": "tests/test_review_operation_cas.py",
+      "sha256": "6460354074ce282d72faf2b2edc07d7f452cded84efcc238ed3a6ca44395c653",
+      "adaptation": "Local package paths and Supplementary identities; topology selector subset replaces old static assertions."
+    },
+    {
+      "path": "tests/test_review_event_reconcile.py",
+      "sha256": "dbe3a3c5d51f7c7b7ea44a6161da8c3cb671d3a1ddff0dbb76080c5d6f6c8c36",
+      "adaptation": "Local package paths and Supplementary identities; topology selector subset replaces old static assertions."
+    },
+    {
+      "path": "tests/test_review_event_port.py",
+      "sha256": "1bfb2a18b89a5b1a616b5be2d2c0971979b4aae315646d88c36dfd8ac5b70d1e",
+      "adaptation": "Local package paths and Supplementary identities; topology selector subset replaces old static assertions."
+    },
+    {
+      "path": "tests/test_current_revision_rerun_topology.py",
+      "sha256": "6293e6228b71efb363a79040fec9820b1eee5a6e6aaefff28dcc3637b29033e6",
+      "adaptation": "Local package paths and Supplementary identities; topology selector subset replaces old static assertions."
+    }
+  ]
+}

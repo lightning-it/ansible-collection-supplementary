@@ -96,6 +96,50 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
     be mounted into it. A scenario that needs a managed runtime belongs to a protected pipeline and MUST fail closed
     locally instead of weakening this boundary.
 
+## 1.3 LI-219 Three-Pilot Adoption (2026-10-05)
+
+This owner-authorized local adoption is restricted to `lightning-it/.github`,
+`lightning-it/shared-assets-lit`, and `lightning-it/ansible-collection-supplementary`.
+The event behavior requires the exact repository variable `LI219_EVENT_MODE=enabled`.
+Absent or disabled flags retain legacy execution. Fleet admission remains frozen.
+
+The Supplementary producer remains repository-owned. Its exact protected source
+checks, Release-App exclusion, ancestry-only exemption, Renovate restrictions,
+fork identity, metadata/label binding, and branch-specific legacy helper routes
+remain local contracts. The bounded port adopts the audited Source request claim,
+refresh, helper and reconciler. This explicit adoption does not authorize a generic
+sync to overwrite the producer or Security release and main-authorization files.
+The independent DotGithub verifier retains its native promotion-aggregation checks.
+
+Events locate evidence; protected consumers independently authorize mutations.
+The request consumes one repository-ID/PR/head CAS operation on
+`refs/heads/lit-review-operations` before its sole POST. Uncertain outcomes never
+permit a blind retry. The event refresh may consume the sole producer rerun;
+the request job is attempt-one-only. The helper validates the completed producer
+attempt and full Required inventory before the sole verifier rerun. CAS receipts
+never replace native review evidence. Terminal review content consumes no retry.
+
+The required static Contents/Checks write scopes apply only to the audited jobs;
+legacy helper jobs retain read scopes. Workflow token permissions remain
+repository-wide. Enable only after protected source/target controllers and the
+CAS manifest/rules are verified and old/new writers are quiesced and drained.
+Rollback also drains writers and preserves consumed operations.
+
+Normal Copilot PR size is advisory: Push-Ready version 3 retains its existing risk
+classification and protected-policy binding, using `review.warn_diff_bytes: 500000`.
+Legacy positive `max_diff_bytes` remains readable without imposing a diff ceiling.
+Null disables the notice. Full deterministic checks and complete input remain
+mandatory; no automatic splitting, truncation or additional AI review follows.
+Per-file safe-read limits, historical evidence schemas and model-call contracts
+remain separate. No new model-call route is introduced by this pilot.
+
+`.lit/li219-pilot-source.json` records exact preparation hashes. Its protected-source
+field must be bound by the publisher after the real Source promotion; a local
+feature-source hash is not protected rollout authority. The scoped inventory
+`.lit/li219-managed-assets.json`, validated by the pilot contract tests,
+distinguishes byte-identical source assets from locally adapted contracts. It
+does not opt the collection into a repository-wide managed inventory or fleet sync.
+
 ## 2. Repository Baseline (This Repo)
 
 1. Repository identity values (namespace, name, license, tags, dependencies) MUST be read from `galaxy.yml`.

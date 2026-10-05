@@ -57,6 +57,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
+          LI219_EVENT_MODE: ${{ github.repository == 'lightning-it/.github' && vars.LI219_EVENT_MODE == 'enabled' && 'enabled' || 'disabled' }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
           WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: python3 protected-source/scripts/verify-dot-github-current-revision.py

@@ -1,5 +1,5 @@
-# Managed by lightning-it/shared-assets-lit.
-# Do not edit downstream copies directly.
+# Repository-owned Supplementary producer.
+# LI-219 request/event pieces adapted from the explicitly bound Shared Assets source.
 # Protected per-repository MLX-90/REP-60 current-revision controller.
 # Release-App review belongs only to the sibling protected controller at
 # .github/workflows/release-bot-exact-head-review.yml.
@@ -25,12 +25,16 @@ permissions:
   pull-requests: read
 
 env:
+  LI219_EVENT_MODE: ${{ (vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) && 'enabled' || 'disabled' }}
   COPILOT_REVIEWER_LOGIN: copilot-pull-request-reviewer
   NO_FILES_REVIEW_MARKER: was not able to review any files
   UNABLE_REVIEW_MARKER: unable to review this pull request
   QUOTA_EXHAUSTED_MARKER: quota exhausted
   QUOTA_EXCEEDED_MARKER: quota exceeded
+  PREMIUM_REQUEST_QUOTA_MARKER: premium request quota
+  PREMIUM_REQUESTS_QUOTA_MARKER: premium requests quota
   SUPPRESSED_COMMENTS_MARKER: suppressed comments
+  ERROR_REVIEW_MARKER: encountered an error
 
 concurrency:
   # A synchronize/reopened verifier run must never cancel the one-time
@@ -48,6 +52,10 @@ concurrency:
 jobs:
   request-current-revision-review:
     name: Request Copilot review for current revision
+    # This predicate governs only Lightning-IT-funded review requests; it is
+    # deliberately not the acceptance predicate. Non-litroc contributors
+    # supply a current-head Copilot review under their own entitlement, and
+    # verify-current-revision-policy validates that review below.
     if: >-
       github.event_name == 'pull_request_target' &&
       (github.event.action == 'opened' ||
@@ -55,17 +63,162 @@ jobs:
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.user.login == 'litroc' &&
+      github.run_attempt == 1 &&
       github.actor == 'litroc' &&
       github.triggering_actor == 'litroc'
     permissions:
       actions: read
-      contents: read
+      contents: write
       issues: write
       pull-requests: write
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
+      - name: Materialize the protected operation claim
+        run: |
+          set -euo pipefail
+          umask 077
+          cat >"${RUNNER_TEMP}/request-operation.sh" <<'CLAIM'
+          claim_review_operation() {
+            [ "${LI219_EVENT_MODE:-disabled}" = enabled ] || return 0
+            # The data ref is the CAS authority; Check inventory is never a lock.
+            local target="$1" head="$2" base="$3" pr="$4"
+            local key path action target_run created now prior snapshot record payload response committed marker rows attempt
+            [[ "${target}" =~ ^[1-9][0-9]*$ ]] || return 1
+            [[ "${pr}" =~ ^[1-9][0-9]*$ ]] || return 1
+            [[ "${head}" =~ ^[0-9a-f]{40}$ ]] || return 1
+            [[ "${base}" =~ ^[0-9a-f]{40}$ ]] || return 1
+            [[ "${GITHUB_REPOSITORY_ID}" =~ ^[1-9][0-9]*$ ]] || return 1
+            [[ "${GITHUB_RUN_ID}" =~ ^[1-9][0-9]*$ ]] || return 1
+            [ "${GITHUB_RUN_ATTEMPT}" = 1 ] || return 1
+            action="${5:-rerun}"
+            case "${action}" in
+              rerun) [ "${GITHUB_EVENT_NAME}" = workflow_dispatch ] || return 1 ;;
+              request) [ "${GITHUB_EVENT_NAME}" = pull_request_target ] || return 1 ;;
+              *) return 1 ;;
+            esac
+            [ "${GITHUB_REF_PROTECTED}" = true ] || return 1
+            [[ "${GITHUB_REF}" =~ ^refs/heads/(develop|main)$ ]] || return 1
+            [[ "${WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]] || return 1
+            operation_api() {
+              if declare -F bounded_gh_api >/dev/null; then
+                bounded_gh_api "$@"
+              else
+                timeout --foreground --signal=TERM --kill-after=2s 30s gh api "$@"
+              fi
+            }
+            operation_ref() {
+              local result
+              result="$(operation_api "repos/${REPOSITORY}/git/ref/heads/lit-review-operations")" || return 1
+              jq -er 'select(.ref == "refs/heads/lit-review-operations" and .object.type == "commit")
+                | .object.sha | strings | select(test("^[0-9a-f]{40}$"))' <<<"${result}"
+            }
+            operation_snapshot() {
+              # Source commit, manifest and operation are one immutable snapshot. Never
+              # combine a mutable ref read with a separately resolved branch:path read.
+              local oid="$1" result
+              result="$(operation_api graphql -f query='query($owner:String!,$name:String!,$oid:String!,$manifest:String!,$record:String!){
+                repository(owner:$owner,name:$name){nameWithOwner
+                  source:object(expression:$oid){__typename oid}
+                  manifest:object(expression:$manifest){__typename ... on Blob{isTruncated byteSize text}}
+                  record:object(expression:$record){__typename ... on Blob{isTruncated byteSize text}}
+                }}' -f "owner=${REPOSITORY%%/*}" -f "name=${REPOSITORY#*/}" \
+                -f "oid=${oid}" -f "manifest=${oid}:manifest.json" -f "record=${oid}:${path}")" || return 1
+              jq -ce --arg oid "${oid}" --arg repo "${REPOSITORY}" --arg repo_id "${GITHUB_REPOSITORY_ID}" '
+                select(has("errors") | not) | .data.repository
+                | select(.nameWithOwner == $repo and .source.__typename == "Commit" and .source.oid == $oid)
+                | select(.manifest.__typename == "Blob" and .manifest.isTruncated == false
+                    and (.manifest.byteSize | type) == "number" and .manifest.byteSize > 0 and .manifest.byteSize <= 4096)
+                | select((.manifest.text | fromjson) == {schema:1,repository:$repo,repository_id:$repo_id,ref:"refs/heads/lit-review-operations"})
+                | select(has("record"))
+                | if .record == null then {present:false} else
+                    .record | select(.__typename == "Blob" and .isTruncated == false
+                      and (.byteSize | type) == "number" and .byteSize > 0 and .byteSize <= 4096)
+                    | {present:true,record:(.text | fromjson)} end
+                ' <<<"${result}"
+            }
+            target_run="$(operation_api "repos/${REPOSITORY}/actions/runs/${target}")" || return 1
+            created="$(jq -er --argjson id "${target}" '
+              select(.id == $id and .run_attempt == 1) | .created_at | fromdateiso8601
+              ' <<<"${target_run}")" || return 1
+            now="$(date +%s)"
+            if [ "$((now - created))" -gt 604800 ] || [ "${created}" -gt "${now}" ]; then
+              echo 'Verifier event reservation expired; merge remains blocked.' >&2
+              return 1
+            fi
+            key="li219-verifier-operation:v1:${pr}:${base}:${head}:${target}"
+            if [ "${action}" = request ]; then
+              # Base changes and fresh producer run IDs cannot buy another AI call.
+              key="li219-review-request:v1:${GITHUB_REPOSITORY_ID}:${pr}:${head}"
+            fi
+            path="operations/$(printf '%s' "${key}" | sha256sum | cut -d ' ' -f 1).json"
+            prior="$(operation_ref)" || return 1
+            snapshot="$(operation_snapshot "${prior}")" || return 1
+            if [ "$(jq -r .present <<<"${snapshot}")" != false ]; then
+              echo 'Verifier operation already consumed; only native-state reconciliation is allowed.' >&2
+              return 1
+            fi
+            record="$(jq -cn --arg key "${key}" --arg repo "${REPOSITORY}" --arg run "${GITHUB_RUN_ID}" \
+              --arg source "${WORKFLOW_SHA}" --arg repo_id "${GITHUB_REPOSITORY_ID}" --arg action "${action}" '{schema:1,repository:$repo,repository_id:$repo_id,action:$action,operation:$key,claim_run:$run,claim_attempt:"1",source_sha:$source}')" || return 1
+            payload="$(jq -cn --arg repo "${REPOSITORY}" --arg prior "${prior}" --arg path "${path}" \
+              --arg content "$(printf '%s' "${record}" | base64 -w 0)" '{
+                query:"mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid parents(first:2){nodes{oid}}}}}",
+                variables:{input:{branch:{repositoryNameWithOwner:$repo,branchName:"lit-review-operations"},
+                  expectedHeadOid:$prior,message:{headline:"Consume LI-219 verifier operation"},
+                  fileChanges:{additions:[{path:$path,contents:$content}]}}}}')" || return 1
+            # Exactly one CAS attempt. A lost response or conflict is NOT permission to
+            # retry a mutation, even if readback finds our record. Only confirmed winners
+            # may reach the single rerun POST in this invocation.
+            committed=''
+            if response="$(operation_api graphql --input - <<<"${payload}")"; then
+              committed="$(jq -er --arg prior "${prior}" '
+                select(has("errors") | not) | .data.createCommitOnBranch.commit
+                | select(.parents.nodes == [{oid:$prior}])
+                | .oid | strings | select(test("^[0-9a-f]{40}$") and . != $prior)
+                ' <<<"${response}")" || committed=''
+            fi
+            if [ -z "${committed}" ]; then
+              for attempt in 1 2 3; do
+                if prior="$(operation_ref)" && snapshot="$(operation_snapshot "${prior}")" \
+                    && [ "$(jq -r .present <<<"${snapshot}")" = true ]; then break; fi
+                [ "${attempt}" -eq 3 ] || sleep 2
+              done
+              echo 'CAS conflict or uncertain claim response; reconciliation only, no rerun sent.' >&2
+              return 1
+            fi
+            snapshot="$(operation_snapshot "${committed}")" || return 1
+            jq -e --argjson record "${record}" '.present == true and .record == $record' \
+              <<<"${snapshot}" >/dev/null || return 1
+            if [ "${action}" = request ]; then
+              CLAIM_COMMIT="${committed}"
+              return 0
+            fi
+            marker="$(jq -cn --arg key "${key}" --arg run "${GITHUB_RUN_ID}" \
+              --arg commit "${committed}" '{operation:$key,claim_run:$run,claim_attempt:"1",journal_commit:$commit}')" || return 1
+            operation_api --method POST "repos/${REPOSITORY}/check-runs" \
+              -f 'name=Review event operation' -f "head_sha=${head}" -f "external_id=${key}" \
+              -f status=completed -f conclusion=neutral -f 'output[title]=Verifier mutation consumed' \
+              -f "output[summary]=${marker}" >/dev/null || true
+            for attempt in 1 2 3; do
+              if rows="$(operation_api --paginate --slurp \
+                  "repos/${REPOSITORY}/commits/${head}/check-runs?check_name=Review%20event%20operation&filter=all&per_page=100")" \
+                && jq -e --arg marker "${marker}" --arg key "${key}" --arg head "${head}" '
+                  select(type == "array" and length > 0 and length <= 10)
+                  | select(all(.[]; (.check_runs | type) == "array"))
+                  | [.[].check_runs[] | select(.external_id == $key)]
+                  | length == 1 and .[0].output.summary == $marker
+                    and .[0].name == "Review event operation" and .[0].head_sha == $head
+                    and .[0].app.id == 15368 and .[0].app.slug == "github-actions"
+                    and .[0].status == "completed" and .[0].conclusion == "neutral"
+                    and .[0].output.title == "Verifier mutation consumed"
+                  ' <<<"${rows}" >/dev/null; then return 0; fi
+              [ "${attempt}" -eq 3 ] || sleep 2
+            done
+            echo 'Consumed operation receipt not visible; no rerun sent.' >&2
+            return 1
+          }
+          CLAIM
       - name: Request Copilot review for the current revision
         env:
           GH_TOKEN: ${{ github.token }}
@@ -76,6 +229,7 @@ jobs:
           EXPECTED_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           REPOSITORY: ${{ github.repository }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
           TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
           TRUSTED_WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
@@ -85,6 +239,20 @@ jobs:
           [[ "${TRUSTED_WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
           test "${DEFAULT_BRANCH}" = develop
           [[ "${EXPECTED_BASE_REF}" =~ ^(develop|main)$ ]]
+          live_pr=''
+          assert_bound_head_current() {
+            local live_head
+            # Status 1 is reserved for the legitimate "review/request absent"
+            # result in callers below. An unreadable or malformed live head is
+            # indeterminate and must never authorize a new review request.
+            live_pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")" || return 2
+            live_head="$(jq -er '.head.sha | select(type == "string" and test("^[0-9a-f]{40}$"))' \
+              <<<"${live_pr}")" || return 2
+            if [ "${live_head}" != "${EXPECTED_HEAD}" ]; then
+              echo 'STALE: bound head no longer equals live PR head; result is not usable.' >&2
+              exit 78
+            fi
+          }
           test "${TRUSTED_WORKFLOW_REF}" = \
             "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/${DEFAULT_BRANCH}"
           if [ "${EXPECTED_BASE_REF}" = develop ]; then
@@ -117,7 +285,8 @@ jobs:
               and .repository.full_name == $repository
               and .head_repository.full_name == $repository
             ' <<<"${protected_run}" >/dev/null
-          pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
+          assert_bound_head_current
+          pr="${live_pr}"
           test "$(jq -r .state <<<"${pr}")" = open
           test "$(jq -r .draft <<<"${pr}")" = false
           base_ref="$(jq -er '.base.ref | select(. == "develop" or . == "main")' <<<"${pr}")"
@@ -134,45 +303,97 @@ jobs:
           requested_reviewers_url="repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers"
           marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
           review_exists_for_head() {
-            local reviews
-            reviews="$(gh api --paginate --slurp \
-              "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100")"
-            jq -e \
-              --arg reviewer_login "${reviewer_login}" \
+            local reviews status
+            assert_bound_head_current || return $?
+            if ! reviews="$(gh api --paginate --slurp \
+              "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100")"; then
+              return 2
+            fi
+            if ! jq -e '
+              (type == "array")
+              and all(.[]?; type == "array")
+              and all(.[][]?;
+                (type == "object")
+                and ((.user | type) == "object")
+                and ((.user.login | type) == "string")
+                and ((.user.login | length) > 0)
+                and (.user.login | test("^[^[:space:]]+$"))
+                and ((.commit_id | type) == "string")
+                and (.commit_id | test("^[0-9a-f]{40}$"))
+                and ((.state | type) == "string")
+                and (.state == "PENDING" or .state == "COMMENTED" or .state == "APPROVED" or .state == "CHANGES_REQUESTED" or .state == "DISMISSED")
+                and has("body")
+                and (.body == null or ((.body | type) == "string"))
+              )
+            ' <<<"${reviews}" >/dev/null; then
+              return 2
+            fi
+            if jq -e \
               --arg reviewer "${reviewer}" \
               --arg head "${EXPECTED_HEAD}" \
               --arg retry_unable "${UNABLE_REVIEW_MARKER}" \
               --arg retry_no_files "${NO_FILES_REVIEW_MARKER}" \
               --arg retry_quota_exhausted "${QUOTA_EXHAUSTED_MARKER}" \
               --arg retry_quota_exceeded "${QUOTA_EXCEEDED_MARKER}" \
-              --arg retry_suppressed "${SUPPRESSED_COMMENTS_MARKER}" '
-                any(add[];
-                  (.user.login == $reviewer_login or .user.login == $reviewer)
+              --arg retry_premium_request_quota "${PREMIUM_REQUEST_QUOTA_MARKER}" \
+              --arg retry_premium_requests_quota "${PREMIUM_REQUESTS_QUOTA_MARKER}" \
+              --arg retry_suppressed "${SUPPRESSED_COMMENTS_MARKER}" \
+              --arg retry_error "${ERROR_REVIEW_MARKER}" '
+                def compact_error_marker:
+                  ascii_downcase
+                  | split("")
+                  | map(select(test("\\s") | not))
+                  | join("");
+                ($retry_error | compact_error_marker) as $error
+                | any(add[];
+                  .user.login == $reviewer
                   and .commit_id == $head
                   and (.state == "COMMENTED" or .state == "APPROVED")
                   and (((.body // "") | ascii_downcase) as $body
+                    | ($body | compact_error_marker) as $compact_body
                     | ($body | contains($retry_unable) | not)
                     and ($body | contains($retry_no_files) | not)
                     and ($body | contains("able to review any files") | not)
                     and ($body | contains($retry_quota_exhausted) | not)
                     and ($body | contains($retry_quota_exceeded) | not)
+                    and ($body | contains($retry_premium_request_quota) | not)
+                    and ($body | contains($retry_premium_requests_quota) | not)
                     and ($body | contains($retry_suppressed) | not)
-                    and ($body | contains("encountered an error") | not))
+                    and ($compact_body | contains($error) | not))
                 )
-              ' <<<"${reviews}" >/dev/null
+              ' <<<"${reviews}" >/dev/null; then
+              return 0
+            else
+              status=$?
+            fi
+            if [ "${status}" -ne 1 ]; then
+              return "${status}"
+            fi
+            return 1
           }
           if review_exists_for_head; then
             echo "Copilot already reviewed the exact finalized head."
             exit 0
+          else
+            review_status=$?
+            if [ "${review_status}" -eq 78 ]; then
+              exit 78
+            fi
+            if [ "${review_status}" -ne 1 ]; then
+              echo "Unable to safely evaluate existing Copilot reviews; refusing to request another review." >&2
+              exit "${review_status}"
+            fi
           fi
           reviewer_is_requested() {
             local response
+            assert_bound_head_current || return $?
             if ! response="$(gh api "${requested_reviewers_url}")"; then
               return 2
             fi
             jq -e --arg reviewer "${reviewer}" \
               'any(.users[]?; .login == $reviewer)' <<<"${response}" >/dev/null
           }
+          assert_bound_head_current
           comments="$(gh api --paginate --slurp "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100")"
           marker_exists=false
           if jq -e --arg marker "${marker}" \
@@ -182,6 +403,7 @@ jobs:
           fi
           if reviewer_is_requested; then
             if [ "${marker_exists}" = false ]; then
+              assert_bound_head_current
               gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
                 -f body="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->Copilot review request accepted for finalized head ${EXPECTED_HEAD}." >/dev/null
             fi
@@ -189,6 +411,9 @@ jobs:
             exit 0
           else
             request_status=$?
+            if [ "${request_status}" -eq 78 ]; then
+              exit 78
+            fi
             if [ "${request_status}" -ne 1 ]; then
               exit "${request_status}"
             fi
@@ -196,6 +421,16 @@ jobs:
           if [ "${marker_exists}" = true ]; then
             echo "The one exact-head Copilot request was already consumed; automatic retry is forbidden." >&2
             exit 1
+          fi
+          assert_bound_head_current
+          if [ "${LI219_EVENT_MODE:-disabled}" = enabled ]; then
+            # Pilot-only: consume the durable claim before the sole effect.
+            # Legacy has no pre-request comment reservation; a comment is
+            # published only after acceptance or a verified pending request.
+            # shellcheck source=/dev/null
+            source "${RUNNER_TEMP}/request-operation.sh"
+            claim_review_operation "${GITHUB_RUN_ID}" "${EXPECTED_HEAD}" "${EXPECTED_BASE}" "${PR_NUMBER}" request || exit 0
+            assert_bound_head_current
           fi
           if ! gh api --method POST "${requested_reviewers_url}" \
               -f "reviewers[]=${reviewer}"; then
@@ -210,6 +445,7 @@ jobs:
             fi
           fi
           if [ "${marker_exists}" = false ]; then
+            assert_bound_head_current
             gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
               -f body="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->Copilot review request accepted for finalized head ${EXPECTED_HEAD}." >/dev/null
           fi
@@ -873,6 +1109,14 @@ jobs:
                               or contains($quota_exhausted)
                               or contains($quota_exceeded)
                               or contains($suppressed)
+                              or contains("wasnotabletoreviewthispullrequest")
+                              or contains("nofilestoreview")
+                              or contains("unabletoreviewanyfiles")
+                              or contains("notabletoreviewanyfiles")
+                              or contains("premiumrequestquota")
+                              or contains("premiumrequestsquota")
+                              or contains("suppressedcomment")
+                              or contains("encounteredanerror")
                             )
                         )
                     ] | length),
@@ -921,7 +1165,9 @@ jobs:
           declare -A rejected_review_ids=()
           review_complete=false
           head_sha=""
-          for attempt in $(seq 1 40); do
+          review_observations=40
+          [ "${LI219_EVENT_MODE:-disabled}" != enabled ] || review_observations=1
+          for attempt in $(seq 1 "${review_observations}"); do
             head_sha=""
             before=""
             request_failed=false
@@ -1021,7 +1267,7 @@ jobs:
               fi
             done
 
-            if [ "${attempt}" -eq 40 ]; then
+            if [ "${attempt}" -eq "${review_observations}" ]; then
               if [ "${request_failed}" = true ]; then
                 echo "Unable to verify the Copilot review after repeated API or head-change failures." >&2
               else
@@ -1067,7 +1313,9 @@ jobs:
           GRAPHQL
 
           findings_resolved=false
-          for resolution_attempt in $(seq 1 20); do
+          resolution_observations=20
+          [ "${LI219_EVENT_MODE:-disabled}" != enabled ] || resolution_observations=1
+          for resolution_attempt in $(seq 1 "${resolution_observations}"); do
             after=""
             unresolved_copilot_threads=0
             request_failed=false
@@ -1124,7 +1372,7 @@ jobs:
               findings_resolved=true
               break
             fi
-            if [ "${resolution_attempt}" -eq 20 ]; then
+            if [ "${resolution_attempt}" -eq "${resolution_observations}" ]; then
               if [ "${request_failed}" = true ]; then
                 echo "Unable to verify Copilot review threads after repeated API or head-change failures." >&2
               else
@@ -1625,16 +1873,17 @@ jobs:
           fi
 
   request-protected-verifier-reevaluation-develop:
-    name: Request protected verifier re-evaluation
+    name: ${{ (vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) && github.event.pull_request.user.type == 'User' && 'Inactive legacy develop handoff' || 'Request protected verifier re-evaluation' }}
     needs: verify-current-revision-policy
     if: >-
+      !((vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) && github.event.pull_request.user.type == 'User') &&
       needs.verify-current-revision-policy.result == 'success' &&
       github.event.pull_request.base.ref == 'develop' &&
       github.event.pull_request.base.sha == github.workflow_sha
     permissions:
       actions: write
-      checks: read
-      contents: read
+      checks: write
+      contents: write
       pull-requests: read
     uses: ./.github/workflows/current-revision-rerun.yml
     with:
@@ -1645,9 +1894,10 @@ jobs:
       producer_run_id: ${{ github.run_id }}
 
   validate-protected-main-helper-pin:
-    name: Validate protected main helper pin
+    name: ${{ (vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) && github.event.pull_request.user.type == 'User' && 'Inactive legacy main pin' || 'Validate protected main helper pin' }}
     needs: verify-current-revision-policy
     if: >-
+      !((vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) && github.event.pull_request.user.type == 'User') &&
       needs.verify-current-revision-policy.result == 'success' &&
       github.event.pull_request.base.ref == 'main'
     permissions:
@@ -1659,7 +1909,7 @@ jobs:
         env:
           EVENT_BASE: ${{ github.event.pull_request.base.sha }}
           GH_TOKEN: ${{ github.token }}
-          PINNED_MAIN_HELPER: eb1b0e7437a2a4caf50e2fec058abeddca5cf088
+          PINNED_MAIN_HELPER: 64451b42ec9d03c47ba8156f0952c139c0744648
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -1684,24 +1934,57 @@ jobs:
   # moves. The validation job fails closed instead of silently skipping the
   # handoff or following a mutable branch.
   request-protected-verifier-reevaluation-main:
-    name: Request protected verifier re-evaluation
+    name: ${{ (vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) && github.event.pull_request.user.type == 'User' && 'Inactive legacy main handoff' || 'Request protected verifier re-evaluation' }}
     needs:
       - verify-current-revision-policy
       - validate-protected-main-helper-pin
     if: >-
+      !((vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) && github.event.pull_request.user.type == 'User') &&
       needs.verify-current-revision-policy.result == 'success' &&
       needs.validate-protected-main-helper-pin.result == 'success' &&
       github.event.pull_request.base.ref == 'main' &&
-      github.event.pull_request.base.sha == 'eb1b0e7437a2a4caf50e2fec058abeddca5cf088'
+      github.event.pull_request.base.sha == '64451b42ec9d03c47ba8156f0952c139c0744648'
     permissions:
       actions: write
       checks: read
       contents: read
       pull-requests: read
-    uses: lightning-it/ansible-collection-supplementary/.github/workflows/current-revision-rerun.yml@eb1b0e7437a2a4caf50e2fec058abeddca5cf088
+    uses: lightning-it/ansible-collection-supplementary/.github/workflows/current-revision-rerun.yml@64451b42ec9d03c47ba8156f0952c139c0744648
     with:
       base_ref: ${{ github.event.pull_request.base.ref }}
       pr_number: ${{ github.event.pull_request.number }}
       expected_base: ${{ github.event.pull_request.base.sha }}
       expected_head: ${{ github.event.pull_request.head.sha }}
       producer_run_id: ${{ github.run_id }}
+
+  dispatch-event-verifier-reevaluation:
+    name: Request protected verifier re-evaluation
+    needs: verify-current-revision-policy
+    if: >-
+      always() && (vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) && github.event.pull_request.user.type == 'User' &&
+      needs.verify-current-revision-policy.result == 'success' &&
+      github.event_name == 'pull_request_target' &&
+      github.ref_protected && github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch protected event verifier locator
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          [[ "${BASE_REF}" =~ ^(main|develop)$ ]]
+          gh api --method POST "repos/${REPOSITORY}/actions/workflows/current-revision-rerun.yml/dispatches" \
+            -f "ref=${BASE_REF}" -f "inputs[base_ref]=${BASE_REF}" \
+            -f "inputs[pr_number]=${PR_NUMBER}" -f "inputs[expected_base]=${BASE_SHA}" \
+            -f "inputs[expected_head]=${HEAD_SHA}" -f "inputs[producer_run_id]=${GITHUB_RUN_ID}" \
+            -f "inputs[producer_run_attempt]=${GITHUB_RUN_ATTEMPT}"
