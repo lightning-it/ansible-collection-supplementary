@@ -5,8 +5,8 @@
   "local_preparation_source_commit": "ab6dd8bec5958508b8b4d66920d08d3dd8251e65",
   "local_preparation_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
   "protected_source_commit": "a44cb1762aa6ae3edba91d6cf75ada2a99182af5",
-  "final_target_agents_sha256": "65e33dd50e786d84b4e9f11b639051a9b2c80f8bde9082fb5cc6d2403253a307",
-  "final_target_copilot_sha256": "693aad497f9f2780fbf18f2735e077357b8925f02a54df74845e965458078ff3",
+  "final_target_agents_sha256": "82a3f0df0579560aba7b3021b221f1fdc208a424d6ea667c9559117cc2888657",
+  "final_target_copilot_sha256": "6af201707af78aa734398c046d00b7fd2290fd9483abc2a07fb7b2a3c9eccc5b",
   "bindings": [
     {
       "source_path": "default/.github/workflows/release-bot-exact-head-review.yml",
@@ -23,30 +23,33 @@
       "target_path": "scripts/materialize-exact-revision-review.py",
       "source_blob": "9f8d4df107b98915282bbbc5733b3fd12e828edc",
       "source_sha256": "97f76a9a7f5690bc880f8bcf579e38723ab9d462e9cb248fa245a6359774b816",
-      "target_sha256": "97f76a9a7f5690bc880f8bcf579e38723ab9d462e9cb248fa245a6359774b816",
-      "mode": "byte-identical",
-      "target_blob": "9f8d4df107b98915282bbbc5733b3fd12e828edc",
-      "target_mode": "0644"
+      "target_sha256": "03af85858801a57f8d1261937ff0d5fe0e082b8bd401a4615e55bd6084af046b",
+      "mode": "adapted-local",
+      "target_blob": "eb1cf90b235f81119c70c7b36686eb27ff6584c3",
+      "target_mode": "0644",
+      "adaptation": "Native Ansible sanity source compatibility only: retain exact JSON type validation while naming discarded values and documenting the strict-type pylint rule."
     },
     {
       "source_path": "default/scripts/exact_revision_gateway.py",
       "target_path": "scripts/exact_revision_gateway.py",
       "source_blob": "05661ecc788e299aff1ffadce9a21b6be275e37e",
       "source_sha256": "1b88d061a65dcf8efa609c2919f759a8e39d043c070e8f809567717d9b228ebc",
-      "target_sha256": "1b88d061a65dcf8efa609c2919f759a8e39d043c070e8f809567717d9b228ebc",
-      "mode": "byte-identical",
-      "target_blob": "05661ecc788e299aff1ffadce9a21b6be275e37e",
-      "target_mode": "0644"
+      "target_sha256": "88de85631efca65b84d6a431c3cf21434248a5f1726c68e0147f56c13ed34140",
+      "mode": "adapted-local",
+      "target_blob": "02674e129637a8c0302e9ad0807d38293c6d19be",
+      "target_mode": "0644",
+      "adaptation": "Native Ansible sanity source compatibility: strict JSON schema types retained; discarded values named, runtime Unicode preserved as ASCII escapes."
     },
     {
       "source_path": "default/scripts/bounded_review.py",
       "target_path": "scripts/bounded_review.py",
       "source_blob": "81e16d7c210181b0a4cec62bd55696bd5e108da6",
       "source_sha256": "22d4e0eea6b368f00b34f8f8d78f50cab2ac855e386e3f6b1db2d7e94bd7a155",
-      "target_sha256": "22d4e0eea6b368f00b34f8f8d78f50cab2ac855e386e3f6b1db2d7e94bd7a155",
-      "mode": "byte-identical",
-      "target_blob": "81e16d7c210181b0a4cec62bd55696bd5e108da6",
-      "target_mode": "0644"
+      "target_sha256": "587d346e6cfce3b19934ba6f13dabaab592ff01591e1631354242bc4d00e642d",
+      "mode": "adapted-local",
+      "target_blob": "c313cc0e66d81a1d9efb7adf960602622f8ac913",
+      "target_mode": "0644",
+      "adaptation": "Native Ansible sanity source compatibility: strict JSON schema types retained; discarded values named, runtime Unicode preserved as ASCII escapes."
     },
     {
       "source_path": "default/scripts/bounded_review_config.py",
@@ -63,30 +66,33 @@
       "target_path": "scripts/bounded_review_provider.py",
       "source_blob": "2491731ef65e54f823eb5813bf1c197e9d8124af",
       "source_sha256": "61dea0b1de49356a49e75aaa556a2495398775e8b1a848e13f460ed2b13f62bd",
-      "target_sha256": "61dea0b1de49356a49e75aaa556a2495398775e8b1a848e13f460ed2b13f62bd",
-      "mode": "byte-identical",
-      "target_blob": "2491731ef65e54f823eb5813bf1c197e9d8124af",
-      "target_mode": "0644"
+      "target_sha256": "7d435da4942f74a8923eb3bd56e0bfcd7806c4dbe0874cec76bfd5375d8935a8",
+      "mode": "adapted-local",
+      "target_blob": "4d126dd9b80fe59ea7fe1e391ef3d5869d1d83d0",
+      "target_mode": "0644",
+      "adaptation": "Native Ansible sanity source compatibility: strict JSON schema types retained; discarded values named, runtime Unicode preserved as ASCII escapes."
     },
     {
       "source_path": "default/scripts/bounded_review_transport.py",
       "target_path": "scripts/bounded_review_transport.py",
       "source_blob": "09aed07fa3c1aeefbb7ce0d8c9ac560521599cd6",
       "source_sha256": "c64578f57f10bd6447f26da9b4935e2afabf434122e89a6b764d24372766d5fb",
-      "target_sha256": "c64578f57f10bd6447f26da9b4935e2afabf434122e89a6b764d24372766d5fb",
-      "mode": "byte-identical",
-      "target_blob": "09aed07fa3c1aeefbb7ce0d8c9ac560521599cd6",
-      "target_mode": "0644"
+      "target_sha256": "1af34f91f785a5bb7f73190055b0023b259dc8713d52e9052a05cd1b95d545e5",
+      "mode": "adapted-local",
+      "target_blob": "cb7e5515254b5a02b8ece575cfee1adb87a4ff51",
+      "target_mode": "0644",
+      "adaptation": "Native Ansible sanity source compatibility: strict JSON schema types retained; discarded values named, runtime Unicode preserved as ASCII escapes."
     },
     {
       "source_path": "default/scripts/single_review_resources.py",
       "target_path": "scripts/single_review_resources.py",
       "source_blob": "e4b3b21f9b2501835d3d618ec3b3412a631901f4",
       "source_sha256": "af5ae56c58279e9078b6d78fdc49dfee51cbf062fd05f3bab2885fb3e9c8a68d",
-      "target_sha256": "af5ae56c58279e9078b6d78fdc49dfee51cbf062fd05f3bab2885fb3e9c8a68d",
-      "mode": "byte-identical",
-      "target_blob": "e4b3b21f9b2501835d3d618ec3b3412a631901f4",
-      "target_mode": "0644"
+      "target_sha256": "08463589db2fa4b58baf9402031bf01e28e01d383636a9e9704b915aa4d1f47a",
+      "mode": "adapted-local",
+      "target_blob": "ecdb5c7bd18c039ab2cd95bac25444b6a2cb1486",
+      "target_mode": "0644",
+      "adaptation": "Native Ansible sanity source compatibility: strict JSON schema types retained; discarded values named, runtime Unicode preserved as ASCII escapes."
     }
   ],
   "protected_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",

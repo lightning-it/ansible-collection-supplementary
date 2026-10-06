@@ -7,6 +7,8 @@ output. Workers permit only verified TLS to fixed Responses endpoints, no redire
 environment proxies, retry or decompression. The parent kills the worker on the
 review's absolute deadline; an unknown upstream outcome retains its reservation.
 """
+# Exact JSON schema types deliberately reject bool as int and subclasses.
+# pylint: disable=unidiomatic-typecheck
 
 from __future__ import annotations
 
@@ -272,7 +274,7 @@ def run_worker(
         )
         remaining = (deadline - monotonic_ms()) / 1000
         require(remaining > 0, "provider-timeout")
-        payload, _ = child.communicate(message, timeout=remaining)
+        payload, _unused_value_1 = child.communicate(message, timeout=remaining)
         require(child.returncode == 0, "transport-upstream-failure")
         if output is not None:
             require(0 < os.fstat(output.fileno()).st_size <= maximum, "transport-response-size")

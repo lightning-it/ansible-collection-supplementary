@@ -4,6 +4,8 @@ Dispatch responses are never retried here. Every later observation reads native
 run history first. The consumers serialize and claim the effective rerun before
 its sole mutation. This service never requests an AI review or publishes PASS.
 """
+# Exact JSON schema types deliberately reject bool as int and subclasses.
+# pylint: disable=unidiomatic-typecheck
 
 import datetime as dt
 import json
@@ -178,7 +180,7 @@ def clean_review(review, comments, head):
             (text or "")
             .lower()
             .replace("n't", " not")
-            .replace("n’t", " not"),
+            .replace("n\u2019t", " not"),
         )
         for text in texts
     ]
@@ -433,11 +435,11 @@ def reconcile(repository, now):
                     continue
                 if inputs is None:
                     continue
-                path, ref = CONTINUATION, branch
+                path, ref = CONTINUATION, pr["base"]["ref"]
                 title = f"First review PR #{number} head {head} owner {inputs['owner_run']} old review {inputs['old_review']}"
             else:
                 review = max(usable, key=lambda item: item["id"])
-                path, ref = REFRESH, branch
+                path, ref = REFRESH, pr["base"]["ref"]
                 title = f"Reconcile review PR #{number} head {head}"
                 inputs = dict(pr_number=str(number), expected_head=head, expected_base=base,
                               review_id=str(review["id"]))
@@ -450,6 +452,7 @@ def reconcile(repository, now):
             or live["draft"]
             or live["head"]["sha"] != head
             or live["base"]["sha"] != base
+            or live["base"]["ref"] != pr["base"]["ref"]
         ):
             continue
         api(

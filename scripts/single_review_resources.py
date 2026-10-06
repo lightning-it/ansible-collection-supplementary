@@ -7,6 +7,8 @@ including Unicode and ASCII serialization. The lexical preflight bounds JSON
 allocation before json.loads; full review text remains one untruncated string.
 Only the provider's authenticated complete input count admits model inference.
 """
+# Exact JSON schema types deliberately reject bool as int and subclasses.
+# pylint: disable=unidiomatic-typecheck
 
 from __future__ import annotations
 
@@ -31,7 +33,7 @@ def cgroup_headroom() -> dict[str, int]:
             memberships.append(("cgroup2", location))
         elif "memory" in controllers.split(","):
             memberships.append(("cgroup", location))
-    if not memberships or len({kind for kind, _ in memberships}) != len(memberships):
+    if not memberships or len({kind for kind, _unused_value_1 in memberships}) != len(memberships):
         raise ValueError("single-memory-cgroup-membership")
     # In a hybrid hierarchy the explicit v1 memory controller owns the limit.
     # A unified entry may coexist; duplicate entries of either kind remain invalid.
@@ -98,13 +100,13 @@ def cgroup_headroom() -> dict[str, int]:
 def memory_contract() -> dict:
     fields = {}
     for line in Path("/proc/meminfo").read_text().splitlines():
-        key, _, value = line.partition(":")
+        key, _unused_value_2, value = line.partition(":")
         if key == "MemAvailable":
             fields["host_available_bytes"] = int(value.split()[0]) * 1024
     if not fields.get("host_available_bytes", 0) > 0:
         raise ValueError("single-memory-evidence-unavailable")
     fields.update(cgroup_headroom())
-    limit, _ = resource.getrlimit(resource.RLIMIT_AS)
+    limit, _unused_value_3 = resource.getrlimit(resource.RLIMIT_AS)
     if limit != resource.RLIM_INFINITY:
         virtual = int(Path("/proc/self/statm").read_text().split()[0]) * os.sysconf("SC_PAGE_SIZE")
         fields["process_available_bytes"] = limit - virtual

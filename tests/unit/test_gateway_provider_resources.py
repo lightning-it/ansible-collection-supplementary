@@ -22,7 +22,7 @@ class ProviderResourceTests(unittest.TestCase):
     response = fixtures.SingleReviewGatewayTests.response
 
     def test_count_and_each_provider_response_decode_preflight_before_json_allocation(self):
-        bomb = '{"items":[' + ",".join("{}" for _ in range(3000)) + "]}"
+        bomb = '{"items":[' + ",".join("{}" for _unused_value_1 in range(3000)) + "]}"
         deep = '{"items":' + "[" * 65 + "0" + "]" * 65 + "}"
         for payload, reason in ((bomb, "node-budget"), (deep, "depth")):
             for streaming in (False, True):

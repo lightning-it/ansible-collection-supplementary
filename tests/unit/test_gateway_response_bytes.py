@@ -1,4 +1,6 @@
 """Actual admission-to-receipt output bounds; simulated worker wire only."""
+# Exact JSON schema types deliberately reject bool as int and subclasses.
+# pylint: disable=unidiomatic-typecheck
 
 import json
 import tracemalloc
@@ -127,7 +129,7 @@ class GatewayResponseByteTests(unittest.TestCase):
             with self.subTest(protected_is_narrower=protected is small):
                 state = self.state | {"resource_contract": protected}
                 reviewer = gateway.Reviewer(state, self.prompt, self.root / "public")
-                counted, _ = self.replies("count", small["max_wire_bytes"] + 1)
+                counted, _unused_value_1 = self.replies("count", small["max_wire_bytes"] + 1)
                 with (
                     patch.object(transport, "run_worker", return_value=counted) as worker,
                     self.assertRaisesRegex(gateway.review.ReviewError, "response-size"),
@@ -181,7 +183,7 @@ class GatewayResponseByteTests(unittest.TestCase):
             parsed = transport.strict_json(body, json_limits=(contract["max_json_nodes"], 64))
             with patch.object(transport, "run_worker", side_effect=worker):
                 returned = self.reviewer.submit(parsed, "fixture", admission=contract)
-            _, peak = tracemalloc.get_traced_memory()
+            _unused_value_2, peak = tracemalloc.get_traced_memory()
         finally:
             tracemalloc.stop()
         self.assertLess(peak, contract["reserved_bytes"])

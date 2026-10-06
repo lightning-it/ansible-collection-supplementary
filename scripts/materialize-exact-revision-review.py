@@ -1,4 +1,6 @@
 """Materialize the bounded REP-60 / MLX-90 section 7.2 review input."""
+# Exact JSON schema types deliberately reject bool as int and subclasses.
+# pylint: disable=unidiomatic-typecheck
 
 # Canonical formatting contract: Ruff-compatible Python with line length 120.
 

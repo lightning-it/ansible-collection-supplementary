@@ -10,9 +10,9 @@
       "target_path": ".github/workflows/copilot-review-refresh.yml",
       "source_sha256": "31e34a9ccd7f5dbfaac62bcb308ebeafb69c00d41b0a80b579f557f66980583b",
       "source_blob": "a42cd8725cbd4fafc170bc3158631f7f09973fac",
-      "target_blob": "a42cd8725cbd4fafc170bc3158631f7f09973fac",
-      "target_sha256": "31e34a9ccd7f5dbfaac62bcb308ebeafb69c00d41b0a80b579f557f66980583b",
-      "mode": "byte-identical",
+      "target_blob": "e10185595cc09bceda4d450a04cc9acb95077507",
+      "target_sha256": "4f81cd074aa838698ebdab5da04d69c6f676f863d26b671e46bf12ecd858ede3",
+      "mode": "adapted-local",
       "target_mode": "0644"
     },
     {
@@ -40,9 +40,9 @@
       "target_path": "scripts/review-event-reconcile.py",
       "source_sha256": "74bf8eb90116afa0a58ebf57be3e141c95e0127d08d008b33cc28d3b3569602c",
       "source_blob": "45a9920e640fb220f5f3db06f98f684f15d73735",
-      "target_blob": "45a9920e640fb220f5f3db06f98f684f15d73735",
-      "target_sha256": "74bf8eb90116afa0a58ebf57be3e141c95e0127d08d008b33cc28d3b3569602c",
-      "mode": "byte-identical",
+      "target_blob": "0d3fb00e2453c9bffcfb219a827ce18cc3a9bf57",
+      "target_sha256": "bf5470663d66afcc6a3d8257dac88605487fd246123b0e255603c14c41108a28",
+      "mode": "adapted-local",
       "target_mode": "0644"
     },
     {
@@ -70,9 +70,9 @@
       "target_path": "scripts/review_content_markers.py",
       "source_sha256": "00e73bad77fc2b7eaf3182f302f375a981deb6578a21f219ff410d52d62daf09",
       "source_blob": "617ac13543c358f1abb44da7c7885907abd8ab4c",
-      "target_blob": "617ac13543c358f1abb44da7c7885907abd8ab4c",
-      "target_sha256": "00e73bad77fc2b7eaf3182f302f375a981deb6578a21f219ff410d52d62daf09",
-      "mode": "byte-identical",
+      "target_blob": "a9f366a20a0be6ea63509b768e076d279a8de1e1",
+      "target_sha256": "846efa703a39d59ffeefe946958fdb8ac82eb32617c91bdbb1eae9ae084d4a44",
+      "mode": "adapted-local",
       "target_mode": "0644"
     },
     {
@@ -90,8 +90,8 @@
       "target_path": ".github/workflows/copilot-review.yml",
       "source_sha256": "1bdbb4bd62ebda00ef689ce063e6b74299d9b1ee067c1c972730cd1212114b98",
       "source_blob": "9f8d54e95bccffd7de815826ea8bba1bdab66f81",
-      "target_blob": "7d42beba82d235635a011b5c312bdbca1c676bb0",
-      "target_sha256": "6b6fed60247718a565cce268161527daab6c70648b1f42dcac7b8112d2a3045b",
+      "target_blob": "a7ccf140996ee6a33d3eb6476a81a3867476ada4",
+      "target_sha256": "5b10872d52d5bc52967519dc4d896368a349b1a332db3671ab08b96fa02c2242",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -100,8 +100,8 @@
       "target_path": "scripts/lit-push-ready.py",
       "source_sha256": "7184b923f21f4a8cca8ca5e3c856dfc0184cf702543ce718ff6352d78a581ddf",
       "source_blob": "570b3bc8ab012c0a28473ed5129da2565b244681",
-      "target_blob": "ea6467e1cb5c6b2780756588224a8434cc7274e1",
-      "target_sha256": "3771838cc8638c933548c54691ed9c5e410179f5c4330f4602afee0f6dfd35b7",
+      "target_blob": "930624d7d16d50c9e9dbcd00fd96d641f7dba32a",
+      "target_sha256": "e2ffdb26feebf9e58d9e4d4d389941cd041fe72b1e3e37fb891f2b6e0b895231",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -110,9 +110,9 @@
       "target_path": ".github/workflows/review-request-continuation.yml",
       "source_sha256": "5d5de0d48ab51f2fb742aaed82fef9eb06f5d05aa5c5cbbbf4ee21fd27c29584",
       "source_blob": "ae826a6b3efa7df6bec8e1b567112605a92d8815",
-      "target_blob": "ae826a6b3efa7df6bec8e1b567112605a92d8815",
-      "target_sha256": "5d5de0d48ab51f2fb742aaed82fef9eb06f5d05aa5c5cbbbf4ee21fd27c29584",
-      "mode": "byte-identical",
+      "target_blob": "5c1b88607284a480cc5c3b18c27ffdc0064badae",
+      "target_sha256": "e89dcebc08fb644cf4393ede380f001f581add5fcd827c8d5ae8d4e3d73b68de",
+      "mode": "adapted-local",
       "target_mode": "0644"
     },
     {
@@ -120,9 +120,9 @@
       "target_path": "scripts/review_request_continuation.py",
       "source_sha256": "29014fe17a418763f294e9724354809abf56d051333e690768b5d17cce24452f",
       "source_blob": "da7bba5c5faba9f7abfe5285f3f8a5a3c561ff17",
-      "target_blob": "da7bba5c5faba9f7abfe5285f3f8a5a3c561ff17",
-      "target_sha256": "29014fe17a418763f294e9724354809abf56d051333e690768b5d17cce24452f",
-      "mode": "byte-identical",
+      "target_blob": "7fff9ba68e814ca168feedb9a3d40984038fe0dd",
+      "target_sha256": "b66506dd37ff90d808a99a1f3168650df23d5313a032a3ee66274af4e194bbcb",
+      "mode": "adapted-local",
       "target_mode": "0644"
     },
     {
@@ -130,9 +130,9 @@
       "target_path": "scripts/review_request_provenance.py",
       "source_sha256": "742d38d26c580c7220acb03462c27146327608ea964915efad9d0be2b0f6d8f3",
       "source_blob": "17ae4e232221846a4865fa2fe728caa85b33b45c",
-      "target_blob": "17ae4e232221846a4865fa2fe728caa85b33b45c",
-      "target_sha256": "742d38d26c580c7220acb03462c27146327608ea964915efad9d0be2b0f6d8f3",
-      "mode": "byte-identical",
+      "target_blob": "b5038b2c7b4dec1671dede6ff51494fb9b7fbe7f",
+      "target_sha256": "a391a41cea27b673062865b958035d60b107cc9c1f0f1cbf8d6d168beaf764ab",
+      "mode": "adapted-local",
       "target_mode": "0644"
     }
   ],
@@ -173,14 +173,14 @@
   ],
   "instructions": {
     "source_agents_sha256": "00aa090f2a662cbbe9704bf2fa94a455b4107127f850694e8ec68dd19fe4e779",
-    "target_agents_sha256": "65e33dd50e786d84b4e9f11b639051a9b2c80f8bde9082fb5cc6d2403253a307",
-    "target_copilot_sha256": "693aad497f9f2780fbf18f2735e077357b8925f02a54df74845e965458078ff3"
+    "target_agents_sha256": "82a3f0df0579560aba7b3021b221f1fdc208a424d6ea667c9559117cc2888657",
+    "target_copilot_sha256": "6af201707af78aa734398c046d00b7fd2290fd9483abc2a07fb7b2a3c9eccc5b"
   },
   "local_preparation_source_commit": "ab6dd8bec5958508b8b4d66920d08d3dd8251e65",
   "local_preparation_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
   "final_protected_source_agents_sha256": "00aa090f2a662cbbe9704bf2fa94a455b4107127f850694e8ec68dd19fe4e779",
-  "final_target_agents_sha256": "65e33dd50e786d84b4e9f11b639051a9b2c80f8bde9082fb5cc6d2403253a307",
-  "final_target_copilot_sha256": "693aad497f9f2780fbf18f2735e077357b8925f02a54df74845e965458078ff3",
+  "final_target_agents_sha256": "82a3f0df0579560aba7b3021b221f1fdc208a424d6ea667c9559117cc2888657",
+  "final_target_copilot_sha256": "6af201707af78aa734398c046d00b7fd2290fd9483abc2a07fb7b2a3c9eccc5b",
   "final_acceptance_status": "PENDING_INDEPENDENT_AND_NATIVE_PORT_ACCEPTANCE",
   "protected_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
   "protected_source_receipt": {

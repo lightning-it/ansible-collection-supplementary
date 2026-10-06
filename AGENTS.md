@@ -159,7 +159,7 @@ Only an exact confirmed native STALE_DATA journal conflict permits retrying the
 eligibility-only intent write, with at most three attempts. Unknown delivery is
 readback-only; request CAS and AI POST remain single-attempt. Legacy uncertain request
 consumption survives cleared Pending and terminal review content; it never funds
-a second same-head request. Explicit negation (including isn’t/isn't) marks
+a second same-head request. Explicit negation (including ASCII and U+2019 apostrophes in isn't) marks
 failure; positive able-to-review text does not. Keyed inventories
 require stable exact totals. Historical review provenance uses its bound request
 event time, authenticated inside the native request step. Supplementary has no protected empty-association sender:

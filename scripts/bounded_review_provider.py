@@ -6,6 +6,8 @@ capacity come from a separately verified, manifest-bound provider profile. This
 module does not select a model, accept a profile, authenticate a reviewer, or send
 requests. A controller reservation must already exist before constructing it.
 """
+# Exact JSON schema types deliberately reject bool as int and subclasses.
+# pylint: disable=unidiomatic-typecheck
 
 from __future__ import annotations
 
@@ -245,7 +247,7 @@ class ResponseBudget:
                 not self.failed and self.active is not None and self.admitted is None, "provider-active-or-terminal"
             )
             self._clock(now_ms)
-            expected, _, output_cap = self.active
+            expected, _unused_value_1, output_cap = self.active
             require(digest == expected == sha(canonical(request)), "provider-substituted-count")
             keys(count, {"object", "input_tokens"}, "provider-token-count-shape")
             require(count["object"] == "response.input_tokens", "provider-token-count-object")
