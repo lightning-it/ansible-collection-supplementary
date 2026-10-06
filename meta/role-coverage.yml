@@ -1027,9 +1027,9 @@ roles:
       - >-
         Managed pod/container DNS names have strict offline binding and
         cutover-resolution rollback coverage. Tiny proves that the managed
-        PostgreSQL container name resolves exclusively to its exact private
-        address from the running Keycloak container; target-specific resolver
-        isolation remains required.
+        PostgreSQL container name is pinned through the portable Pod
+        hostAliases contract and resolves exclusively to its exact private
+        address from the running Keycloak container.
       - >-
         Native manifest semantic reconciliation has offline actual-Ansible
         regression coverage; live no-second-restart acceptance remains pending

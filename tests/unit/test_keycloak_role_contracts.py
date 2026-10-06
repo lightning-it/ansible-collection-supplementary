@@ -613,7 +613,11 @@ exit 0
             self.assertFalse((quadlet_dir / "keycloak-pod.kube").exists())
             service_log = log.read_text(encoding="utf-8")
             self.assertIn("Native quiescence failure", output)
-            self.assertEqual((state / f"{native_state}.active").read_text(encoding="utf-8"), "active")
+            self.assertEqual(
+                (state / f"{native_state}.active").read_text(encoding="utf-8"),
+                "active",
+                output,
+            )
             self.assertIn("stop keycloak-pod.service", service_log)
             self.assertNotIn("start podman-kube@etc-podman-pods-keycloak.yml.service", service_log)
 
@@ -687,6 +691,24 @@ exit 0
                 self.assertEqual(validator["when"], "':ip=' in item")
 
     def test_ordinary_keycloak_deploy_proves_database_dns_at_runtime(self) -> None:
+        pod_template = (ROOT / "roles" / "keycloak_deploy" / "templates" / "keycloak-pod.yml.j2").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("hostAliases:", pod_template)
+        self.assertIn("keycloak_deploy_database_private_address | default({})", pod_template)
+        self.assertIn("keycloak_deploy_db_host | to_json", pod_template)
+
+        pod_tasks = yaml.safe_load(
+            (ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy_pod.yml").read_text(encoding="utf-8")
+        )
+        address = next(
+            task
+            for task in pod_tasks
+            if task["name"] == "Resolve the unique private address for the managed database name"
+        )
+        self.assertIn("ipaddress.IPv4Address", address["ansible.builtin.command"]["argv"][2])
+        self.assertEqual(address["register"], "keycloak_deploy_database_private_address")
+
         validation_path = ROOT / "roles" / "keycloak_deploy" / "tasks" / "validate_database_dns.yml"
         validation = yaml.safe_load(validation_path.read_text(encoding="utf-8"))
         self.assertEqual(
