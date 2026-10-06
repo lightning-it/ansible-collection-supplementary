@@ -16,3 +16,6 @@ bugfixes:
   - >-
     Stream complete Push-Ready patches, fingerprints and secret scans while
     preserving local review classification and the aggregate workspace budget.
+  - >-
+    Compare complete streamed patch content when binding Push-Ready evidence so
+    unchanged replanned patches pass while actual plan drift remains blocked.

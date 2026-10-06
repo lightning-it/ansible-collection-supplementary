@@ -100,8 +100,8 @@
       "target_path": "scripts/lit-push-ready.py",
       "source_sha256": "7184b923f21f4a8cca8ca5e3c856dfc0184cf702543ce718ff6352d78a581ddf",
       "source_blob": "570b3bc8ab012c0a28473ed5129da2565b244681",
-      "target_blob": "f964091f3e77f8fae71ff74547a2ea5e6062b685",
-      "target_sha256": "53038b266a83ad3c4194adc2e9c495f7d3948c6c562ef999a5c6caa58f8978bb",
+      "target_blob": "ea6467e1cb5c6b2780756588224a8434cc7274e1",
+      "target_sha256": "3771838cc8638c933548c54691ed9c5e410179f5c4330f4602afee0f6dfd35b7",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -137,7 +137,7 @@
     }
   ],
   "prior_preparation_source_commit": "3eff591b19da313ea501c4962f1452d3f35545e6",
-  "source_content_sha256": "ba9f8c365577f561b6610a4c3ddcf45819af7142be9b4f3bb1541503b4661ecf",
+  "source_content_sha256": "f9704e1a1f7562b6502fdf536f3922a3d9691957cc63ca15b308c40682852c4f",
   "prior_preparation_source_tree": "23997920b8f94f6da46608c02233d0f80ceed1b2",
   "prior_test_sources": [
     {
