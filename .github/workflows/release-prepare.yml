@@ -654,6 +654,7 @@ jobs:
               and .base.ref == $base
             ' <<<"$owned_pull" >/dev/null
           gh workflow run release-bot-exact-head-review.yml \
+            -f bounded_mode=single \
             --repo "$GITHUB_REPOSITORY" \
             --ref "$(jq -r .base.ref <<<"$owned_pull")" \
             -f "pr_number=${existing}" \

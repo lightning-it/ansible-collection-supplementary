@@ -11,7 +11,6 @@ FAILURE_MARKERS = (
     "wasnotabletoreviewthispullrequest",
     "nofilestoreview",
     "unabletoreviewanyfiles",
-    "abletoreviewanyfiles",
     "notabletoreviewanyfiles",
     "wasnotabletoreviewanyfiles",
     "quotaexhausted",
@@ -30,7 +29,7 @@ class ReviewContentError(ValueError):
 def normalize(value: str) -> str:
     """Match the protected gate's ASCII fold, contraction and Unicode whitespace rules."""
     ascii_lower = "".join(chr(ord(char) + 32) if "A" <= char <= "Z" else char for char in value)
-    expanded = ascii_lower.replace("wasn't", "was not").replace("wasn’t", "was not")
+    expanded = ascii_lower.replace("n't", " not").replace("n’t", " not")
     return "".join(char for char in expanded if not char.isspace())
 
 

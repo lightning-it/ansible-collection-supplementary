@@ -8,10 +8,10 @@
     {
       "source_path": "default/.github/workflows/copilot-review-refresh.yml",
       "target_path": ".github/workflows/copilot-review-refresh.yml",
-      "source_sha256": "d72e1984d22195bbca8257db2dcc136a670dd5f3e55d13f6e2537e689b940a47",
-      "source_blob": "4ab5423898c8327f281ad264d3e2a4648d34071d",
-      "target_blob": "4ab5423898c8327f281ad264d3e2a4648d34071d",
-      "target_sha256": "d72e1984d22195bbca8257db2dcc136a670dd5f3e55d13f6e2537e689b940a47",
+      "source_sha256": "b01fcf12921c484ae8d4a4f69c8d86b237f742b39714e8f0f996ed7566a71dd0",
+      "source_blob": "d22ecfc8ce61c7e83cdd42c52e538a4d45a0a9ce",
+      "target_blob": "d22ecfc8ce61c7e83cdd42c52e538a4d45a0a9ce",
+      "target_sha256": "b01fcf12921c484ae8d4a4f69c8d86b237f742b39714e8f0f996ed7566a71dd0",
       "mode": "byte-identical"
     },
     {
@@ -35,10 +35,10 @@
     {
       "source_path": "default/scripts/review-event-reconcile.py",
       "target_path": "scripts/review-event-reconcile.py",
-      "source_sha256": "fb069673ae3a3121f45d630b8adc5586dce339559115d41ea29356a48a2e2ece",
-      "source_blob": "fb712cf04b1e4cbce57bfcb6c8890e737a39f8a8",
-      "target_blob": "fb712cf04b1e4cbce57bfcb6c8890e737a39f8a8",
-      "target_sha256": "fb069673ae3a3121f45d630b8adc5586dce339559115d41ea29356a48a2e2ece",
+      "source_sha256": "f27c619b276f42256d00d217581c2e028bee4558ba12a86d177aa41b2344bc7e",
+      "source_blob": "bb156ce60d6eee28d0a872c4bdd445f5529925de",
+      "target_blob": "bb156ce60d6eee28d0a872c4bdd445f5529925de",
+      "target_sha256": "f27c619b276f42256d00d217581c2e028bee4558ba12a86d177aa41b2344bc7e",
       "mode": "byte-identical"
     },
     {
@@ -62,10 +62,10 @@
     {
       "source_path": "scripts/review_content_markers.py",
       "target_path": "scripts/review_content_markers.py",
-      "source_sha256": "256447a7e7135cdc83f34cdba89610ceb1479ba0f8379761d4b107e66a083256",
-      "source_blob": "e8cbc798d50a9e93560c769441512f5a0279c529",
-      "target_blob": "e8cbc798d50a9e93560c769441512f5a0279c529",
-      "target_sha256": "256447a7e7135cdc83f34cdba89610ceb1479ba0f8379761d4b107e66a083256",
+      "source_sha256": "1c6714882222f0956533ac5c2d0b5219ab3931288cefda625dd7259a2883e140",
+      "source_blob": "8f84e491ecf22ff43b6e8923cf20ef3df420c810",
+      "target_blob": "8f84e491ecf22ff43b6e8923cf20ef3df420c810",
+      "target_sha256": "1c6714882222f0956533ac5c2d0b5219ab3931288cefda625dd7259a2883e140",
       "mode": "byte-identical"
     },
     {
@@ -80,10 +80,10 @@
     {
       "source_path": "default/.github/workflows/copilot-review.yml",
       "target_path": ".github/workflows/copilot-review.yml",
-      "source_sha256": "285c61869eaabb6952728bc98e074f40f744460a264f7060b50da95571c78617",
-      "source_blob": "1633733ac6404a085866d797338a3351d78ce2b9",
-      "target_blob": "9a260f1abd9a1ec4b4a99e41b16028f16c06e1b7",
-      "target_sha256": "0013a3fd04dfe92ae83f869c73d84371ee4f0694ecf3381f73ac08e3f9fee03d",
+      "source_sha256": "73d6195b6b5f7ec9c13c5f1916e3739e93a4d2fdea22c689d06d6caf9a875950",
+      "source_blob": "fb7bf8bc945a75f220450f7567d1b91c7e5af286",
+      "target_blob": "93208c9ff769b3269fbbe3c55d2ae77d8f58a571",
+      "target_sha256": "71aae2e232c138bcc4c8c6e0963c8c0971bd08b10bf753e49ab7c8a7ce78cabd",
       "mode": "adapted-local"
     },
     {
@@ -98,33 +98,33 @@
     {
       "source_path": "default/.github/workflows/review-request-continuation.yml",
       "target_path": ".github/workflows/review-request-continuation.yml",
-      "source_sha256": "b64d17e5d73549ec115989691b2389a3e12f139ea2f384aece80d8c7edfa16e8",
-      "source_blob": "8b1b6989b36a4809f98d8ba21c2aff2866924a47",
-      "target_blob": "8b1b6989b36a4809f98d8ba21c2aff2866924a47",
-      "target_sha256": "b64d17e5d73549ec115989691b2389a3e12f139ea2f384aece80d8c7edfa16e8",
+      "source_sha256": "2afa9c12cf60977fe969536d9806f29946a1c083df3a9e01f71795380ec4c429",
+      "source_blob": "857f886b41e0fb7fa418f46ce6c273dafadd9fef",
+      "target_blob": "857f886b41e0fb7fa418f46ce6c273dafadd9fef",
+      "target_sha256": "2afa9c12cf60977fe969536d9806f29946a1c083df3a9e01f71795380ec4c429",
       "mode": "byte-identical"
     },
     {
       "source_path": "default/scripts/review_request_continuation.py",
       "target_path": "scripts/review_request_continuation.py",
-      "source_sha256": "ec7b216cd6ad9c9fea4f4127bd25dbca9fa3e81c2f2fdd779054e8aa032c21d4",
-      "source_blob": "92c2d0fae7ad36d413a6d8f7c1e6a36f6247efd8",
-      "target_blob": "92c2d0fae7ad36d413a6d8f7c1e6a36f6247efd8",
-      "target_sha256": "ec7b216cd6ad9c9fea4f4127bd25dbca9fa3e81c2f2fdd779054e8aa032c21d4",
+      "source_sha256": "dda71c5573aa915208e305f01433e8cd979d60ea7bcc57e7704ded3e2305b878",
+      "source_blob": "32de0f07de677855ec2016c71b04f6847f660662",
+      "target_blob": "32de0f07de677855ec2016c71b04f6847f660662",
+      "target_sha256": "dda71c5573aa915208e305f01433e8cd979d60ea7bcc57e7704ded3e2305b878",
       "mode": "byte-identical"
     },
     {
       "source_path": "default/scripts/review_request_provenance.py",
       "target_path": "scripts/review_request_provenance.py",
-      "source_sha256": "2b0d09ba9926dcd77b522cdcb763a9bd3fda09f20619d501107f8ccae0ab2b89",
-      "source_blob": "cec277d7aeb64654d2c63ac2b102ba3f48ad5bc8",
-      "target_blob": "cec277d7aeb64654d2c63ac2b102ba3f48ad5bc8",
-      "target_sha256": "2b0d09ba9926dcd77b522cdcb763a9bd3fda09f20619d501107f8ccae0ab2b89",
+      "source_sha256": "149bc3ef72f992d638a9e7399af8bd414679487eaba14c288325c5d5366b01e0",
+      "source_blob": "a0f0f00f9619fd8aa97c443ff7516a4b4b63ae89",
+      "target_blob": "a0f0f00f9619fd8aa97c443ff7516a4b4b63ae89",
+      "target_sha256": "149bc3ef72f992d638a9e7399af8bd414679487eaba14c288325c5d5366b01e0",
       "mode": "byte-identical"
     }
   ],
   "prior_preparation_source_commit": "3eff591b19da313ea501c4962f1452d3f35545e6",
-  "source_content_sha256": "3fa97f0b3afb5386cf8a2bb77b34bfd6a88fbc6d443663700a96cd70c0f85b4d",
+  "source_content_sha256": "9f9bfa412ff84be1670f8b5cf69704585ae9cc0de0610ce5cb6f47f5066f6f6d",
   "prior_preparation_source_tree": "23997920b8f94f6da46608c02233d0f80ceed1b2",
   "prior_test_sources": [
     {
@@ -160,9 +160,13 @@
   ],
   "instructions": {
     "source_agents_sha256": "8edb3353ffd993b5b2250d923d2b443bd09cac2ac83ab255bc4df29443267a79",
-    "target_agents_sha256": "6604c86e1da465221591a0420377152b7f04284a1606dbdf3c484d02472bf6c6",
-    "target_copilot_sha256": "ccbcca64fcb718c9ae7c9016eb7088cbe973212a474b7cef69b8a5b4e9d76405"
+    "target_agents_sha256": "0654d4aa8e7ab81bd41730f6dd39d3378dbae828cab0791585849d76f173ebe3",
+    "target_copilot_sha256": "c7f2e740591369c1defa57a28b45d174687f4fa0ea69c8238168ed920fdc677d"
   },
-  "local_preparation_source_commit": "d5a52bf322abdfcb5268b56b278c0c7da720103e",
-  "local_preparation_source_tree": "4465341bd7afbaee592f114fbdd26d55b1ebeabb"
+  "local_preparation_source_commit": "65ce52fe1814a91699d5fee425502e7f608e0ff5",
+  "local_preparation_source_tree": "94e309975231effcdddd4d947d7032a79f19c4c2",
+  "final_protected_source_agents_sha256": null,
+  "final_target_agents_sha256": null,
+  "final_target_copilot_sha256": null,
+  "final_acceptance_status": "HOLD: actual protected Source MAIN and final Owner/independent acceptance pending"
 }

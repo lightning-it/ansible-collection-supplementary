@@ -57,6 +57,57 @@ class ReviewEventTests(unittest.TestCase):
             **changes,
         }
 
+    def test_any_files_marker_requires_explicit_negation_in_body_or_inline(self):
+        positives = (
+            "The bot was able to review any files.",
+            "able to review any files",
+            "THE BOT WAS\u00a0ABLE\u2003TO REVIEW ANY FILES",
+        )
+        negatives = (
+            "Copilot wasn't able to review any files.",
+            "Copilot wasn’t able to review any files.",
+            "Copilot isn't able to review any files.",
+            "Copilot isn’t able to review any files.",
+            "COPILOT ISN’T ABLE\u2003TO\u00a0REVIEW\u202fANY\u2009FILES.",
+            "The bots aren't able to review any files.",
+            "The bots weren’t able to review any files.",
+            "COPILOT\u00a0WASN’T\u2003ABLE\tTO REVIEW ANY FILES",
+            "Copilot is not able to review any files.",
+            "Copilot is unable to review any files.",
+        )
+        for messages, expected in ((positives, True), (negatives, False)):
+            for text in messages:
+                for inline in (False, True):
+                    with self.subTest(text=text, inline=inline):
+                        review = self.review() if inline else self.review(body=text)
+                        comments = [{"body": text}] if inline else []
+                        self.assertEqual(expected, EVENT.clean_review(review, comments, self.head))
+
+    def test_ordered_required_terminal_supersession_preserves_all_guards(self):
+        old = self.required_run()
+        new = {**old, "id": 89, "created_at": "2026-10-05T17:01:00Z"}
+        self.assertEqual(1, len(self.reconcile(neutral=True, required=[new, old])))
+        self.assertEqual([], self.reconcile(neutral=True, required=[old, {**new, "conclusion": "success"}]))
+        for changes in (
+            {"status": "in_progress", "conclusion": None},
+            {"run_attempt": 3},
+            {"actor": {"login": "foreign"}},
+            {"triggering_actor": {"login": "foreign"}},
+            {"created_at": "invalid"},
+            {"created_at": "2026-02-30T17:00:00Z"},
+        ):
+            with self.subTest(changes=changes):
+                self.assertEqual([], self.reconcile(neutral=True, required=[{**old, **changes}, new]))
+        self.assertEqual(
+            1,
+            len(
+                self.reconcile(
+                    neutral=True,
+                    required=[old, {**new, "run_attempt": 2, "triggering_actor": {"login": "github-actions[bot]"}}],
+                )
+            ),
+        )
+
     def test_review_content_rejects_stale_empty_quota_and_foreign(self):
         self.assertTrue(EVENT.clean_review(self.review(), [], self.head))
         for review in (
@@ -231,6 +282,10 @@ class ReviewEventTests(unittest.TestCase):
             "id": 88,
             "workflow_id": 999,
             "event": "pull_request_target",
+            "created_at": "2026-10-05T17:00:00Z",
+            "run_attempt": 1,
+            "actor": {"login": "litroc"},
+            "triggering_actor": {"login": "litroc"},
             "path": ".github/workflows/dot-github-current-revision-required.yml",
             "workflow_url": f"{api_url}/actions/required_workflows/999",
             "repository": {"full_name": repo},
@@ -287,9 +342,7 @@ class ReviewEventTests(unittest.TestCase):
         run = self.required_run()
         run["pull_requests"][0]["number"] = 24
         self.assertEqual([], self.reconcile(neutral=True, required=[run]))
-        self.assertEqual(
-            [], self.reconcile(neutral=True, required=[self.required_run(), {**self.required_run(), "id": 89}])
-        )
+        self.assertEqual([], self.reconcile(neutral=True, required=[self.required_run(), self.required_run()]))
 
     def test_other_pilots_bind_the_central_organization_required_path(self):
         for repo in ("lightning-it/shared-assets-lit", "lightning-it/ansible-collection-supplementary"):

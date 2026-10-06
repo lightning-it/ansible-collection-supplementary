@@ -119,10 +119,10 @@ the request job is attempt-one-only. The helper validates the completed producer
 attempt and full Required inventory before the sole verifier rerun. CAS receipts
 never replace native review evidence. Terminal review content consumes no retry.
 
-The preparation donor content is Source bundle `3fa97f0b3afb5386cf8a2bb77b34bfd6a88fbc6d443663700a96cd70c0f85b4d`.
+The preparation donor content is Source bundle `9f9bfa412ff84be1670f8b5cf69704585ae9cc0de0610ce5cb6f47f5066f6f6d`.
 This is a local preparation binding; `protected_source_commit` remains null until actual protected Source main
-adoption. Local immutable Source snapshot: `d5a52bf322abdfcb5268b56b278c0c7da720103e`
-(tree `4465341bd7afbaee592f114fbdd26d55b1ebeabb`), preparation only.
+adoption. Local immutable Source snapshot: `65ce52fe1814a91699d5fee425502e7f608e0ff5`
+(tree `94e309975231effcdddd4d947d7032a79f19c4c2`), preparation only.
 The original Supplementary request job keeps its six-job producer
 context and exact source/author/actor predicate. Only the enabled three pilots
 admit `synchronize`. PR-wide Pending writes a separate immutable deferred intent,
@@ -138,13 +138,19 @@ and owner-completion events only locate work; completed `Copilot` and
 is the bounded delayed-visibility fallback. All three dispatch workflow families
 share the existing 256-GET inventory budget and native cooldown. The original
 producer remains the owner; no third verifier attempt or LI-259 route is added.
+The exact-review SINGLE gateway is distributed with its workflow, materializer,
+and all six runtime modules, including single_review_resources.py. This is local
+preparation only; final protected-source and final instruction digests remain HOLD.
 The adjacent continuation module and read-only provenance module are explicit
 scoped managed assets. Locator jobs receive read access plus dispatch authority;
 only the protected consumer receives the audited request/CAS write scopes.
 
 Only an exact confirmed native STALE_DATA journal conflict permits retrying the
 eligibility-only intent write, with at most three attempts. Unknown delivery is
-readback-only; request CAS and AI POST remain single-attempt. Keyed inventories
+readback-only; request CAS and AI POST remain single-attempt. Legacy uncertain request
+consumption survives cleared Pending and terminal review content; it never funds
+a second same-head request. Explicit negation (including isn’t/isn't) marks
+failure; positive able-to-review text does not. Keyed inventories
 require stable exact totals. Historical review provenance uses its bound request
 event time, authenticated inside the native request step. Supplementary has no protected empty-association sender:
 an empty native PR association fails closed in original/continuation/provenance

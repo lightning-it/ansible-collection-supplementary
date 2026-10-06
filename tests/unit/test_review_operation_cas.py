@@ -19,128 +19,195 @@ import json
 import os
 from pathlib import Path
 import sys
+
 args = sys.argv[1:]
-file = Path(os.environ['STATE'])
+file = Path(os.environ["STATE"])
 s = json.loads(file.read_text())
-worker = os.environ['GITHUB_RUN_ID']
-mode = s['mode']
-fields = dict(a.split('=', 1) for a in args if '=' in a)
-route = next((a for a in args if a.startswith('repos/') or a == 'graphql'), '')
-post = '--method' in args and args[args.index('--method') + 1] == 'POST'
-call = {'worker': worker, 'route': route, 'post': post}
-s['calls'].append(call)
+worker = os.environ["GITHUB_RUN_ID"]
+mode = s["mode"]
+fields = dict(a.split("=", 1) for a in args if "=" in a)
+route = next((a for a in args if a.startswith("repos/") or a == "graphql"), "")
+post = "--method" in args and args[args.index("--method") + 1] == "POST"
+call = {"worker": worker, "route": route, "post": post}
+s["calls"].append(call)
 rc, result = 0, None
-if route == 'graphql' and '--input' in args:
-    request = json.load(sys.stdin)['variables']['input']
+if route == "graphql" and "--input" in args:
+    request = json.load(sys.stdin)["variables"]["input"]
     call.update(cas=True, input=request)
-    assert request['branch'] == {'repositoryNameWithOwner': 'lightning-it/ansible-collection-supplementary',
-                                 'branchName': 'lit-review-operations'}
-    assert len(request['fileChanges']['additions']) == 1
-    assert 'deletions' not in request['fileChanges']
-    old = request['expectedHeadOid']
-    if old != s['oid']:
-        result, rc = {'errors': [{'message': 'expectedHeadOid mismatch'}]}, 1
-    elif mode == 'not-applied':
+    assert request["branch"] == {
+        "repositoryNameWithOwner": "lightning-it/ansible-collection-supplementary",
+        "branchName": "lit-review-operations",
+    }
+    assert len(request["fileChanges"]["additions"]) == 1
+    assert "deletions" not in request["fileChanges"]
+    old = request["expectedHeadOid"]
+    if old != s["oid"]:
+        result, rc = {"errors": [{"message": "expectedHeadOid mismatch"}]}, 1
+    elif mode == "not-applied":
         rc = 42
     else:
         import base64
-        entry = request['fileChanges']['additions'][0]
-        record = base64.b64decode(entry['contents']).decode()
-        s['oid'] = '1' * 40 if old == '0' * 40 else format(int(old, 16) + 1, '040x')
-        s['versions'][s['oid']] = {**s['versions'][old], entry['path']: json.loads(record)}
-        result = {'data': {'createCommitOnBranch': {'commit': {
-            'oid': s['oid'], 'parents': {'nodes': [{'oid': old}]}}}}}
-        if mode == 'lost-cas':
+
+        entry = request["fileChanges"]["additions"][0]
+        record = base64.b64decode(entry["contents"]).decode()
+        s["oid"] = "1" * 40 if old == "0" * 40 else format(int(old, 16) + 1, "040x")
+        s["versions"][s["oid"]] = {**s["versions"][old], entry["path"]: json.loads(record)}
+        result = {"data": {"createCommitOnBranch": {"commit": {"oid": s["oid"], "parents": {"nodes": [{"oid": old}]}}}}}
+        if mode == "lost-cas":
             result, rc = None, 42
-        if mode == 'partial-cas':
-            result['errors'] = []
-        if mode == 'wrong-parent':
-            result['data']['createCommitOnBranch']['commit']['parents']['nodes'] = []
-elif route == 'graphql':
-    oid = fields['oid']
-    assert fields['manifest'] == oid + ':manifest.json'
-    assert fields['record'].startswith(oid + ':operations/')
-    record = s['versions'][oid].get(fields['record'].split(':', 1)[1])
-    manifest = {'schema': 1, 'repository': 'lightning-it/ansible-collection-supplementary',
-                'repository_id': '1103407173', 'ref': 'refs/heads/lit-review-operations'}
-    if mode == 'foreign-manifest':
-        manifest['repository'] = 'mallory/foreign'
+        if mode == "partial-cas":
+            result["errors"] = []
+        if mode == "wrong-parent":
+            result["data"]["createCommitOnBranch"]["commit"]["parents"]["nodes"] = []
+elif route == "graphql":
+    oid = fields["oid"]
+    assert fields["manifest"] == oid + ":manifest.json"
+    assert fields["record"].startswith(oid + ":operations/")
+    record = s["versions"][oid].get(fields["record"].split(":", 1)[1])
+    manifest = {
+        "schema": 1,
+        "repository": "lightning-it/ansible-collection-supplementary",
+        "repository_id": "1103407173",
+        "ref": "refs/heads/lit-review-operations",
+    }
+    if mode == "foreign-manifest":
+        manifest["repository"] = "mallory/foreign"
+
     def blob(value):
         text = json.dumps(value)
-        return {'__typename': 'Blob', 'isTruncated': False, 'byteSize': len(text), 'text': text}
-    result = {'data': {'repository': {'nameWithOwner': 'lightning-it/ansible-collection-supplementary',
-        'source': {'__typename': 'Commit', 'oid': 'f' * 40 if mode == 'mixed-source' else oid},
-        'manifest': blob(manifest), 'record': None if record is None else blob(record)}}}
-    if mode == 'missing-record-field':
-        del result['data']['repository']['record']
-    if mode == 'partial-read':
-        result['errors'] = []
-    if mode == 'truncated':
-        result['data']['repository']['manifest']['isTruncated'] = True
-elif '/git/ref/' in route:
-    if mode == 'missing-bootstrap':
+        return {"__typename": "Blob", "isTruncated": False, "byteSize": len(text), "text": text}
+
+    result = {
+        "data": {
+            "repository": {
+                "nameWithOwner": "lightning-it/ansible-collection-supplementary",
+                "source": {"__typename": "Commit", "oid": "f" * 40 if mode == "mixed-source" else oid},
+                "manifest": blob(manifest),
+                "record": None if record is None else blob(record),
+            }
+        }
+    }
+    if mode == "missing-record-field":
+        del result["data"]["repository"]["record"]
+    if mode == "partial-read":
+        result["errors"] = []
+    if mode == "truncated":
+        result["data"]["repository"]["manifest"]["isTruncated"] = True
+elif "/git/ref/" in route:
+    if mode == "missing-bootstrap":
         rc = 1
     else:
         # Every later worker sees a stale but coherent immutable snapshot.
         # Authoritative CAS still checks the actual current server ref.
-        oid = '0' * 40 if worker == '501' and mode in ('stale-ref', 'lost-cas-stale') else s['oid']
-        result = {'ref': 'refs/heads/lit-review-operations', 'object': {'type': 'commit', 'sha': oid}}
-elif post and route.endswith('/check-runs'):
-    call['marker'] = True
-    marker = {'id': 99, 'name': fields['name'], 'head_sha': fields['head_sha'],
-        'external_id': fields['external_id'], 'status': fields['status'], 'conclusion': fields['conclusion'],
-        'app': {'id': 15368, 'slug': 'github-actions'},
-        'output': {'title': fields['output[title]'], 'summary': fields['output[summary]']}}
-    s['markers'].append(marker)
+        oid = "0" * 40 if worker == "501" and mode in ("stale-ref", "lost-cas-stale") else s["oid"]
+        result = {"ref": "refs/heads/lit-review-operations", "object": {"type": "commit", "sha": oid}}
+elif post and route.endswith("/check-runs"):
+    call["marker"] = True
+    marker = {
+        "id": 99,
+        "name": fields["name"],
+        "head_sha": fields["head_sha"],
+        "external_id": fields["external_id"],
+        "status": fields["status"],
+        "conclusion": fields["conclusion"],
+        "app": {"id": 15368, "slug": "github-actions"},
+        "output": {"title": fields["output[title]"], "summary": fields["output[summary]"]},
+    }
+    s["markers"].append(marker)
     result = marker
-    if mode == 'lost-marker':
+    if mode == "lost-marker":
         rc = 42
-elif route.endswith('/requested_reviewers'):
+elif route.endswith("/requested_reviewers"):
     if post:
-        call['request'] = True
-        if mode == 'rejected-old-pending':
-            call['accepted'] = False
-            s['requested'] = True
-            s['pending_head'] = 'a' * 40
+        call["request"] = True
+        if mode == "rejected-old-pending":
+            call["accepted"] = False
+            s["requested"] = True
+            s["pending_head"] = "a" * 40
             rc = 42
-        elif mode in ('request-success', 'lost-request-response', 'lost-request-response-cleared'):
-            s['requested'] = True
-            call['accepted'] = True
-            if mode != 'request-success': rc = 42
+        elif mode in (
+            "request-success",
+            "lost-request-response",
+            "lost-request-response-cleared",
+            "legacy-terminal-cleared",
+        ):
+            s["requested"] = True
+            call["accepted"] = True
+            if mode != "request-success":
+                rc = 42
         else:
             rc = 42
     else:
-        if mode == 'lost-request-response-cleared' and worker != '500': s['requested'] = False
-        result = {'users': [{'login': 'copilot-pull-request-reviewer[bot]'}]
-              if mode == 'pending-review' or s.get('requested') else []}
-elif '/comments' in route:
+        if mode in ("lost-request-response-cleared", "legacy-terminal-cleared") and worker != "500":
+            s["requested"] = False
+        result = {
+            "users": [{"login": "copilot-pull-request-reviewer[bot]"}]
+            if mode == "pending-review" or s.get("requested")
+            else []
+        }
+elif "/comments" in route:
     if post:
-        call['comment'] = True
-        s.setdefault('comments', []).append({'user': {'login': 'github-actions[bot]'}, 'body': fields['body']})
-        rc = 0 if mode == 'request-success' else 42
+        call["comment"] = True
+        s.setdefault("comments", []).append({"user": {"login": "github-actions[bot]"}, "body": fields["body"]})
+        rc = 0 if mode == "request-success" else 42
     else:
-        result = [[] if worker == '501' else s.get('comments', [])]
-elif '/reviews?' in route:
-    result = [[{'commit_id': os.environ['EXPECTED_HEAD'], 'state': 'COMMENTED', 'body': 'Review complete.',
-                'user': {'login': 'copilot-pull-request-reviewer[bot]'}}] if mode == 'existing-review' else []]
-elif route.endswith('/pulls/23'):
-    result = {'number': 23, 'state': 'open', 'draft': False, 'user': {'login': 'litroc'},
-              'head': {'sha': os.environ['EXPECTED_HEAD'], 'repo': {
-                  'full_name': 'lightning-it/ansible-collection-supplementary'}},
-              'base': {'sha': os.environ['EXPECTED_BASE'], 'repo': {
-                  'full_name': 'lightning-it/ansible-collection-supplementary'}}}
-elif post and route.endswith('/rerun'):
-    call['rerun'] = True
+        result = [[] if worker == "501" and mode != "legacy-terminal-cleared" else s.get("comments", [])]
+elif "/reviews?" in route:
+    if mode == "legacy-terminal-cleared" and worker != "500":
+        result = [
+            [
+                {
+                    "commit_id": os.environ["EXPECTED_HEAD"],
+                    "state": "COMMENTED",
+                    "body": "Copilot was not able to review any files.",
+                    "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                }
+            ]
+        ]
+    else:
+        result = [
+            [
+                {
+                    "commit_id": os.environ["EXPECTED_HEAD"],
+                    "state": "COMMENTED",
+                    "body": "Review complete.",
+                    "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                }
+            ]
+            if mode == "existing-review"
+            else []
+        ]
+elif route.endswith("/pulls/23"):
+    result = {
+        "number": 23,
+        "state": "open",
+        "draft": False,
+        "user": {"login": "litroc"},
+        "head": {
+            "sha": os.environ["EXPECTED_HEAD"],
+            "repo": {"full_name": "lightning-it/ansible-collection-supplementary"},
+        },
+        "base": {
+            "sha": os.environ["EXPECTED_BASE"],
+            "repo": {"full_name": "lightning-it/ansible-collection-supplementary"},
+        },
+    }
+elif post and route.endswith("/rerun"):
+    call["rerun"] = True
     rc = 42
-elif '/check-runs?' in route:
+elif "/check-runs?" in route:
     # Exact reported regression: old marker invisible through confirmation of
     # any new marker; no consistency assumption is made about this inventory.
-    visible = [] if worker == '501' or mode == 'invisible-marker' else s['markers']
-    result = [{'total_count': len(visible), 'check_runs': visible}]
-elif '/actions/runs/' in route:
-    created = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-    result = {'id': int(route.rsplit('/', 1)[1]), 'run_attempt': 1, 'status': 'completed',
-              'created_at': '2000-01-01T00:00:00Z' if mode == 'expired' else created}
+    visible = [] if worker == "501" or mode == "invisible-marker" else s["markers"]
+    result = [{"total_count": len(visible), "check_runs": visible}]
+elif "/actions/runs/" in route:
+    created = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    result = {
+        "id": int(route.rsplit("/", 1)[1]),
+        "run_attempt": 1,
+        "status": "completed",
+        "created_at": "2000-01-01T00:00:00Z" if mode == "expired" else created,
+    }
 else:
     raise AssertionError(args)
 file.write_text(json.dumps(s))
@@ -210,7 +277,7 @@ read_refresh_review_state() { printf '%s' '{"event_current":true,"incomplete":0,
                     "refresh_expected_snapshot": "null",
                     **changes,
                 }
-                result = subprocess.run(  # noqa: S603 -- Fixed workflow fixture with local mock transport.
+                result = subprocess.run(  # noqa: S603 -- Fixed repository workflow with fixture transport.
                     ["/bin/bash", "-c", script],
                     env=env,
                     capture_output=True,
@@ -302,6 +369,23 @@ read_refresh_review_state() { printf '%s' '{"event_current":true,"incomplete":0,
 
 
 class ReviewRequestCASTests(unittest.TestCase):
+    def test_request_reservations_serialize_across_event_actions(self):
+        import yaml
+
+        paths = [ROOT / ".github/workflows/copilot-review.yml"]
+        mirror = ROOT / "default/.github/workflows/copilot-review.yml"
+        if mirror.exists():
+            paths.append(mirror)
+        for path in paths:
+            request = yaml.safe_load(path.read_text())["jobs"]["request-current-revision-review"]
+            self.assertEqual(
+                {
+                    "group": "copilot-review-request-${{ github.event.pull_request.number }}",
+                    "cancel-in-progress": False,
+                },
+                request["concurrency"],
+            )
+
     def probe(
         self,
         mode,
@@ -311,6 +395,7 @@ class ReviewRequestCASTests(unittest.TestCase):
         source_prefix="",
         interrupt=None,
         repository="lightning-it/ansible-collection-supplementary",
+        repository_id="1103407173",
     ):
         import textwrap
 
@@ -383,7 +468,7 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                     "GITHUB_REF_PROTECTED": "true",
                     "GITHUB_REF": "refs/heads/develop",
                     "WORKFLOW_SHA": SOURCE,
-                    "GITHUB_REPOSITORY_ID": "1103407173",
+                    "GITHUB_REPOSITORY_ID": repository_id,
                     "LI219_EVENT_MODE": event_mode or "",
                     "PROBE_INTERRUPT": (interrupt or "") if worker == "500" else "",
                     "REPOSITORY": repository,
@@ -403,7 +488,7 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                 }
                 if event_mode is None:
                     env.pop("LI219_EVENT_MODE", None)
-                result = subprocess.run(  # noqa: S603 -- Fixed workflow fixture with local mock transport.
+                result = subprocess.run(  # noqa: S603 -- Fixed repository workflow with fixture transport.
                     ["/bin/bash", "-c", shell],
                     env=env,
                     capture_output=True,
@@ -424,7 +509,7 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
             final["outcomes"] = outcomes
             return final
 
-    def test_legacy_interruption_before_post_cannot_reserve_marker(self):
+    def test_legacy_interruption_before_post_leaves_only_uncertain_consumption(self):
         for prefix in ("",):
             for flag, repo in (
                 (None, "lightning-it/shared-assets-lit"),
@@ -439,17 +524,9 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                         interrupt="before-request",
                         repository=repo,
                     )
-                    self.assertFalse(
-                        any(
-                            c.get("cas") or c.get("request") or c.get("comment")
-                            for c in state["observations"][0]["calls"]
-                        )
-                    )
-                    effects = [c for c in state["calls"] if c.get("cas") or c.get("request") or c.get("comment")]
-                    self.assertEqual(
-                        [("501", "request"), ("501", "comment")],
-                        [(c["worker"], "request" if c.get("request") else "comment") for c in effects],
-                    )
+                    self.assertFalse(any(c.get("cas") or c.get("request") for c in state["calls"]))
+                    self.assertTrue(state["observations"][0]["comments"])
+                    self.assertTrue(all("UNCERTAIN:" in item["body"] for item in state["comments"]))
 
     def test_actual_request_order_and_interruption_after_post(self):
         for prefix in ("",):
@@ -467,18 +544,23 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                             "cas" if c.get("cas") else "request" if c.get("request") else "comment" for c in effects
                         ]
                         self.assertEqual(
-                            ((["cas"] if flag == "enabled" else []) + ["request"]),
+                            ((["cas"] if flag == "enabled" else ["comment"]) + ["request"]),
                             kinds[: kinds.index("request") + 1],
                         )
                         self.assertEqual(1, kinds.count("request"))
                         if interrupt:
                             # A later PR-scoped pending reviewer cannot prove
                             # which head the interrupted POST requested.
-                            self.assertNotIn("comment", kinds)
+                            self.assertTrue(all("UNCERTAIN:" in item["body"] for item in state.get("comments", [])))
                         else:
                             self.assertEqual("comment", kinds[-1])
                         if interrupt:
-                            self.assertFalse(any(c.get("comment") for c in state["observations"][0]["calls"]))
+                            self.assertFalse(
+                                any(
+                                    "request accepted" in item["body"]
+                                    for item in state["observations"][0].get("comments", [])
+                                )
+                            )
 
     def test_enabled_interruption_after_claim_does_not_repeat_effect(self):
         for prefix in ("",):
@@ -518,7 +600,7 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                 if mode in ("existing-review", "pending-review"):
                     self.assertFalse(any(c.get("cas") for c in state["calls"]))
 
-    def test_pending_old_head_never_marks_or_consumes_new_head_in_local_producer(self):
+    def test_pending_old_head_never_marks_or_consumes_new_head_in_either_mirror(self):
         for prefix in ("",):
             for flag in ("enabled", "disabled"):
                 with self.subTest(source=prefix, flag=flag):
@@ -572,7 +654,7 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                         ),
                     ),
                 )
-                return eval(  # noqa: S307 -- Fixed local predicate and restricted fixture namespace.
+                return eval(  # noqa: S307 -- Fixed GitHub expression, no builtins, fixture globals only.
                     expression,
                     {"__builtins__": {}},
                     {
@@ -588,7 +670,7 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                 )
 
             for repo in (
-                "lightning-it/.github",
+                "lightning-it/ansible-collection-supplementary",
                 "lightning-it/shared-assets-lit",
                 "lightning-it/ansible-collection-supplementary",
             ):
@@ -623,7 +705,7 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                         self.assertEqual(1, state["outcomes"][0])
                         self.assertEqual(1, sum(bool(c.get("request")) for c in state["calls"]))
                         self.assertEqual(int(flag == "enabled"), sum(bool(c.get("cas")) for c in state["calls"]))
-                        self.assertFalse(any(c.get("comment") for c in state["calls"]))
+                        self.assertTrue(all("UNCERTAIN:" in item["body"] for item in state.get("comments", [])))
 
     def test_lost_original_post_keeps_claim_consumed_after_pending_clears(self):
         for prefix in ("",):
@@ -633,7 +715,21 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                     expected = ["500", "502"] if new_head else ["500"]
                     self.assertEqual(expected, [c["worker"] for c in state["calls"] if c.get("request")])
                     self.assertEqual(len(expected), sum(bool(c.get("cas")) for c in state["calls"]))
-                    self.assertFalse(any(c.get("comment") for c in state["calls"]))
+                    self.assertTrue(all("UNCERTAIN:" in item["body"] for item in state.get("comments", [])))
+
+    def test_legacy_lost_response_terminal_review_and_cleared_pending_never_repeat(self):
+        for prefix in ("",):
+            for flag in (None, "disabled"):
+                with self.subTest(source=prefix, flag=flag):
+                    state = self.probe("legacy-terminal-cleared", event_mode=flag, source_prefix=prefix)
+                    self.assertEqual(["500"], [c["worker"] for c in state["calls"] if c.get("request")])
+                    self.assertFalse(any(c.get("cas") for c in state["calls"]))
+                    self.assertEqual(1, len(state["comments"]))
+                    self.assertIn("UNCERTAIN:", state["comments"][0]["body"])
+                    self.assertNotIn("request accepted", state["comments"][0]["body"])
+                    first = [c for c in state["calls"] if c["worker"] == "500" and c.get("post")]
+                    self.assertTrue(first[0].get("comment"))
+                    self.assertTrue(first[1].get("request"))
 
     def test_rejected_original_post_then_old_pending_never_accepts_new_head(self):
         for prefix in ("",):
@@ -649,4 +745,4 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                         self.assertEqual(BASE, state["pending_head"])
                         self.assertEqual(1, state["outcomes"][0])
                         self.assertEqual(int(flag == "enabled"), sum(bool(c.get("cas")) for c in state["calls"]))
-                        self.assertFalse(any(c.get("comment") for c in state["calls"]))
+                        self.assertTrue(all("UNCERTAIN:" in item["body"] for item in state.get("comments", [])))

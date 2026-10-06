@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "status": "local-preparation-only",
+  "repository": "lightning-it/ansible-collection-supplementary",
+  "local_preparation_source_commit": "65ce52fe1814a91699d5fee425502e7f608e0ff5",
+  "local_preparation_source_tree": "94e309975231effcdddd4d947d7032a79f19c4c2",
+  "protected_source_commit": null,
+  "final_target_agents_sha256": null,
+  "final_target_copilot_sha256": null,
+  "bindings": [
+    {
+      "source_path": "default/.github/workflows/release-bot-exact-head-review.yml",
+      "target_path": ".github/workflows/release-bot-exact-head-review.yml",
+      "source_blob": "5522b815c708acc37153793d5fb709e0ffab0430",
+      "source_sha256": "1a736593e89ec0cedc215e8ff37bfc4fb5726184c979036153ddcaa05af71215",
+      "target_sha256": "1a736593e89ec0cedc215e8ff37bfc4fb5726184c979036153ddcaa05af71215",
+      "mode": "byte-identical"
+    },
+    {
+      "source_path": "default/scripts/materialize-exact-revision-review.py",
+      "target_path": "scripts/materialize-exact-revision-review.py",
+      "source_blob": "0126d832fbacb16bf8feaaa2fcb2403259b55dab",
+      "source_sha256": "444339b14b57f8c04d6d71f5660e13c158791165ebda146f51752ad1785ee9c9",
+      "target_sha256": "444339b14b57f8c04d6d71f5660e13c158791165ebda146f51752ad1785ee9c9",
+      "mode": "byte-identical"
+    },
+    {
+      "source_path": "default/scripts/exact_revision_gateway.py",
+      "target_path": "scripts/exact_revision_gateway.py",
+      "source_blob": "2bbf927a01e708d96b81f5f4ae88a287a0acf3e8",
+      "source_sha256": "b79efb6182410bb8db42c9d2f309f642778da37d60b343dd9ef35eb59f5a30b3",
+      "target_sha256": "b79efb6182410bb8db42c9d2f309f642778da37d60b343dd9ef35eb59f5a30b3",
+      "mode": "byte-identical"
+    },
+    {
+      "source_path": "default/scripts/bounded_review.py",
+      "target_path": "scripts/bounded_review.py",
+      "source_blob": "81e16d7c210181b0a4cec62bd55696bd5e108da6",
+      "source_sha256": "22d4e0eea6b368f00b34f8f8d78f50cab2ac855e386e3f6b1db2d7e94bd7a155",
+      "target_sha256": "22d4e0eea6b368f00b34f8f8d78f50cab2ac855e386e3f6b1db2d7e94bd7a155",
+      "mode": "byte-identical"
+    },
+    {
+      "source_path": "default/scripts/bounded_review_config.py",
+      "target_path": "scripts/bounded_review_config.py",
+      "source_blob": "3a205d5e4aca655ce107e5b0b55a5de2304df94c",
+      "source_sha256": "8f827fd52c72644ae37d8cdc371364fb89628b3e61fb10b7683956c04b32be6a",
+      "target_sha256": "8f827fd52c72644ae37d8cdc371364fb89628b3e61fb10b7683956c04b32be6a",
+      "mode": "byte-identical"
+    },
+    {
+      "source_path": "default/scripts/bounded_review_provider.py",
+      "target_path": "scripts/bounded_review_provider.py",
+      "source_blob": "2491731ef65e54f823eb5813bf1c197e9d8124af",
+      "source_sha256": "61dea0b1de49356a49e75aaa556a2495398775e8b1a848e13f460ed2b13f62bd",
+      "target_sha256": "61dea0b1de49356a49e75aaa556a2495398775e8b1a848e13f460ed2b13f62bd",
+      "mode": "byte-identical"
+    },
+    {
+      "source_path": "default/scripts/bounded_review_transport.py",
+      "target_path": "scripts/bounded_review_transport.py",
+      "source_blob": "2c49d7f3e9850c61266beda76e1c1142536a8a8b",
+      "source_sha256": "d6caf6a8892409eba57b820b36dc6059552262621d8730d9aad48235c9ff8fb4",
+      "target_sha256": "d6caf6a8892409eba57b820b36dc6059552262621d8730d9aad48235c9ff8fb4",
+      "mode": "byte-identical"
+    },
+    {
+      "source_path": "default/scripts/single_review_resources.py",
+      "target_path": "scripts/single_review_resources.py",
+      "source_blob": "c6dbd2abb1496febf36cb916d7ae843859abd09d",
+      "source_sha256": "82d185d3316a363a4ce86a87c07b96bc2819f355463b62c6d0fda0f84a381a3f",
+      "target_sha256": "82d185d3316a363a4ce86a87c07b96bc2819f355463b62c6d0fda0f84a381a3f",
+      "mode": "byte-identical"
+    }
+  ]
+}
