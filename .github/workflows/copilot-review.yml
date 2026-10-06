@@ -917,9 +917,12 @@ jobs:
           fi
           if ! gh api --method POST "${requested_reviewers_url}" \
               -f "reviewers[]=${reviewer}"; then
-            # PR-wide Pending does not prove this head's POST was accepted.
-            # A lost response leaves the claim consumed; never publish a false receipt.
-            echo "Unconfirmed Copilot request; claim remains consumed and no accepted marker is published." >&2
+            # Pending is PR-scoped and cannot confirm this head's POST.
+            # Read back existing state only; never retry or publish acceptance.
+            if reviewer_is_requested; then
+              echo "A reviewer is pending; exact-head request acceptance remains unconfirmed." >&2
+            fi
+            echo "Review request response remains uncertain; no retry sent." >&2
             exit 1
           fi
           if [ "${marker_exists}" = false ]; then

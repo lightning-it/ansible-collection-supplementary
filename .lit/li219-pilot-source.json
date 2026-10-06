@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "repository": "lightning-it/ansible-collection-supplementary",
-  "preparation_source_commit": "5876d213be5bd03ff6ecb24e15246599775b1c9f",
+  "preparation_source_commit": "465cb86936d5cdf95db00caa62f045d6bbd5a073",
   "protected_source_commit": null,
   "status": "local-continuation-port-prepared-awaits-final-review-and-actual-protected-source-main",
   "target_base": "c983bb3c8aa26114f682d825bfaca6fa1be187e4",
@@ -74,11 +74,11 @@
     {
       "source_path": "default/.github/workflows/copilot-review.yml",
       "target_path": ".github/workflows/copilot-review.yml",
-      "source_sha256": "713abc341eb51593ed8050d7740ff30b184b1084addc9390801755536ae1f0a6",
-      "source_blob": "b70ca241d88a4e8ea48d5951618ea97d9ce8fb1c",
+      "source_sha256": "45f7be1bb597afbe3ca2a3d0b547fb6e51d546cb3989cb0eb9775e303aaad096",
+      "source_blob": "2e2f09558db7d0219d7f204c0deb63da65b7ee2b",
       "mode": "adapted-local",
-      "target_sha256": "c9ac1710fb2c70c7a13a01a567237e21b490fcbb328fbd75acc2b96000c6464f",
-      "adaptation": "Preserve six Supplementary jobs and exact original trust; add enabled sync and canonical intent helper in existing step; uncertain original POST stops without accepted marker."
+      "target_sha256": "d3baf6596bd49242a98afc79870f685eb031c84efffc848e4144612efebe3f0e",
+      "adaptation": "Preserve six Supplementary jobs and exact original trust; enabled sync and canonical intent helper in existing step; canonical failed original POST performs read-only Pending check, exits without acceptance or retry."
     },
     {
       "source_path": "default/scripts/lit-push-ready.py",
@@ -121,7 +121,7 @@
     },
     {
       "path": "tests/test_review_operation_cas.py",
-      "sha256": "3772f53dce6fb8f44e0ad06cc2320665e4417c1de50f585885fa68391a3490dd",
+      "sha256": "35219a3c3dcd3bf4685898992b8763cded42421fd80f8b32aa7eae2e0b520f7e",
       "adaptation": "Local package paths and Supplementary identities; topology selector subset replaces old static assertions."
     },
     {
@@ -145,5 +145,5 @@
       "adaptation": "Supplementary identity/package and actual six-job owner topology; read-only schema2 provenance acceptance and native source/step/time/locator rejection."
     }
   ],
-  "preparation_source_tree": "1f4915d3008c74fc19b939d3dc96ecb195a07c1d"
+  "preparation_source_tree": "d05b388b62c16b68e579dba00385e2e85f518abf"
 }

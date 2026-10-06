@@ -119,8 +119,8 @@ the request job is attempt-one-only. The helper validates the completed producer
 attempt and full Required inventory before the sole verifier rerun. CAS receipts
 never replace native review evidence. Terminal review content consumes no retry.
 
-The immutable preparation donor is Source `5876d213be5bd03ff6ecb24e15246599775b1c9f`
-(tree `1f4915d3008c74fc19b939d3dc96ecb195a07c1d`). This is a local preparation
+The immutable preparation donor is Source `465cb86936d5cdf95db00caa62f045d6bbd5a073`
+(tree `d05b388b62c16b68e579dba00385e2e85f518abf`). This is a local preparation
 binding; `protected_source_commit` remains null until actual protected Source main
 adoption. The original Supplementary request job keeps its six-job producer
 context and exact source/author/actor predicate. Only the enabled three pilots
