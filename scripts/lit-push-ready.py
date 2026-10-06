@@ -4203,6 +4203,16 @@ def install_pre_push_hook() -> None:
         os.close(directory)
 
 
+def verified_diff_sha256(change: PlannedChange) -> str:
+    if change.patch is None:
+        raise RuntimeError("planned patch has not been materialized")
+    digest = hashlib.sha256()
+    # Exhaust the stream so PatchSpool also verifies its cached size and digest.
+    for chunk in patch_chunks(change.patch):
+        digest.update(chunk.encode("utf-8"))
+    return digest.hexdigest()
+
+
 def produce_evidence(
     config: dict[str, Any],
     change: PlannedChange,
@@ -4224,7 +4234,9 @@ def produce_evidence(
     ):
         raise RuntimeError("checks changed branch or tree")
     current = planned_change(config, fixture_manifest_bootstrap=fixture_manifest_bootstrap)
-    if current != change:
+    if current._replace(patch=None) != change._replace(patch=None) or verified_diff_sha256(
+        current
+    ) != verified_diff_sha256(change):
         raise RuntimeError("change binding drifted")
     classification = classify_review_profile(current)
     print(f"Review profile: {classification.profile} ({classification.reason})", flush=True)
