@@ -31,7 +31,6 @@ MARKERS = (
     "wasnotabletoreviewthispullrequest",
     "nofilestoreview",
     "unabletoreviewanyfiles",
-    "abletoreviewanyfiles",
     "notabletoreviewanyfiles",
     "wasnotabletoreviewanyfiles",
     "quotaexhausted",
@@ -178,8 +177,8 @@ def clean_review(review, comments, head):
             "",
             (text or "")
             .lower()
-            .replace("wasn't", "was not")
-            .replace("wasn’t", "was not"),
+            .replace("n't", " not")
+            .replace("n’t", " not"),
         )
         for text in texts
     ]
@@ -248,6 +247,35 @@ def required_locator(run, repository, pr):
         }
         and run.get("name") in (name, run.get("display_title"))
     )
+
+
+def latest_required(runs, repository, pr):
+    """Ordered native terminal supersession, matching the protected rerun helper.
+
+    This is a locator only; the helper independently authenticates current
+    source, actor, pair and the one existing verifier reservation before effects.
+    An active or malformed predecessor never disappears behind a newer run.
+    """
+    selected = [run for run in runs if required_locator(run, repository, pr)]
+    if not selected or len({run["id"] for run in selected}) != len(selected):
+        return None
+    for run in selected:
+        created = run.get("created_at")
+        if not isinstance(created, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", created):
+            return None
+        try:
+            if dt.datetime.fromisoformat(created.replace("Z", "+00:00")).strftime("%Y-%m-%dT%H:%M:%SZ") != created:
+                return None
+        except ValueError:
+            return None
+        attempt = run.get("run_attempt")
+        if (type(attempt) is not int or attempt not in (1, 2)
+                or run.get("actor", {}).get("login") != pr["user"]["login"]
+                or run.get("triggering_actor", {}).get("login") != (pr["user"]["login"] if attempt == 1 else "github-actions[bot]")
+                or run.get("status") != "completed"
+                or run.get("conclusion") not in {"success", "failure", "cancelled"}):
+            return None
+    return max(selected, key=lambda run: (run["created_at"], run["id"]))
 
 
 def reconcile(repository, now):
@@ -372,10 +400,8 @@ def reconcile(repository, now):
             required_runs = pages(
                 f"{prefix}/actions/runs?head_sha={head}", "workflow_runs"
             )
-            targets = [run for run in required_runs if required_locator(run, repository, pr)]
-            if len(targets) != 1 or targets[0]["status"] != "completed":
-                continue
-            if all(run.get("conclusion") == "success" for run in targets):
+            target = latest_required(required_runs, repository, pr)
+            if target is None or target["conclusion"] == "success":
                 continue
         else:
             reviews = pages(f"{prefix}/pulls/{number}/reviews")

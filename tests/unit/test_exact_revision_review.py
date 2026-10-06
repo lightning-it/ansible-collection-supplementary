@@ -4,12 +4,15 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import tempfile
 import types
 import unittest
 from pathlib import Path
 from unittest import mock
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 MATERIALIZER_PATH = ROOT / "scripts" / "materialize-exact-revision-review.py"
@@ -300,7 +303,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("      actions: read\n      checks: write", workflow)
         self.assertIn("checks: write", workflow)
         self.assertNotIn("actions/checkout@", workflow)
-        self.assertEqual(7, workflow.count("load_protected_asset"))
+        self.assertEqual(9, workflow.count("load_protected_asset"))
         for protected_path in (
             "scripts/materialize-exact-revision-review.py",
             ".github/codex/prompts/review-exact-head.md",
@@ -312,7 +315,12 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             self.assertIn(protected_path, workflow)
         self.assertEqual(1, workflow.count("?ref=${TRUSTED_WORKFLOW_SHA}"))
         self.assertIn("permission-profile: :read-only", workflow)
-        self.assertIn("codex-args: '[\"--ephemeral\"]'", workflow)
+        steps = yaml.safe_load(workflow)["jobs"]["exact-revision-codex-review"]["steps"]
+        args = next(step["with"]["codex-args"] for step in steps if "openai/codex-action@" in step.get("uses", ""))
+        alternatives = [json.loads(value) for value in re.findall(r"'(\[.*?\])'", args)]
+        self.assertEqual(2, len(alternatives))
+        self.assertTrue(all("--ephemeral" in values for values in alternatives))
+        self.assertIn('web_search="disabled"', alternatives[0])
         self.assertIn("name: Current revision review", workflow)
         self.assertIn("mlx90-exact-revision:v5:${input_sha256}:", workflow)
         self.assertIn("mlx90-current-revision:v4:${producer_run_id}:${input_sha256}", workflow)

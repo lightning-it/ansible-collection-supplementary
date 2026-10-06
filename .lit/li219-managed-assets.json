@@ -4,7 +4,7 @@
     {
       "path": ".github/workflows/copilot-review-refresh.yml",
       "category": "central-managed",
-      "sha256": "d72e1984d22195bbca8257db2dcc136a670dd5f3e55d13f6e2537e689b940a47",
+      "sha256": "b01fcf12921c484ae8d4a4f69c8d86b237f742b39714e8f0f996ed7566a71dd0",
       "source": "shared-assets-lit/default/.github/workflows/copilot-review-refresh.yml"
     },
     {
@@ -22,7 +22,7 @@
     {
       "path": "scripts/review-event-reconcile.py",
       "category": "central-managed",
-      "sha256": "fb069673ae3a3121f45d630b8adc5586dce339559115d41ea29356a48a2e2ece",
+      "sha256": "f27c619b276f42256d00d217581c2e028bee4558ba12a86d177aa41b2344bc7e",
       "source": "shared-assets-lit/default/scripts/review-event-reconcile.py"
     },
     {
@@ -41,7 +41,7 @@
     {
       "path": "scripts/review_content_markers.py",
       "category": "central-managed",
-      "sha256": "256447a7e7135cdc83f34cdba89610ceb1479ba0f8379761d4b107e66a083256",
+      "sha256": "1c6714882222f0956533ac5c2d0b5219ab3931288cefda625dd7259a2883e140",
       "source": "shared-assets-lit/scripts/review_content_markers.py"
     },
     {
@@ -54,7 +54,7 @@
     {
       "path": ".github/workflows/copilot-review.yml",
       "category": "local-required",
-      "sha256": "0013a3fd04dfe92ae83f869c73d84371ee4f0694ecf3381f73ac08e3f9fee03d",
+      "sha256": "71aae2e232c138bcc4c8c6e0963c8c0971bd08b10bf753e49ab7c8a7ce78cabd",
       "owner": "ansible-collection-supplementary",
       "purpose": "Locally adapted LI-219 contract; preserve Supplementary semantics."
     },
@@ -69,19 +69,19 @@
       "path": ".github/workflows/review-request-continuation.yml",
       "category": "central-managed",
       "source": "shared-assets-lit/default/.github/workflows/review-request-continuation.yml",
-      "sha256": "b64d17e5d73549ec115989691b2389a3e12f139ea2f384aece80d8c7edfa16e8"
+      "sha256": "2afa9c12cf60977fe969536d9806f29946a1c083df3a9e01f71795380ec4c429"
     },
     {
       "path": "scripts/review_request_continuation.py",
       "category": "central-managed",
       "source": "shared-assets-lit/default/scripts/review_request_continuation.py",
-      "sha256": "ec7b216cd6ad9c9fea4f4127bd25dbca9fa3e81c2f2fdd779054e8aa032c21d4"
+      "sha256": "dda71c5573aa915208e305f01433e8cd979d60ea7bcc57e7704ded3e2305b878"
     },
     {
       "path": "scripts/review_request_provenance.py",
       "category": "central-managed",
       "source": "shared-assets-lit/default/scripts/review_request_provenance.py",
-      "sha256": "2b0d09ba9926dcd77b522cdcb763a9bd3fda09f20619d501107f8ccae0ab2b89"
+      "sha256": "149bc3ef72f992d638a9e7399af8bd414679487eaba14c288325c5d5366b01e0"
     }
   ],
   "scope": "li219-three-pilot",

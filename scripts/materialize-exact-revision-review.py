@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import runpy
 import secrets
 import selectors
 import shutil
@@ -25,6 +26,7 @@ SHA1_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 RELEASE_BOT = "lightning-it-release-automation[bot]"
 MAX_REVIEW_BYTES = 200_000
+MAX_BOUNDED_REVIEW_BYTES = 64 * (MAX_REVIEW_BYTES - 1)
 MAX_PROTECTED_ASSET_BYTES = 1_000_000
 COMMAND_TIMEOUT_SECONDS = 120
 ASSET_ARGUMENTS = {
@@ -304,8 +306,19 @@ def validated_runner_temp() -> Path:
     return runner_temp
 
 
-def protected_asset_bytes(path: Path, name: str) -> bytes:
+def protected_asset_bytes(
+    path: Path,
+    name: str,
+    *,
+    # Only the bounded full diff uses a larger read budget.
+    maximum: int = MAX_PROTECTED_ASSET_BYTES,
+    single_runtime: bool = False,
+) -> bytes:
     """Read one bounded regular protected asset through an anchored parent chain."""
+    if type(maximum) is not int or not 1 <= maximum <= (
+        2**63 - 1 if single_runtime else MAX_BOUNDED_REVIEW_BYTES
+    ):
+        fail("Invalid protected file read boundary.")
     directory, no_follow, close_on_exec = open_owned_parent_directory(
         path,
         name,
@@ -330,10 +343,10 @@ def protected_asset_bytes(path: Path, name: str) -> bytes:
             fail(f"Protected {name} must be owned by the current user.")
         if details.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
             fail(f"Protected {name} must not be group- or world-writable.")
-        if details.st_size <= 0 or details.st_size > MAX_PROTECTED_ASSET_BYTES:
-            fail(f"Protected {name} must contain 1..{MAX_PROTECTED_ASSET_BYTES} bytes.")
+        if details.st_size <= 0 or details.st_size > maximum:
+            fail(f"Protected {name} must contain 1..{maximum} bytes.")
         with os.fdopen(descriptor, "rb", closefd=False) as protected_asset:
-            payload = protected_asset.read(MAX_PROTECTED_ASSET_BYTES + 1)
+            payload = protected_asset.read(maximum + 1)
         if len(payload) != details.st_size:
             fail(f"Protected {name} changed while reading.")
         return payload
@@ -362,10 +375,22 @@ def protected_asset_bytes(path: Path, name: str) -> bytes:
             add_error_notes(active_error, cleanup_errors)
 
 
-def write_owned_regular_file(path: Path, payload: bytes, name: str) -> None:
+def write_owned_regular_file(
+    path: Path,
+    payload: bytes,
+    name: str,
+    *,
+    # Only the bounded full diff uses a larger write budget.
+    maximum: int = MAX_PROTECTED_ASSET_BYTES,
+    single_runtime: bool = False,
+) -> None:
     """Replace a bounded owned file without following its parent chain or target."""
-    if len(payload) <= 0 or len(payload) > MAX_PROTECTED_ASSET_BYTES:
-        fail(f"Protected {name} must contain 1..{MAX_PROTECTED_ASSET_BYTES} bytes.")
+    if type(maximum) is not int or not 1 <= maximum <= (
+        2**63 - 1 if single_runtime else MAX_BOUNDED_REVIEW_BYTES
+    ):
+        fail("Invalid protected file write boundary.")
+    if len(payload) <= 0 or len(payload) > maximum:
+        fail(f"Protected {name} must contain 1..{maximum} bytes.")
     directory, no_follow, close_on_exec = open_owned_parent_directory(
         path,
         name,
@@ -541,6 +566,28 @@ def asset_paths_from_arguments(arguments: argparse.Namespace) -> dict[str, Path]
     return paths
 
 
+def single_memory_boundary() -> int:
+    # Loaded from the same immutable protected controller directory. This is
+    # runtime memory headroom, not a review-size or byte-to-token policy.
+    try:
+        return runpy.run_path(
+            str(Path(__file__).with_name("single_review_resources.py"))
+        )["wire_limit"]()
+    except (OSError, ValueError, KeyError) as error:
+        fail(f"SINGLE memory resource evidence unavailable: {error}")
+
+
+def single_mode(arguments: argparse.Namespace) -> bool:
+    single = getattr(arguments, "single_runtime", False)
+    if (
+        type(single) is not bool
+        or single
+        and getattr(arguments, "bounded_runtime", False)
+    ):
+        fail("Invalid SINGLE runtime mode.")
+    return single
+
+
 def validate_inputs(arguments: argparse.Namespace) -> None:
     if not REPOSITORY_PATTERN.fullmatch(arguments.repository):
         fail("Repository must use the owner/name form.")
@@ -559,6 +606,25 @@ def validate_inputs(arguments: argparse.Namespace) -> None:
         expected_dispatch_ref = f"refs/heads/{arguments.base_ref}"
         if arguments.dispatch_ref != expected_dispatch_ref:
             fail("App dispatch must execute from the protected pull-request base ref.")
+    review_boundary(arguments)
+
+
+def review_boundary(arguments: argparse.Namespace) -> int:
+    """Opt-in materialization only; admission and per-unit review remain separate."""
+    if single_mode(arguments):
+        return single_memory_boundary()
+    bounded = getattr(arguments, "bounded_runtime", False)
+    if type(bounded) is not bool:
+        fail("Invalid bounded-runtime mode.")
+    if not bounded:
+        return MAX_REVIEW_BYTES - 1
+    if (arguments.repository, arguments.base_ref, arguments.trigger) != (
+        "lightning-it/shared-assets-lit",
+        "develop",
+        "app_dispatch",
+    ):
+        fail("Bounded runtime is limited to protected shared-assets-lit develop.")
+    return MAX_BOUNDED_REVIEW_BYTES
 
 
 def read_live_pull_request(
@@ -727,6 +793,9 @@ def write_materialized_workspace(
     output_directory: Path,
     diff: bytes,
     metadata: dict[str, Any],
+    *,
+    maximum: int = MAX_PROTECTED_ASSET_BYTES,
+    single_runtime: bool = False,
 ) -> None:
     """Publish the two-file review workspace or remove the exact partial output."""
     if output_directory.exists():
@@ -739,7 +808,9 @@ def write_materialized_workspace(
     patch = output_directory / "change.patch"
     metadata_path = output_directory / "review-metadata.json"
     try:
-        write_owned_regular_file(patch, diff, "review diff")
+        write_owned_regular_file(
+            patch, diff, "review diff", maximum=maximum, single_runtime=single_runtime
+        )
         write_owned_regular_file(
             metadata_path,
             (json.dumps(metadata, indent=2, sort_keys=True) + "\n").encode("utf-8"),
@@ -769,6 +840,7 @@ def materialize(
     output_directory: Path,
 ) -> dict[str, Any]:
     validate_inputs(arguments)
+    maximum = review_boundary(arguments)
     runner_temp = validated_runner_temp()
     if output_directory.exists():
         fail(f"Review workspace already exists: {output_directory}")
@@ -876,6 +948,16 @@ def materialize(
         if object_type != "tree":
             fail("The integration object is not a Git tree.")
 
+        bounded = getattr(arguments, "bounded_runtime", False)
+        if bounded:
+            validate_bounded_blobs(
+                git,
+                git_dir,
+                arguments.expected_base,
+                integration_tree,
+                git_environment,
+            )
+        diff_options = ["--no-renames"] if bounded else []
         diff = git_output(
             git,
             git_dir,
@@ -886,18 +968,18 @@ def materialize(
                 "--no-color",
                 "--no-ext-diff",
                 "--no-textconv",
+                *diff_options,
                 f"{arguments.expected_base}^{{tree}}",
                 integration_tree,
             ],
             environment=git_environment,
             binary=True,
-            max_bytes=MAX_REVIEW_BYTES,
+            max_bytes=maximum + 1,
         )
         if not isinstance(diff, bytes):
             fail("Git returned an invalid diff representation.")
         review_bytes = len(diff)
-        if review_bytes <= 0 or review_bytes >= MAX_REVIEW_BYTES:
-            maximum = MAX_REVIEW_BYTES - 1
+        if review_bytes <= 0 or review_bytes > maximum:
             boundary = f"1..{maximum} bytes"
             message = f"Exact-revision review input must contain {boundary}"
             fail(f"{message}; observed {review_bytes}.")
@@ -905,7 +987,7 @@ def materialize(
 
         read_live_pull_request(arguments, home=home)
         metadata = {
-            "schema_version": 5,
+            "schema_version": 6 if single_mode(arguments) else 5,
             "repository": arguments.repository,
             "pull_request": arguments.pull_request,
             "base_ref": arguments.base_ref,
@@ -918,8 +1000,92 @@ def materialize(
             "trusted_workflow_sha": arguments.trusted_workflow_sha,
             "trigger": arguments.trigger,
         }
-        write_materialized_workspace(output_directory, diff, metadata)
+        write_materialized_workspace(
+            output_directory,
+            diff,
+            metadata,
+            maximum=maximum,
+            single_runtime=single_mode(arguments),
+        )
         return metadata
+
+
+def validate_bounded_blobs(
+    git: str,
+    git_dir: Path,
+    base: str,
+    tree: str,
+    environment: dict[str, str],
+) -> None:
+    """Reject hidden unsupported bytes in every complete old/new touched blob."""
+    arguments = [
+        "diff",
+        "--raw",
+        "-z",
+        "--no-abbrev",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        base,
+        tree,
+        "--",
+    ]
+    raw = git_output(
+        git,
+        git_dir,
+        arguments,
+        environment=environment,
+        binary=True,
+        max_bytes=MAX_PROTECTED_ASSET_BYTES + 1,
+    )
+    if not isinstance(raw, bytes) or not raw.endswith(b"\0"):
+        fail("Bounded blob inventory is malformed.")
+    records = raw[:-1].split(b"\0")
+    if len(records) % 2:
+        fail("Bounded blob inventory is incomplete.")
+    blobs: set[str] = set()
+    pattern = rb":[0-7]{6} [0-7]{6} ([0-9a-f]{40}) ([0-9a-f]{40}) [ADMT]"
+    for index in range(0, len(records), 2):
+        match = re.fullmatch(pattern, records[index])
+        if match is None or not records[index + 1]:
+            fail("Bounded blob inventory contains an unsupported record.")
+        blobs.update(value.decode("ascii") for value in match.groups())
+    blobs.discard("0" * 40)
+    if len(blobs) > 8192:
+        fail("Bounded touched-blob count exceeds its work budget.")
+    total = 0
+    for blob in sorted(blobs):
+        size_text = git_output(
+            git,
+            git_dir,
+            ["cat-file", "-s", blob],
+            environment=environment,
+        )
+        if not isinstance(size_text, str) or not re.fullmatch(r"[0-9]+\n", size_text):
+            fail("Bounded touched-blob size is malformed.")
+        size = int(size_text)
+        total += size
+        if total > 4 * MAX_BOUNDED_REVIEW_BYTES:
+            fail("Bounded touched blobs exceed their work budget.")
+        data = git_output(
+            git,
+            git_dir,
+            ["cat-file", "blob", blob],
+            environment=environment,
+            binary=True,
+            max_bytes=size + 1,
+        )
+        if not isinstance(data, bytes) or len(data) != size:
+            fail("Bounded touched-blob data is incomplete.")
+        identity = hashlib.sha1(f"blob {size}\0".encode() + data).hexdigest()
+        if identity != blob:
+            fail("Bounded touched-blob identity changed.")
+        if b"\0" in data:
+            fail("Bounded touched blob contains NUL/binary content.")
+        try:
+            data.decode("utf-8", errors="strict")
+        except UnicodeDecodeError:
+            fail("Bounded touched blob contains invalid UTF-8.")
 
 
 def bind_assets(review_directory: Path, asset_paths: dict[str, Path]) -> dict[str, Any]:
@@ -948,6 +1114,7 @@ def verify(
     asset_paths: dict[str, Path],
 ) -> dict[str, Any]:
     validate_inputs(arguments)
+    maximum = review_boundary(arguments)
     patch = review_directory / "change.patch"
     metadata_path = review_directory / "review-metadata.json"
     invalid_patch = not patch.is_file() or patch.is_symlink()
@@ -955,8 +1122,8 @@ def verify(
     if invalid_patch or invalid_metadata:
         fail("The review diff and metadata must be regular, non-symlink files.")
     patch_size = patch.stat().st_size
-    if patch_size <= 0 or patch_size >= MAX_REVIEW_BYTES:
-        fail(f"The review diff must be between 1 and {MAX_REVIEW_BYTES - 1} bytes.")
+    if patch_size <= 0 or patch_size > maximum:
+        fail(f"The review diff must be between 1 and {maximum} bytes.")
     try:
         metadata_bytes = protected_asset_bytes(metadata_path, "review metadata")
         expected_metadata = json.loads(metadata_bytes.decode("utf-8"))
@@ -982,9 +1149,16 @@ def verify(
         regenerated = Path(temporary) / "review"
         regenerated_metadata = materialize(arguments, regenerated)
         actual_metadata = bind_protected_assets(regenerated_metadata, asset_paths)
-        if protected_asset_bytes(patch, "review diff") != protected_asset_bytes(
-            regenerated / "change.patch", "regenerated diff"
-        ):
+        original_diff = protected_asset_bytes(
+            patch, "review diff", maximum=maximum, single_runtime=single_mode(arguments)
+        )
+        fresh_diff = protected_asset_bytes(
+            regenerated / "change.patch",
+            "regenerated diff",
+            maximum=maximum,  # Reuse the same admitted full-diff boundary.
+            single_runtime=single_mode(arguments),
+        )
+        if original_diff != fresh_diff:
             fail("The full binary diff changed during exact-revision verification.")
     for key in IMMUTABLE_METADATA_KEYS:
         if expected_metadata.get(key) != actual_metadata.get(key):
@@ -1007,6 +1181,8 @@ def parse_arguments() -> argparse.Namespace:
         choices=("ready_for_review", "app_dispatch"),
     )
     parser.add_argument("--dispatch-ref", default="")
+    parser.add_argument("--bounded-runtime", action="store_true")
+    parser.add_argument("--single-runtime", action="store_true")
     parser.add_argument("--review-directory", required=True, type=Path)
     parser.add_argument("--materializer-path", type=Path)
     parser.add_argument("--copilot-workflow-path", type=Path)

@@ -13,6 +13,7 @@ from urllib.parse import urlencode
 import re
 import subprocess
 import sys
+import time
 
 PILOTS = {"lightning-it/.github", "lightning-it/shared-assets-lit",
           "lightning-it/ansible-collection-supplementary"}
@@ -24,7 +25,6 @@ FAILURE_MARKERS = (
     "wasnotabletoreviewthispullrequest",
     "nofilestoreview",
     "unabletoreviewanyfiles",
-    "abletoreviewanyfiles",
     "notabletoreviewanyfiles",
     "wasnotabletoreviewanyfiles",
     "quotaexhausted",
@@ -38,6 +38,15 @@ ORIGINAL_STEPS = ["Set up job", "Materialize the protected operation claim",
                   "Request Copilot review for the current revision", "Complete job"]
 RESUME_STEPS = ["Set up job", "Materialize protected first-request continuation",
                 "Resume the deferred first request", "Complete job"]
+
+
+VISIBILITY_READS = 24
+VISIBILITY_SECONDS = 20
+_visibility_budget = None
+
+
+class NativeBindingPending(ValueError):
+    """A valid unfinished native owner has not exposed its policy binding yet."""
 
 
 class ConfirmedIntentConflict(ValueError):
@@ -55,7 +64,7 @@ class ReviewContentError(ValueError):
 def normalize(value: str) -> str:
     """Match the protected gate's ASCII fold, contraction and Unicode whitespace rules."""
     ascii_lower = "".join(chr(ord(char) + 32) if "A" <= char <= "Z" else char for char in value)
-    expanded = ascii_lower.replace("wasn't", "was not").replace("wasn’t", "was not")
+    expanded = ascii_lower.replace("n't", " not").replace("n’t", " not")
     return "".join(char for char in expanded if not char.isspace())
 
 
@@ -103,8 +112,15 @@ def api(route, payload=None, fields=()):
     args = ["gh", "api", route, *fields]
     if payload is not None:
         args += ["--method", "POST", "--input", "-"]
+    timeout = 30
+    if _visibility_budget is not None:
+        require(payload is None and not fields and route.startswith("repos/"), "visibility is GET-only")
+        remaining = _visibility_budget[1] - time.monotonic()
+        require(_visibility_budget[0] > 0 and remaining > 0, "visibility read/time budget exhausted")
+        _visibility_budget[0] -= 1
+        timeout = min(timeout, remaining)
     result = subprocess.run(args, input=None if payload is None else json.dumps(payload),
-                            capture_output=True, text=True, timeout=30, check=True)
+                            capture_output=True, text=True, timeout=timeout, check=True)
     return json.loads(result.stdout, object_pairs_hook=unique) if result.stdout.strip() else None
 
 
@@ -241,7 +257,8 @@ def original_run(repo, intent, completed=True):
     prs = run["pull_requests"]
     require(isinstance(prs, list) and len(prs) <= 1, "original PR inventory")
     if not prs:
-        pr = empty_owner(repo, run, intent["pr"], intent["base"], intent["head"], intent["base_ref"])
+        lookup = empty_owner if completed else await_empty_owner
+        pr = lookup(repo, run, intent["pr"], intent["base"], intent["head"], intent["base_ref"])
         require(pr["head"]["ref"] == intent["head_ref"], "fallback head ref")
     else:
         recorded_pr(repo, intent, prs[0])
@@ -250,7 +267,25 @@ def original_run(repo, intent, completed=True):
     return run
 
 
-def empty_owner(repo, run, owner, base, head, base_ref):
+def await_empty_owner(repo, run, owner, base, head, base_ref):
+    """Only visibility races get a short read-only wait before intent creation."""
+    global _visibility_budget
+    require(_visibility_budget is None, "nested visibility wait")
+    _visibility_budget = [VISIBILITY_READS, time.monotonic() + VISIBILITY_SECONDS]
+    try:
+        for observation in range(4):
+            try:
+                return empty_owner(repo, run, owner, base, head, base_ref, allow_pending=True)
+            except NativeBindingPending:
+                require(observation < 3, "native binding visibility exhausted")
+                remaining = _visibility_budget[1] - time.monotonic()
+                require(_visibility_budget[0] > 0 and remaining > 2, "visibility read/time budget exhausted")
+                time.sleep(2)
+    finally:
+        _visibility_budget = None
+
+
+def empty_owner(repo, run, owner, base, head, base_ref, allow_pending=False):
     require(repo in PILOTS and positive(owner) and positive(run.get("id"))
             and type(run.get("run_attempt")) is int and run["run_attempt"] in (1, 2)
             and run["event"] == "pull_request_target" and run["path"] == PRODUCER
@@ -259,12 +294,20 @@ def empty_owner(repo, run, owner, base, head, base_ref):
             and run["triggering_actor"]["login"] == ("litroc" if run["run_attempt"] == 1 else "github-actions[bot]")
             and run["repository"]["full_name"] == repo and run["head_repository"]["full_name"] == repo
             and run["pull_requests"] == [] and sha(base) and sha(head), "fallback native owner")
+    require(repo in {"lightning-it/.github", "lightning-it/shared-assets-lit"}, "no native fallback sender")
     pr = branch_pr(repo, run)
     require(pr["number"] == owner and pr["base"]["sha"] == base and pr["base"]["ref"] == base_ref, "fallback PR binding")
     jobs = pages(f"repos/{repo}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?filter=all", "jobs")
     policy = [job for job in jobs if job.get("name") == "Verify current revision policy"]
+    if allow_pending and not policy:
+        raise NativeBindingPending("policy job not visible")
     require(len(policy) == 1, "fallback policy job")
     job = policy[0]
+    require(type(job.get("run_id")) is int and job["run_id"] == run["id"]
+            and type(job.get("run_attempt")) is int and job["run_attempt"] == run["run_attempt"]
+            and job["head_sha"] == head, "fallback native policy identity")
+    if allow_pending and job["status"] in {"queued", "waiting", "pending"} and job["conclusion"] is None:
+        raise NativeBindingPending("policy job queued")
     require(type(job.get("run_id")) is int and job["run_id"] == run["id"]
             and type(job.get("run_attempt")) is int and job["run_attempt"] == run["run_attempt"]
             and job["head_sha"] == head and positive(job.get("runner_id"))
@@ -275,9 +318,15 @@ def empty_owner(repo, run, owner, base, head, base_ref):
     binding = (f"Event binding #{owner}:{base}:{head}:{run['id']}" if repo == "lightning-it/.github" else
                f"Current revision tuple #{owner} {base_ref}@{base} -> {repo}:{run['head_branch']}@{head} run {run['id']}")
     steps = job["steps"]
-    require(isinstance(steps, list) and all(isinstance(step, dict) and isinstance(step.get("name"), str) for step in steps)
-            and sum(step["name"] == binding for step in steps) == 1, "fallback event binding")
+    require(isinstance(steps, list) and all(isinstance(step, dict) and isinstance(step.get("name"), str) for step in steps),
+            "fallback step inventory")
+    if allow_pending and job["status"] == "in_progress" and not any(step.get("number") == 2 for step in steps):
+        raise NativeBindingPending("policy binding not visible")
+    require(sum(step["name"] == binding for step in steps) == 1, "fallback event binding")
     step = next(step for step in steps if step["name"] == binding)
+    if (allow_pending and job["status"] == "in_progress" and type(step.get("number")) is int
+            and step["number"] == 2 and step["status"] in {"queued", "in_progress"} and step["conclusion"] is None):
+        raise NativeBindingPending("policy binding unfinished")
     require(type(step.get("number")) is int and step["number"] == 2
             and step["status"] == "completed" and step["conclusion"] == "success", "fallback binding step")
     return pr
@@ -381,8 +430,10 @@ def unconsumed(repo, intent, journal):
     pending = api(f"repos/{repo}/pulls/{intent['pr']}/requested_reviewers")
     require(isinstance(pending["users"], list) and not any(item["login"] in {BOT, BOT.removesuffix('[bot]')} for item in pending["users"]), "review still pending")
     comments = pages(f"repos/{repo}/issues/{intent['pr']}/comments")
-    marker = f"<!-- mlx90-copilot-request head={intent['head']} -->"
-    require(not any(item["user"]["login"] == "github-actions[bot]" and marker in item["body"] for item in comments), "existing accepted marker")
+    markers = (f"<!-- mlx90-copilot-request head={intent['head']} -->",
+               f"<!-- mlx90-copilot-request-uncertain head={intent['head']} -->")
+    require(not any(item["user"]["login"] == "github-actions[bot]" and any(marker in item["body"] for marker in markers)
+                    for item in comments), "existing request consumption marker")
 
 
 def environment():

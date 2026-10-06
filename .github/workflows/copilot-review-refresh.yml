@@ -1499,7 +1499,7 @@ jobs:
                 | select(all(.[]; type == "array"))
                 | [$review.body, .[][].body]
                 | select(all(.[]; type == "string" or . == null))
-                | map((. // "") | ascii_downcase | gsub("wasn[\u0027\u2019]t"; "was not") | gsub("\\s"; ""))
+                | map((. // "") | ascii_downcase | gsub("n[\u0027\u2019]t"; " not") | gsub("\\s"; ""))
                 ' <<<"${comments}")" || return 1
               if jq -e '
                 any(.[]; length > 0) and all(.[];
@@ -1508,7 +1508,6 @@ jobs:
                    or contains("nofilestoreview")
                    or contains("unabletoreviewanyfiles")
                    or contains("notabletoreviewanyfiles")
-                   or contains("abletoreviewanyfiles")
                    or contains("wasnotabletoreviewanyfiles")
                    or contains("quotaexhausted")
                    or contains("quotaexceeded")
@@ -2719,7 +2718,7 @@ jobs:
               then ([($review.body // "")] + [$pages[][]? | .body]
                 | map(
                     ascii_downcase
-                    | gsub("wasn[\u0027\u2019]t"; "was not")
+                    | gsub("n[\u0027\u2019]t"; " not")
                     | gsub("\\p{White_Space}"; "")
                   )) as $parts
                 | if any($parts[]; length > 0) then ($parts | join("|"))
@@ -2729,7 +2728,7 @@ jobs:
             ' <(printf '%s\n' "${review_payload}") \
               <(printf '%s\n' "${review_comment_pages}"))"
             case "${normalized_review_body}" in
-              *unabletoreviewthispullrequest*|*wasnotabletoreviewthispullrequest*|*nofilestoreview*|*abletoreviewanyfiles*|*quotaexhausted*|*quotaexceeded*|*premiumrequestquota*|*premiumrequestsquota*|*suppressedcomment*|*encounteredanerror*)
+              *unabletoreviewthispullrequest*|*wasnotabletoreviewthispullrequest*|*nofilestoreview*|*notabletoreviewanyfiles*|*unabletoreviewanyfiles*|*quotaexhausted*|*quotaexceeded*|*premiumrequestquota*|*premiumrequestsquota*|*suppressedcomment*|*encounteredanerror*)
                 return 1
                 ;;
             esac
