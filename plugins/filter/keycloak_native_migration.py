@@ -56,6 +56,14 @@ def database_binding(components, database_host):
     managed_names = {pod_name, components["postgres"].get("container_name")}
     managed_names.discard(None)
     aliases = {binding["alias"] for binding in bindings["postgres"].values() if binding["alias"]}
+    keycloak_names = {
+        components["keycloak"].get("pod_name"),
+        components["keycloak"].get("container_name"),
+    }
+    keycloak_names.discard(None)
+    keycloak_names.update(binding["alias"] for binding in bindings["keycloak"].values() if binding["alias"])
+    if database_host in keycloak_names:
+        raise ValueError("database endpoint must be owned exclusively by PostgreSQL")
     if database_host in managed_names or database_host in aliases:
         if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", database_host):
             raise ValueError("invalid managed database DNS name")
@@ -87,13 +95,23 @@ def database_binding(components, database_host):
 
 
 def private_database_endpoint_valid(
-    database_host, keycloak_networks, postgres_networks, postgres_pod_name, postgres_container_name=None
+    database_host,
+    keycloak_networks,
+    postgres_networks,
+    postgres_pod_name,
+    postgres_container_name=None,
+    keycloak_pod_name=None,
+    keycloak_container_name=None,
 ):
     """Pure role precheck; DNS runtime proof remains mandatory before acceptance."""
     try:
         database_binding(
             {
-                "keycloak": {"networks": keycloak_networks},
+                "keycloak": {
+                    "networks": keycloak_networks,
+                    "pod_name": keycloak_pod_name,
+                    "container_name": keycloak_container_name,
+                },
                 "postgres": {
                     "networks": postgres_networks,
                     "pod_name": postgres_pod_name,

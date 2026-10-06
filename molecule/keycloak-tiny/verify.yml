@@ -252,9 +252,29 @@
       ansible.builtin.assert:
         that:
           - >-
-            'KC_DB_URL_HOST=10.89.40.3'
+            'KC_DB_URL_HOST=postgres'
             in (keycloak_tiny_environment.stdout | from_json)
       no_log: true
+
+    - name: Resolve the explicit PostgreSQL network alias inside Keycloak
+      ansible.builtin.command:
+        argv:
+          - podman
+          - exec
+          - keycloak-tiny-keycloak
+          - getent
+          - ahostsv4
+          - postgres
+      register: keycloak_tiny_database_alias
+      changed_when: false
+
+    - name: Assert exclusive network-local PostgreSQL alias resolution
+      ansible.builtin.assert:
+        that:
+          - >-
+            keycloak_tiny_database_alias.stdout_lines
+            | map('split') | map('first') | unique | list
+            == ['10.89.40.3']
 
     - name: Inspect Keycloak static network identity
       ansible.builtin.command:
@@ -298,7 +318,7 @@
         mode: "0640"
         content: |-
           <?xml version="1.0" encoding="UTF-8"?>
-          <testsuite name="keycloak-tiny" tests="15" failures="0" errors="0" skipped="0">
+          <testsuite name="keycloak-tiny" tests="16" failures="0" errors="0" skipped="0">
             <testcase classname="keycloak.health" name="readiness" role="keycloak_deploy"/>
             <testcase classname="keycloak.health" name="liveness" role="keycloak_deploy"/>
             <testcase classname="keycloak.oidc" name="discovery" role="keycloak_cac"/>
@@ -310,6 +330,7 @@
             <testcase classname="keycloak.runtime" name="version" role="keycloak_deploy"/>
             <testcase classname="keycloak.security" name="keycloak-manifest-permissions" role="keycloak_deploy"/>
             <testcase classname="keycloak.network" name="bridge-database-service-discovery" role="keycloak_deploy"/>
+            <testcase classname="keycloak.network" name="explicit-alias-dns-resolution" role="keycloak_deploy"/>
             <testcase classname="keycloak.network" name="quadlet-network-handoff" role="keycloak_deploy"/>
             <testcase classname="keycloak.network" name="static-service-identities" role="keycloak_deploy"/>
             <testcase classname="keycloak.proxy" name="trusted-edge-and-untrusted-direct" role="keycloak_deploy"/>

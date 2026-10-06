@@ -37,9 +37,13 @@ attaches NGINX and Keycloak to a pinned private Quadlet network, and trusts only
 the NGINX pod address.
 
 Managed bridge PostgreSQL requires a private `keycloak_deploy_db_host` matching
-its pinned network IP or the exact managed PostgreSQL pod/container DNS name; readiness
-uses the published host endpoint. Arbitrary external DNS names and Keycloak
-loopback are rejected. DNS mode requires network-local Podman name resolution,
+its pinned network IP, exact managed PostgreSQL pod/container DNS name, or an
+explicit PostgreSQL-only network alias declared as
+`<network>.network:ip=<IPv4>,alias=<DNS-label>`. The alias is scoped to that
+Podman network and must not collide with any Keycloak pod name, container name,
+or alias on any attached network. Readiness uses the published host endpoint.
+Arbitrary external DNS names, other Quadlet options, and Keycloak loopback are
+rejected. DNS mode requires network-local Podman name resolution,
 an explicit resolver firewall allowance, and positive/negative DNS evidence;
 it does not replace static firewall addresses or trusted proxy CIDRs.
 
@@ -47,8 +51,9 @@ it does not replace static firewall addresses or trusted proxy CIDRs.
 for two already active, root-owned native Quadlets without drop-ins. Set
 `keycloak_deploy_native_previous_networks` to the exact prior `keycloak` and
 `postgres` Network lists, including explicit empty lists for default-network
-units. The database endpoint must be its declared IPv4 or exact managed pod/container
-DNS name; Keycloak must have its own address on the same database network.
+units. The database endpoint must be its declared IPv4, exact managed pod/container
+DNS name, or exclusive bounded network alias; Keycloak must have its own address
+on the same database network.
 Bind `keycloak_deploy_native_network_runtime_names` explicitly from each Network
 entry basename (including a `.network` suffix where used) to its actual Podman
 network name. Runtime verification compares names and addresses, not addresses
@@ -64,7 +69,10 @@ contract is verified against Podman 4.9.3, not a claim of live migration accepta
 
 Podman 4.9.3 kube play registers the YAML container name as a network alias.
 Thus a managed `postgres` container can retain a different pod/unit identity.
-This does not authorize arbitrary aliases or shared database credentials.
+The role additionally accepts only the exact bounded `,alias=<DNS-label>` form
+above; aliases are network-scoped and must be owned exclusively by PostgreSQL.
+This does not authorize arbitrary names, additional network options, or shared
+database credentials.
 During native cutover, `getent ahostsv4` inside the actual Keycloak container
 must return only the uniquely bound private PostgreSQL address. Missing tooling,
 failed resolution or a different/additional address causes transaction recovery.

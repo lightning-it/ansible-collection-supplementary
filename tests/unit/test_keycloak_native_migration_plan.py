@@ -160,6 +160,20 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
         with self.assertRaises(AnsibleFilterError):
             NATIVE.private_database_endpoint_valid("postgres", keycloak, postgres, "keycloak-postgres", "postgres")
 
+    def test_database_name_must_not_be_a_keycloak_alias_on_another_network(self):
+        keycloak = ["database.network:ip=192.0.2.2", "frontend.network:ip=198.51.100.2,alias=postgres"]
+        postgres = ["database.network:ip=192.0.2.3,alias=postgres"]
+        with self.assertRaises(AnsibleFilterError):
+            NATIVE.private_database_endpoint_valid("postgres", keycloak, postgres, "keycloak-postgres", "postgres")
+
+    def test_database_name_must_not_collide_with_keycloak_pod_or_container_name(self):
+        keycloak = ["database.network:ip=192.0.2.2"]
+        postgres = ["database.network:ip=192.0.2.3,alias=keycloak"]
+        with self.assertRaises(AnsibleFilterError):
+            NATIVE.private_database_endpoint_valid(
+                "keycloak", keycloak, postgres, "keycloak-postgres", "postgres", "keycloak", "keycloak"
+            )
+
     def test_dns_runtime_requires_exclusively_the_bound_private_peer(self):
         components = fixtures()
         output = "192.0.2.3 STREAM postgres\n192.0.2.3 DGRAM\n192.0.2.3 RAW\n"
