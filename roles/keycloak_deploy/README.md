@@ -127,9 +127,9 @@ the collection.
         keycloak_deploy_networks:
           - keycloak-access.network:ip=10.89.40.2
         keycloak_deploy_postgres_networks:
-          - keycloak-access.network:ip=10.89.40.3
+          - keycloak-access.network:ip=10.89.40.3,alias=postgres
         # Requires verified network-local DNS without external forwarding.
-        keycloak_deploy_db_host: keycloak-postgres
+        keycloak_deploy_db_host: postgres
         keycloak_deploy_admin_user: admin
         keycloak_deploy_generate_secrets: false
         keycloak_deploy_admin_password: "{{ vault_keycloak_admin_password }}"

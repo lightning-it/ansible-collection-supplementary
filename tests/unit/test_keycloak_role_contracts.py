@@ -683,7 +683,12 @@ exit 0
             with self.subTest(role=role):
                 self.assertIn(variable, core)
                 self.assertIn("(?::ip=[0-9]{1,3}", core)
+                self.assertIn(",alias=[a-z0-9]", core)
                 self.assertIn("ipaddress.ip_address", validator["ansible.builtin.command"]["argv"][2])
+                self.assertEqual(
+                    validator["ansible.builtin.command"]["argv"][3],
+                    "{{ item.split(':ip=', 1)[1].split(',', 1)[0] }}",
+                )
                 self.assertEqual(validator["when"], "':ip=' in item")
 
     def test_managed_bridge_database_requires_a_shared_normalized_network(self) -> None:
