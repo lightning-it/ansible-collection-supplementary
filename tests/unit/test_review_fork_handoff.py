@@ -289,9 +289,7 @@ else:raise SystemExit('unexpected route '+route)
         for branch in ("develop", "main"):
             for mode in ({}, {"consumer": True}, {"final_fence": True}):
                 with self.subTest(branch=branch, mode=mode):
-                    result, calls = fixture.refresh(
-                        branch, head_repository=FORK, author_type="Bot", **mode
-                    )
+                    result, calls = fixture.refresh(branch, head_repository=FORK, author_type="Bot", **mode)
                     self.assertNotEqual(0, result.returncode)
                     self.assertEqual([], calls)
 
