@@ -5,6 +5,9 @@ metadata:
   labels:
     app: {{ postgres_deploy_pod_name }}
 spec:
+{% if postgres_deploy_hostname | default('', true) | trim | length > 0 %}
+  hostname: {{ postgres_deploy_hostname | trim }}
+{% endif %}
 {% if postgres_deploy_host_network | bool %}
   hostNetwork: true
 {% endif %}

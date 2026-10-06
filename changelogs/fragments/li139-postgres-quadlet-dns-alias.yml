@@ -4,4 +4,5 @@ bugfixes:
     Allow a bounded network-scoped DNS alias after a static IPv4 address in
     native Keycloak and PostgreSQL Kube Quadlet network entries, while keeping
     exact IPv4 validation, rejecting managed-name collisions and unsupported
-    network options, and proving the resolved address inside running containers.
+    network options, publishing a bounded Pod hostname for Podman 4.9
+    compatibility, and proving the resolved address inside running containers.

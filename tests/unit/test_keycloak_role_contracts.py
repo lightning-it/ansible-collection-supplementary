@@ -702,6 +702,14 @@ exit 0
         contract = "\n".join(tasks[0]["ansible.builtin.assert"]["that"])
         self.assertIn("select('search', ',alias=')", contract)
         self.assertIn("intersect([postgres_deploy_pod_name, postgres_deploy_container_name])", contract)
+        self.assertIn("postgres_deploy_hostname", contract)
+        self.assertIn("postgres_deploy_networks | length == 1", contract)
+        defaults = self._role_defaults("postgres_deploy")
+        self.assertEqual(defaults["postgres_deploy_hostname"], "")
+        template = (ROOT / "roles" / "postgres_deploy" / "templates" / "postgres-pod.yml.j2").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("hostname: {{ postgres_deploy_hostname | trim }}", template)
 
     def test_ordinary_keycloak_deploy_proves_database_dns_at_runtime(self) -> None:
         validation_path = ROOT / "roles" / "keycloak_deploy" / "tasks" / "validate_database_dns.yml"
@@ -739,6 +747,10 @@ exit 0
             task for task in pod_tasks if task["name"] == "Validate managed database DNS before starting Keycloak"
         )
         self.assertIn("keycloak_deploy_postgres_pod_name", str(prestart["vars"]))
+        postgres_role = next(
+            task for task in pod_tasks if task["name"] == "Deploy dedicated PostgreSQL service for Keycloak"
+        )
+        self.assertIn("keycloak_deploy_db_host", str(postgres_role["vars"]["postgres_deploy_hostname"]))
 
         systemd = yaml.safe_load(
             (ROOT / "roles" / "keycloak_deploy" / "tasks" / "systemd.yml").read_text(encoding="utf-8")
