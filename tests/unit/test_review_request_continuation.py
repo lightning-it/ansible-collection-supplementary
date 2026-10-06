@@ -319,6 +319,7 @@ class ContinuationTests(unittest.TestCase):
             text=True,
             capture_output=True,
             timeout=35,
+            check=False,  # The test asserts the exact return code.
         )
         self.state = json.loads(self.file.read_text())
         return result
@@ -470,15 +471,15 @@ class ContinuationTests(unittest.TestCase):
         markers = (
             "Copilot was not able to review this pull request.",
             "Copilot wasn't able to review this pull request.",
-            "Copilot wasn’t able to review this pull request.",
+            "Copilot wasn\u2019t able to review this pull request.",
             "suppressed comment",
             "Copilot isn't able to review any files.",
-            "Copilot isn’t able to review any files.",
-            "COPILOT ISN’T ABLE\u2003TO\u00a0REVIEW\u202fANY\u2009FILES.",
+            "Copilot isn\u2019t able to review any files.",
+            "COPILOT ISN\u2019T ABLE\u2003TO\u00a0REVIEW\u202fANY\u2009FILES.",
             "Copilot wasn't able to review any files.",
-            "Copilot wasn’t able to review any files.",
-            "COPILOT\u00a0WASN’T\u2003ABLE\tTO REVIEW ANY FILES",
-            "COPILOT\u00a0WASN’T\u2003ABLE\tTO REVIEW THIS PULL REQUEST",
+            "Copilot wasn\u2019t able to review any files.",
+            "COPILOT\u00a0WASN\u2019T\u2003ABLE\tTO REVIEW ANY FILES",
+            "COPILOT\u00a0WASN\u2019T\u2003ABLE\tTO REVIEW THIS PULL REQUEST",
         )
         for marker in markers:
             for inline in (False, True):
@@ -714,7 +715,7 @@ class ContinuationTests(unittest.TestCase):
         job = self.workflow["jobs"]["resume"]
         for guard in (
             "github.ref_protected",
-            "github.ref == 'refs/heads/develop'",
+            'contains(fromJSON(\'["refs/heads/develop","refs/heads/main"]\'), github.ref)',
             "github.actor == 'github-actions[bot]'",
             "github.triggering_actor == 'github-actions[bot]'",
             "github.run_attempt == 1",
@@ -951,7 +952,7 @@ class ContinuationTests(unittest.TestCase):
                 later = {
                     **self.route("/pulls/23/reviews/17"),
                     "id": 18,
-                    "body": "Copilot wasn’t able to review any files.",
+                    "body": "Copilot wasn\u2019t able to review any files.",
                     "submitted_at": (reference + dt.timedelta(seconds=offset)).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 }
                 self.route("/pulls/23/reviews").append(later)

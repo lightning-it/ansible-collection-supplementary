@@ -110,6 +110,7 @@ runpy.run_path({script!r}, run_name="__main__")
                         timeout=5,
                         cwd="/",
                         env=transport.WORKER_ENVIRONMENT,
+                        check=False,  # The test asserts the exact return code.
                     )
                     self.assertEqual(0 if size == 64 else 1, result.returncode, result.stderr)
                     self.assertEqual(b"x" * 64 if size == 64 else b"", result.stdout)
@@ -123,7 +124,8 @@ runpy.run_path({script!r}, run_name="__main__")
             with self.subTest(size=size):
                 children, outputs = [], []
 
-                def temporary_file(size=size, outputs=outputs, **kwargs):
+                def temporary_file(size=size, outputs=outputs, **kwargs):  # pylint: disable=dangerous-default-value
+                    # Capture this fixture's list, not a shared default across tests.
                     file = original_file(**kwargs)
                     proxy = MagicMock(wraps=file)
                     if size > limit:
@@ -131,7 +133,8 @@ runpy.run_path({script!r}, run_name="__main__")
                     outputs.append(proxy)
                     return proxy
 
-                def spawn(argv, size=size, children=children, **kwargs):
+                def spawn(argv, size=size, children=children, **kwargs):  # pylint: disable=dangerous-default-value
+                    # Capture this iteration's observed child list.
                     self.assertEqual(["--response-byte-limit", str(limit)], argv[-2:])
                     self.assertIsNot(kwargs["stdout"], subprocess.PIPE)
                     code = "import sys; sys.stdin.buffer.read(); sys.stdout.buffer.write(b'x' * " + str(size) + ")"
@@ -165,7 +168,8 @@ runpy.run_path({script!r}, run_name="__main__")
         original_file = transport.tempfile.TemporaryFile
         children, outputs = [], []
 
-        def temporary_file(outputs=outputs, **kwargs):
+        def temporary_file(outputs=outputs, **kwargs):  # pylint: disable=dangerous-default-value
+            # Capture this fixture's observed output list.
             proxy = MagicMock(wraps=original_file(**kwargs))
             outputs.append(proxy)
             return proxy
@@ -229,7 +233,7 @@ runpy.run_path({script!r}, run_name="__main__")
             self.assertEqual(
                 response, transport.completed_response(wire, streaming=True, response_byte_limit=len(wire))
             )
-            _, peak = tracemalloc.get_traced_memory()
+            _unused_value_1, peak = tracemalloc.get_traced_memory()
         finally:
             tracemalloc.stop()
         self.assertLess(peak, len(wire) * fixtures.gateway.resources.COPIES)

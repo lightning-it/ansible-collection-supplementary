@@ -65,13 +65,13 @@ class ReviewEventTests(unittest.TestCase):
         )
         negatives = (
             "Copilot wasn't able to review any files.",
-            "Copilot wasn’t able to review any files.",
+            "Copilot wasn\u2019t able to review any files.",
             "Copilot isn't able to review any files.",
-            "Copilot isn’t able to review any files.",
-            "COPILOT ISN’T ABLE\u2003TO\u00a0REVIEW\u202fANY\u2009FILES.",
+            "Copilot isn\u2019t able to review any files.",
+            "COPILOT ISN\u2019T ABLE\u2003TO\u00a0REVIEW\u202fANY\u2009FILES.",
             "The bots aren't able to review any files.",
-            "The bots weren’t able to review any files.",
-            "COPILOT\u00a0WASN’T\u2003ABLE\tTO REVIEW ANY FILES",
+            "The bots weren\u2019t able to review any files.",
+            "COPILOT\u00a0WASN\u2019T\u2003ABLE\tTO REVIEW ANY FILES",
             "Copilot is not able to review any files.",
             "Copilot is unable to review any files.",
         )
@@ -136,6 +136,7 @@ class ReviewEventTests(unittest.TestCase):
         neutral=False,
         required=None,
         inventory_transform=None,
+        base_ref="develop",
     ):
         prefix = "repos/lightning-it/.github"
         pr = {
@@ -145,7 +146,7 @@ class ReviewEventTests(unittest.TestCase):
             "state": "open",
             "user": {"login": "litroc", "type": "User"},
             "head": {"sha": self.head, "ref": "fix/final", "repo": {"full_name": "lightning-it/.github"}},
-            "base": {"sha": self.base, "ref": "develop"},
+            "base": {"sha": self.base, "ref": base_ref},
         }
         run = {
             "id": 77,
@@ -242,6 +243,12 @@ class ReviewEventTests(unittest.TestCase):
             else:
                 EVENT.reconcile("lightning-it/.github", self.now)
         return mutations
+
+    def test_main_refresh_dispatch_uses_authenticated_main_base(self):
+        calls = self.reconcile(base_ref="main")
+        self.assertEqual(1, len(calls))
+        self.assertTrue(calls[0][0].endswith("copilot-review-refresh.yml/dispatches"))
+        self.assertEqual("main", calls[0][1]["ref"])
 
     def test_late_review_after_ten_minutes_dispatches_same_pr_without_review_request(self):
         for delay in (180, 601, 3600):
@@ -436,8 +443,8 @@ class ReviewEventTests(unittest.TestCase):
         history = [self.locator(i) for i in range(1008)]
         history.append(self.locator(0, id=99999, pr=24, status="in_progress"))
         calls = self.reconcile(history=history, pr_count=3, delay=86400)
-        self.assertEqual(["23", "25"], [payload["inputs"]["pr_number"] for _, payload in calls])
-        self.assertTrue(all(route.endswith("/dispatches") for route, _ in calls))
+        self.assertEqual(["23", "25"], [payload["inputs"]["pr_number"] for _unused_value_1, payload in calls])
+        self.assertTrue(all(route.endswith("/dispatches") for route, _unused_value_2 in calls))
 
     def test_unknown_post_later_native_inventory_suppresses_duplicate(self):
         history = [self.locator(i) for i in range(1008)]

@@ -140,7 +140,7 @@ jobs:
             .state == "open" and .draft == false and .head.sha == $head and .base.sha == $base
             and .head.repo.full_name == $repo and .base.repo.full_name == $repo
             ' <<<"${pr}" >/dev/null
-          branch="$(api "repos/${REPOSITORY}" --jq .default_branch)"
+          branch="$(jq -er .base.ref <<<"${pr}")"
           [[ "${branch}" =~ ^(develop|main)$ ]]
           reviews="$(api --paginate --slurp "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100")"
           review="$(jq -er --arg head "${EXPECTED_HEAD}" '
@@ -342,9 +342,6 @@ jobs:
             [[ "${LOCATOR_REVIEW}" =~ ^[1-9][0-9]*$ ]]
             [[ "${LOCATOR_HEAD}" =~ ^[0-9a-f]{40}$ ]]
             [[ "${LOCATOR_BASE}" =~ ^[0-9a-f]{40}$ ]]
-            branch="$(gh api "repos/${REPOSITORY}" --jq .default_branch)"
-            [[ "${branch}" =~ ^(develop|main)$ ]]
-            test "${GITHUB_REF}" = "refs/heads/${branch}"
             pr="$(gh api "repos/${REPOSITORY}/pulls/${LOCATOR_PR}")"
             jq -e --arg head "${LOCATOR_HEAD}" --arg base "${LOCATOR_BASE}" \
               --arg repo "${REPOSITORY}" --argjson number "${LOCATOR_PR}" '
@@ -352,6 +349,14 @@ jobs:
                 and .head.sha == $head and .base.sha == $base
                 and .head.repo.full_name == $repo and .base.repo.full_name == $repo
               ' <<<"${pr}" >/dev/null
+            branch="$(jq -er .base.ref <<<"${pr}")"
+            [[ "${branch}" =~ ^(develop|main)$ ]]
+            test "${GITHUB_REF}" = "refs/heads/${branch}"
+            test "${WORKFLOW_SHA}" = "${LOCATOR_BASE}"
+            protected_base="$(gh api "repos/${REPOSITORY}/branches/${branch}")"
+            jq -e --arg branch "${branch}" --arg source "${WORKFLOW_SHA}" '
+              .name == $branch and .protected == true and .commit.sha == $source
+              ' <<<"${protected_base}" >/dev/null
             review="$(gh api "repos/${REPOSITORY}/pulls/${LOCATOR_PR}/reviews/${LOCATOR_REVIEW}")"
             jq -e --arg head "${LOCATOR_HEAD}" --argjson id "${LOCATOR_REVIEW}" '
                 .id == $id and .commit_id == $head
@@ -772,6 +777,8 @@ jobs:
           # shellcheck source=/dev/null
           source "${owner_guard}"
           validate_live_pr_tuple() {
+            test "${GITHUB_REF}" = "refs/heads/${BASE_REF}" || return 1
+            test "${WORKFLOW_SHA}" = "${BASE_SHA}" || return 1
             local live_pr
             live_pr="$(oa \
               "repos/${REPOSITORY}/pulls/${PR_NUMBER}")" || return 1

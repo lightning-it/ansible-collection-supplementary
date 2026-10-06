@@ -186,7 +186,7 @@ class SingleReviewGatewayTests(unittest.TestCase):
             client.close()
             thread.join(20)
             self.assertFalse(thread.is_alive())
-        _, peak = tracemalloc.get_traced_memory()
+        _unused_value_1, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
         self.assertLess(peak, len(body) * gateway.resources.COPIES)
         self.assertEqual([True, False], [item[0] for item in calls])
@@ -498,6 +498,7 @@ class SingleReviewGatewayTests(unittest.TestCase):
                 ["bash", "-c", barrier["run"]],  # noqa: S607 -- fixed executable from the pinned runtime.
                 env={**os.environ, "BUDGETED_GATEWAY_INSTALLED": value},
                 capture_output=True,
+                check=False,  # The test asserts the exact return code.
             )
             self.assertEqual(result.returncode, expected)
         for name in gateway.CLOSURE:
@@ -539,6 +540,7 @@ class SingleReviewGatewayTests(unittest.TestCase):
                     "CALLS": str(calls),
                     "GITHUB_OUTPUT": str(output),
                 },
+                check=False,  # The test asserts the exact return code.
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(

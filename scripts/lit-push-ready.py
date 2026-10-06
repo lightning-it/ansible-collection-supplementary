@@ -1,3 +1,5 @@
+# Exact JSON schema types deliberately reject bool as int and subclasses.
+# pylint: disable=unidiomatic-typecheck
 from __future__ import annotations
 
 import argparse
@@ -453,7 +455,7 @@ class StreamingPatterns:
                     matcher = re.compile("[" + "".join(pieces) + "]", flags).fullmatch
                     self.edges[current].append(("char", matcher, end))
                 elif kind == "SUBPATTERN":
-                    _, add, remove, body = argument
+                    _unused_value_1, add, remove, body = argument
                     a, b = build(body, (flags | add) & ~remove)
                     self.edges[current].append(("epsilon", None, a))
                     self.edges[b].append(("epsilon", None, end))
@@ -465,7 +467,7 @@ class StreamingPatterns:
                 elif kind == "MAX_REPEAT":
                     minimum, maximum, body = argument
                     cursor = current
-                    for _ in range(minimum):
+                    for _unused_value_2 in range(minimum):
                         a, b = build(body, flags)
                         self.edges[cursor].append(("epsilon", None, a))
                         cursor = b
@@ -475,7 +477,7 @@ class StreamingPatterns:
                         self.edges[cursor].append(("epsilon", None, a))
                         self.edges[b].append(("epsilon", None, cursor))
                     else:
-                        for _ in range(maximum - minimum):
+                        for _unused_value_3 in range(maximum - minimum):
                             self.edges[cursor].append(("epsilon", None, end))
                             a, b = build(body, flags)
                             self.edges[cursor].append(("epsilon", None, a))
@@ -549,7 +551,7 @@ class PatternScanner:
             self.beginning = False
 
     def finish(self):
-        _, matches = self.machine.step(self.active, self.previous, None, self.beginning)
+        _unused_value_4, matches = self.machine.step(self.active, self.previous, None, self.beginning)
         return self.matches | matches
 
 

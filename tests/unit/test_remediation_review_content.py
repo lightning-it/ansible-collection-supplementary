@@ -152,20 +152,20 @@ class RemediationReviewContentTests(unittest.TestCase):
                         self.assertEqual({"eligible": "false", "actionable": "false"}, values)
                         self.assertNotIn("/issues/", calls)
             for body in (*blanks, "Review overview."):
-                values, _ = inspect(body, [current])
+                values, _unused_value_1 = inspect(body, [current])
                 self.assertEqual("true", values["eligible"])
                 self.assertEqual("true", values["actionable"])
                 self.assertEqual("1", values["round"])
             for comments in ([], [{**current, "body": ""}], [{**current, "body": " \t\n\u00a0\u2003"}]):
-                values, _ = inspect("Review complete; no findings.", comments)
+                values, _unused_value_2 = inspect("Review complete; no findings.", comments)
                 self.assertEqual("true", values["eligible"])
                 self.assertEqual("false", values["actionable"])
-            valid, _ = inspect(None, [current])
-            mixed, _ = inspect(None, [{**current, "body": " \u00a0"}, current, {**current, "body": ""}])
+            valid, _unused_value_3 = inspect(None, [current])
+            mixed, _unused_value_4 = inspect(None, [{**current, "body": " \u00a0"}, current, {**current, "body": ""}])
             self.assertEqual(valid["finding_hash"], mixed["finding_hash"])
             self.assertEqual("true", mixed["actionable"])
             # Unrelated/old comments do not become current-head failure evidence.
-            values, _ = inspect(
+            values, _unused_value_5 = inspect(
                 "Review overview.",
                 [
                     current,

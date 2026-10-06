@@ -292,7 +292,7 @@ read_refresh_review_state() { printf '%s' '{"event_current":true,"incomplete":0,
     def test_hidden_marker_cannot_authorize_second_rerun(self):
         for mode in ("consistent", "stale-ref", "lost-marker"):
             with self.subTest(mode=mode):
-                state, _ = self.probe(mode)
+                state, _unused_value_1 = self.probe(mode)
                 self.assertEqual(1, sum(c.get("rerun", False) for c in state["calls"]))
                 self.assertEqual(1, sum(c.get("marker", False) for c in state["calls"]))
                 self.assertEqual(
@@ -314,13 +314,13 @@ read_refresh_review_state() { printf '%s' '{"event_current":true,"incomplete":0,
                 self.assertIn("reconciliation only", outcomes[0].stderr)
 
     def test_unknown_cas_not_applied_never_sends_rerun(self):
-        state, _ = self.probe("not-applied")
+        state, _unused_value_2 = self.probe("not-applied")
         self.assertEqual(INITIAL, state["oid"])
         self.assertEqual(2, sum(c.get("cas", False) for c in state["calls"]))
         self.assertFalse(any(c.get("marker") or c.get("rerun") for c in state["calls"]))
 
     def test_missing_receipt_after_confirmed_cas_stays_consumed(self):
-        state, _ = self.probe("invisible-marker")
+        state, _unused_value_3 = self.probe("invisible-marker")
         self.assertEqual(COMMITTED, state["oid"])
         self.assertEqual(1, sum(c.get("marker", False) for c in state["calls"]))
         self.assertFalse(any(c.get("rerun") for c in state["calls"]))
@@ -336,7 +336,7 @@ read_refresh_review_state() { printf '%s' '{"event_current":true,"incomplete":0,
             "missing-bootstrap",
         ):
             with self.subTest(mode=mode):
-                state, _ = self.probe(mode)
+                state, _unused_value_4 = self.probe(mode)
                 self.assertFalse(any(c.get("cas") or c.get("marker") or c.get("rerun") for c in state["calls"]))
 
     def test_unprotected_or_repeated_invocation_never_mutates(self):
@@ -348,7 +348,7 @@ read_refresh_review_state() { printf '%s' '{"event_current":true,"incomplete":0,
             {"WORKFLOW_SHA": "invalid"},
         ):
             with self.subTest(changes=changes):
-                state, _ = self.probe("consistent", **changes)
+                state, _unused_value_5 = self.probe("consistent", **changes)
                 self.assertFalse(any(c.get("cas") or c.get("marker") or c.get("rerun") for c in state["calls"]))
 
     def test_contents_write_is_limited_to_protected_dispatch_jobs(self):

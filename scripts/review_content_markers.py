@@ -3,6 +3,8 @@
 The caller must separately authenticate and collect the exact review and all
 its inline comments. This module does not issue a review receipt.
 """
+# Exact JSON schema types deliberately reject bool as int and subclasses.
+# pylint: disable=unidiomatic-typecheck
 
 from __future__ import annotations
 
@@ -29,7 +31,7 @@ class ReviewContentError(ValueError):
 def normalize(value: str) -> str:
     """Match the protected gate's ASCII fold, contraction and Unicode whitespace rules."""
     ascii_lower = "".join(chr(ord(char) + 32) if "A" <= char <= "Z" else char for char in value)
-    expanded = ascii_lower.replace("n't", " not").replace("n’t", " not")
+    expanded = ascii_lower.replace("n't", " not").replace("n\u2019t", " not")
     return "".join(char for char in expanded if not char.isspace())
 
 

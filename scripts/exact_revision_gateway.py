@@ -4,6 +4,8 @@ Installed solely from the protected workflow commit before drop-sudo. This path
 has no units, dispatch fanout or promotion review requirement. Existing durable
 workflow reservation owns admission; unknown provider outcomes never retry.
 """
+# Exact JSON schema types deliberately reject bool as int and subclasses.
+# pylint: disable=unidiomatic-typecheck
 
 from __future__ import annotations
 
@@ -561,7 +563,7 @@ def install(directory: Path, run_id: int):
         env={"PATH": os.defpath},
         start_new_session=True,
     )
-    for _ in range((COLLECTOR_STARTUP_SECONDS + 5) * 10):
+    for _unused_value_1 in range((COLLECTOR_STARTUP_SECONDS + 5) * 10):
         if (root / "public/port.json").exists():
             return
         review.require(child.poll() is None, "single-gateway-start")
@@ -655,7 +657,7 @@ def start_collector(root: Path, directory: Path, run_id: int, owner: int, group:
         bufsize=0,
     )
     try:
-        ready, _, _ = select.select([process.stdout], [], [], COLLECTOR_STARTUP_SECONDS)
+        ready, _unused_value_2, _unused_value_3 = select.select([process.stdout], [], [], COLLECTOR_STARTUP_SECONDS)
         review.require(bool(ready), "single-collector-start-timeout")
         review.require(
             process.stdout.readline(len(COLLECTOR_READY) + 1) == COLLECTOR_READY, "single-collector-start"
@@ -671,7 +673,7 @@ def finish_collector(process, root: Path, run_id: int):
     try:
         # Receipt publication is complete before this byte is sent. The
         # container never races a partially written receipt or opens Docker.
-        wire, _ = process.communicate(input=b"1", timeout=30)
+        wire, _unused_value_4 = process.communicate(input=b"1", timeout=30)
         review.require(
             process.returncode == 0 and 0 < len(wire) <= transport.MAX_RESPONSE_BYTES, "single-collector-result"
         )
@@ -714,7 +716,7 @@ def serve(run_id: int, directory: Path, owner: int, group: int):
 
 def collect(directory: Path, run_id: int, *, supervised: bool = False):
     root = root_for(run_id)
-    state, _ = context(root, run_id)
+    state, _unused_value_5 = context(root, run_id)
     if supervised:
         current = transport.strict_json(
             read_owned(directory / "review-metadata.json", os.geteuid(), MAX_CONTROL_BYTES)

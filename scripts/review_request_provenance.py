@@ -1,4 +1,6 @@
 """Read-only native provenance for LI-219 first-request continuation."""
+# Exact JSON schema types deliberately reject bool as int and subclasses.
+# pylint: disable=unidiomatic-typecheck
 
 
 import datetime as dt
@@ -54,7 +56,7 @@ class ReviewContentError(ValueError):
 def normalize(value: str) -> str:
     """Match the protected gate's ASCII fold, contraction and Unicode whitespace rules."""
     ascii_lower = "".join(chr(ord(char) + 32) if "A" <= char <= "Z" else char for char in value)
-    expanded = ascii_lower.replace("n't", " not").replace("n’t", " not")
+    expanded = ascii_lower.replace("n't", " not").replace("n\u2019t", " not")
     return "".join(char for char in expanded if not char.isspace())
 
 
@@ -149,9 +151,18 @@ class Journal:
         require(sha(self.oid), "journal commit")
 
     def read(self, path):
-        result = api("graphql", fields=["-f", "query=query($owner:String!,$name:String!,$oid:String!,$manifest:String!,$record:String!){repository(owner:$owner,name:$name){nameWithOwner source:object(expression:$oid){__typename oid} manifest:object(expression:$manifest){__typename ... on Blob{isTruncated byteSize text}} record:object(expression:$record){__typename ... on Blob{isTruncated byteSize text}}}}",
-                    "-f", f"owner={self.repo.split('/')[0]}", "-f", f"name={self.repo.split('/')[1]}",
-                    "-f", f"oid={self.oid}", "-f", f"manifest={self.oid}:manifest.json", "-f", f"record={self.oid}:{path}"])
+        query = (
+            'query($owner:String!,$name:String!,$oid:String!,$manifest:String!,$record:String!){repository(owner:'
+            '$owner,name:$name){nameWithOwner source:object(expression:$oid){__typename oid} manifest:object(expr'
+            'ession:$manifest){__typename ... on Blob{isTruncated byteSize text}} record:object(expression:$recor'
+            'd){__typename ... on Blob{isTruncated byteSize text}}}}'
+        )
+        result = api("graphql", fields=[
+            "-f", "query=" + query,
+            "-f", f"owner={self.repo.split('/')[0]}", "-f", f"name={self.repo.split('/')[1]}",
+            "-f", f"oid={self.oid}", "-f", f"manifest={self.oid}:manifest.json",
+            "-f", f"record={self.oid}:{path}",
+        ])
         require("errors" not in result, "partial journal")
         data = result["data"]["repository"]
         require(data["nameWithOwner"] == self.repo and data["source"] == {"__typename": "Commit", "oid": self.oid}, "mixed journal")
@@ -161,13 +172,14 @@ class Journal:
         return None if data["record"] is None else blob(data["record"])
 
 
-def repository(repo, repo_id, source):
+def repository(repo, repo_id, source, base_ref="develop"):
     require(repo in PILOTS and re.fullmatch(r"[1-9][0-9]*", repo_id) and sha(source), "pilot/source")
     meta = api(f"repos/{repo}")
     require(meta["full_name"] == repo and str(meta["id"]) == repo_id
             and meta["default_branch"] == "develop", "repository")
-    branch = api(f"repos/{repo}/branches/develop")
-    require(branch["name"] == "develop" and branch["protected"] is True and sha(branch["commit"]["sha"]), "protected default")
+    require(base_ref in {"develop", "main"}, "protected base ref")
+    branch = api(f"repos/{repo}/branches/{base_ref}")
+    require(branch["name"] == base_ref and branch["protected"] is True and sha(branch["commit"]["sha"]), "protected default")
     ancestry = api(f"repos/{repo}/compare/{source}...{branch['commit']['sha']}")
     require(ancestry.get("status") == "identical" or (ancestry.get("status") == "ahead"
             and ancestry.get("behind_by") == 0 and ancestry.get("merge_base_commit", {}).get("sha") == source), "source ancestry")
@@ -296,7 +308,7 @@ def validate_intent(intent, repo, repo_id, key):
             and intent["base_ref"] in {"develop", "main"} and isinstance(intent["head_ref"], str) and intent["head_ref"]
             and all(sha(intent[field]) for field in ("base", "head", "source_sha")), "deferred intent")
     require(key == key_for(repo_id, intent["pr"], intent["head"]), "intent budget key")
-    repository(repo, repo_id, intent["source_sha"])
+    repository(repo, repo_id, intent["source_sha"], intent["base_ref"])
     run = original_run(repo, intent)
     job = native_job(repo, run, "Request Copilot review for current revision", ORIGINAL_STEPS)
     require(epoch(job["steps"][2]["started_at"]) <= epoch(intent["created_at"]) <= epoch(job["steps"][2]["completed_at"]), "intent outside original step")
@@ -327,12 +339,16 @@ def clean_old_review(repo, pr, review_id, head, after, reference_time=None):
 
 def native_resume_run(repo, run_id, source, intent, review_id, completed=True):
     run = api(f"repos/{repo}/actions/runs/{run_id}/attempts/1")
+    expected_title = (
+        f"First review PR #{intent['pr']} head {intent['head']} "
+        f"owner {intent['owner_run']} old review {review_id}"
+    )
     require(type(run["id"]) is int and str(run["id"]) == run_id and type(run["run_attempt"]) is int and run["run_attempt"] == 1
             and run["event"] == "workflow_dispatch" and run["path"] == WORKFLOW and run["name"] == "Continue deferred first review request"
             and run["repository"]["full_name"] == repo and run["head_repository"]["full_name"] == repo
-            and run["head_sha"] == source and run["head_branch"] == "develop"
+            and run["head_sha"] == source == intent["base"] and run["head_branch"] == intent["base_ref"]
             and run["actor"]["login"] == run["triggering_actor"]["login"] == "github-actions[bot]"
-            and run["display_title"] == f"First review PR #{intent['pr']} head {intent['head']} owner {intent['owner_run']} old review {review_id}", "resume native run")
+            and run["display_title"] == expected_title, "resume native run")
     if completed:
         require(run["status"] == "completed" and run["conclusion"] == "success", "resume native completion")
     else:
@@ -344,7 +360,7 @@ def verify_receipt(context, record):
     """Read-only Required branch; invoked only after existing verifier-rerun proof."""
     repo, repo_id = context["repository"], context["repository_id"]
     require(set(record) == {"schema", "repository", "repository_id", "action", "operation", "claim_run", "claim_attempt",
-                           "source_sha", "intent", "intent_commit", "old_review", "old_head"}
+                            "source_sha", "intent", "intent_commit", "old_review", "old_head"}
             and type(record["schema"]) is int and record["schema"] == 2 and record["repository"] == repo
             and record["repository_id"] == repo_id and record["action"] == "request" and record["claim_attempt"] == "1"
             and isinstance(record["claim_run"], str) and re.fullmatch(r"[1-9][0-9]*", record["claim_run"])
@@ -359,7 +375,7 @@ def verify_receipt(context, record):
     journal = Journal(repo, repo_id)
     journal.oid = record["intent_commit"]
     require(journal.read(record_path(key, True)) == intent and journal.read(record_path(key)) is None, "pre-request intent snapshot")
-    repository(repo, repo_id, record["source_sha"])
+    repository(repo, repo_id, record["source_sha"], intent["base_ref"])
     run = native_resume_run(repo, record["claim_run"], record["source_sha"], intent, record["old_review"])
     job = native_job(repo, run, "Resume deferred first review request", RESUME_STEPS)
     start, end = epoch(job["steps"][2]["started_at"]), epoch(job["steps"][2]["completed_at"])

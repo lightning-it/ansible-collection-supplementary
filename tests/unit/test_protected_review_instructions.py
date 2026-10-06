@@ -77,7 +77,9 @@ class GitPolicies:
 
 def invalid_policy_markers(files):
     copilot = files[".github/copilot-instructions.md"]
-    marker = next(line for line in copilot.splitlines() if line.startswith("<!-- AGENTS_SHA256:"))
+    marker = next((line for line in copilot.splitlines() if line.startswith("<!-- AGENTS_SHA256:")), None)
+    if marker is None:
+        raise AssertionError("Fixture lacks the required AGENTS digest marker")
     for label, replacement in (
         ("missing", ""),
         ("mismatched", "<!-- AGENTS_SHA256: " + "0" * 64 + " -->"),
@@ -312,10 +314,10 @@ class ProtectedGatewayInstructionTests(unittest.TestCase):
             patch.object(gateway.transport, "fetch_once", side_effect=upstream),
         ):
             reviewer.submit(self.request(), "fixture")
-        self.assertEqual([True, False], [counting for counting, _ in calls])
+        self.assertEqual([True, False], [counting for counting, _unused_value_1 in calls])
         self.assertEqual(calls[0][1], gateway.transport.count_request(calls[1][1]))
         encoded = gateway.review.canonical(bundle).decode("ascii")
-        for _, request in calls:
+        for _unused_value_2, request in calls:
             self.assertEqual(1, request["input"].count(encoded))
             self.assertIn(self.metadata["instructions_sha256"], request["input"])
             self.assertLess(request["input"].index(encoded), request["input"].index("Untrusted complete change.patch:"))

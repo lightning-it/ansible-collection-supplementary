@@ -4,7 +4,7 @@ Review only the change represented by `change.patch` and the immutable metadata
 in `review-metadata.json`. The directory intentionally contains no Git history
 and no repository credentials.
 For the versioned SINGLE runtime, apply the complete protected repository
-AGENTS and review-instruction bundle supplied inline, respecting each file’s
+AGENTS and review-instruction bundle supplied inline, respecting each file's
 directory or declared path scope. Its protected revision and content hashes
 are part of the immutable input identity; candidate instruction changes never
 replace that governing bundle. Normal PR size is advisory and never a KB gate.

@@ -3,6 +3,8 @@
 The protected caller owns materialization and authenticates review evidence. This
 module checks byte coverage, input identity and finite admission, not that authority.
 """
+# Exact JSON schema types deliberately reject bool as int and subclasses.
+# pylint: disable=unidiomatic-typecheck
 
 from __future__ import annotations
 
@@ -356,7 +358,7 @@ def partition(
         # earlier endpoint leaves at least as much payload with the same bound.
         # UTF-8 and indivisible groups are hard constraints; file/hunk and CRLF
         # boundaries are preferences, never a reason to reject a feasible input.
-        for _ in range(slots):
+        for _unused_value_1 in range(slots):
             if start == len(payload):
                 return True
             end = farthest(start)
@@ -619,7 +621,7 @@ def git(repo: Path, arguments: list[str], *, home: Path, bound: int = MAX_TOTAL_
                 selector.register(process.stderr, selectors.EVENT_READ)
                 while selector.get_map():
                     require(time.monotonic() < deadline, "git-timeout")
-                    for key, _ in selector.select(0.1):
+                    for key, _unused_value_2 in selector.select(0.1):
                         block = os.read(key.fileobj.fileno(), 65536)
                         if not block:
                             selector.unregister(key.fileobj)
