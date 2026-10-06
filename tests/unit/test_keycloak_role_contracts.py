@@ -695,6 +695,79 @@ exit 0
         self.assertIn("def parse_network_entry(entry):", migration_filter)
         self.assertIn("parse_network_entry(entry)[1]", migration_filter)
 
+    def test_postgres_aliases_cannot_repeat_managed_names(self) -> None:
+        tasks = yaml.safe_load(
+            (ROOT / "roles" / "postgres_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
+        )
+        contract = "\n".join(tasks[0]["ansible.builtin.assert"]["that"])
+        self.assertIn("select('search', ',alias=')", contract)
+        self.assertIn("intersect([postgres_deploy_pod_name, postgres_deploy_container_name])", contract)
+
+    def test_ordinary_keycloak_deploy_proves_database_dns_at_runtime(self) -> None:
+        validation_path = ROOT / "roles" / "keycloak_deploy" / "tasks" / "validate_database_dns.yml"
+        validation = yaml.safe_load(validation_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            validation[0]["ansible.builtin.command"]["argv"],
+            [
+                "podman",
+                "exec",
+                "{{ keycloak_deploy_database_dns_probe_container }}",
+                "getent",
+                "ahostsv4",
+                "{{ keycloak_deploy_db_host }}",
+            ],
+        )
+        resolution_contract = "\n".join(validation[1]["ansible.builtin.assert"]["that"])
+        self.assertIn("lit.supplementary.keycloak_database_resolution_valid", resolution_contract)
+        for binding in (
+            "keycloak_deploy_networks",
+            "keycloak_deploy_postgres_networks",
+            "keycloak_deploy_postgres_pod_name",
+            "keycloak_deploy_postgres_container_name",
+        ):
+            self.assertIn(binding, resolution_contract)
+
+        pod_tasks = yaml.safe_load(
+            (ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy_pod.yml").read_text(encoding="utf-8")
+        )
+        pod_names = [task["name"] for task in pod_tasks]
+        self.assertLess(
+            pod_names.index("Wait until dedicated Keycloak PostgreSQL is reachable"),
+            pod_names.index("Validate managed database DNS before starting Keycloak"),
+        )
+        prestart = next(
+            task for task in pod_tasks if task["name"] == "Validate managed database DNS before starting Keycloak"
+        )
+        self.assertIn("keycloak_deploy_postgres_pod_name", str(prestart["vars"]))
+
+        systemd = yaml.safe_load(
+            (ROOT / "roles" / "keycloak_deploy" / "tasks" / "systemd.yml").read_text(encoding="utf-8")
+        )[0]["block"]
+        transaction = next(
+            task for task in systemd if task["name"] == "Cut over to native Keycloak Quadlet with rollback"
+        )
+        transaction_names = [task["name"] for task in transaction["block"]]
+        self.assertLess(
+            transaction_names.index("Manage the native Keycloak Quadlet service"),
+            transaction_names.index("Validate managed database DNS from the native Keycloak container"),
+        )
+        self.assertLess(
+            transaction_names.index("Validate managed database DNS from the native Keycloak container"),
+            transaction_names.index("Wait until Keycloak health endpoint is reachable"),
+        )
+        rescue_names = [task["name"] for task in transaction["rescue"]]
+        self.assertIn("Capture safe native Keycloak service failure properties", rescue_names)
+
+        deploy = yaml.safe_load(
+            (ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy.yml").read_text(encoding="utf-8")
+        )
+        deploy_block = next(task for task in deploy if task["name"] == "Deploy Keycloak runtime")["block"]
+        deploy_names = [task["name"] for task in deploy_block]
+        self.assertLess(
+            deploy_names.index("Require the desired database endpoint in the active Keycloak pod"),
+            deploy_names.index("Validate managed database DNS from the non-systemd Keycloak container"),
+        )
+
     def test_managed_bridge_database_requires_a_shared_normalized_network(self) -> None:
         assertions = (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
         defaults = self._role_defaults("keycloak_deploy")

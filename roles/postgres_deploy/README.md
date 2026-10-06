@@ -48,10 +48,10 @@ Key variables:
 
 Each network entry is either `<network>.network` or the bounded static form
 `<network>.network:ip=<IPv4>[,alias=<DNS-label>]`. An explicit alias is scoped
-to that Podman network. The role rejects unsupported options and malformed
-aliases; callers must ensure the alias is not also published by another peer.
-Callers must also avoid repeating the PostgreSQL pod/container name: Podman kube
-play already publishes the YAML container name as a network-local DNS alias.
+to that Podman network. The role rejects unsupported options, malformed aliases,
+and aliases that repeat its managed pod or container name. Callers must ensure
+the alias is not also published by another peer. Podman kube play already
+publishes the YAML container name as a network-local DNS alias.
 
 ## Dependencies
 

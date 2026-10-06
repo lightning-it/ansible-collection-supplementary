@@ -390,6 +390,19 @@
   tags:
     - deployment
 
+- name: Validate managed database DNS before starting Keycloak
+  ansible.builtin.include_tasks: validate_database_dns.yml
+  vars:
+    keycloak_deploy_database_dns_probe_container: >-
+      {{ keycloak_deploy_postgres_pod_name }}-{{ keycloak_deploy_postgres_container_name }}
+  when:
+    - keycloak_deploy_manage_postgres | bool
+    - not keycloak_deploy_host_network | bool
+    - not keycloak_deploy_postgres_host_network | bool
+    - not keycloak_deploy_db_host is match('^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$')
+  tags:
+    - deployment
+
 - name: Probe existing Keycloak health before start
   ansible.builtin.uri:
     url: "{{ keycloak_deploy_health_url_effective }}"
