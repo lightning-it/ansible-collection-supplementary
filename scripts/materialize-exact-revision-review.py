@@ -672,6 +672,15 @@ def read_live_pull_request(
         "head_sha": head.get("sha"),
         "head_repository": head_repository.get("full_name"),
     }
+    if (
+        single_mode(arguments)
+        and base.get("ref") == "main"
+        and head.get("ref") == "develop"
+    ):
+        fail(
+            "Develop-to-main promotion requires native ingress coverage and aggregate "
+            "verification; no new model review."
+        )
     if observed != expected:
         observed_json = json.dumps(observed, sort_keys=True)
         fail(f"Live pull-request binding changed or is unauthorized: {observed_json}")
@@ -686,6 +695,7 @@ def git_output(
     environment: dict[str, str],
     binary: bool = False,
     max_bytes: int | None = None,
+    stdout_filter=None,
 ) -> bytes | str:
     command = [git, f"--git-dir={git_dir}", *arguments]
     command_display = " ".join(command)
@@ -727,7 +737,7 @@ def git_output(
                     message = f"{timeout_prefix}: {command_display}"
                     fail(message)
                 for key, _events in selector.select(remaining):
-                    if key.data == "stdout":
+                    if key.data == "stdout" and stdout_filter is None:
                         # MLX-90 rejects inputs greater than or equal to the
                         # protected boundary, so max_bytes is deliberately an
                         # exclusive limit. Read one sentinel byte beyond the
@@ -744,6 +754,8 @@ def git_output(
                         selector.unregister(key.fileobj)
                         continue
                     if key.data == "stdout":
+                        if stdout_filter is not None:
+                            chunk = stdout_filter(chunk)
                         remaining_allowed = max_bytes - 1 - len(stdout)
                         if remaining_allowed > 0:
                             stdout.extend(chunk[:remaining_allowed])
@@ -833,6 +845,134 @@ def write_materialized_workspace(
             cleanup_errors.append(message)
         add_error_notes(error, cleanup_errors)
         raise
+
+
+class InstructionInventoryFilter:
+    """Select NUL-delimited ls-tree records before inventory and UTF-8 limits.
+
+    Keep at most one inventory-budget-sized prefix plus a short suffix per
+    record. Even an oversized unrelated Git path is discarded without buffering
+    it in full; a selected oversized record still exceeds the inventory budget.
+    """
+
+    def __init__(self):
+        self.prefix = bytearray()
+        self.suffix = b""
+        self.size = 0
+
+    def __call__(self, chunk):
+        selected = bytearray()
+        pieces = chunk.split(b"\0")
+        for index, piece in enumerate(pieces):
+            self.size += len(piece)
+            remaining = MAX_PROTECTED_ASSET_BYTES + 1 - len(self.prefix)
+            self.prefix.extend(piece[:remaining])
+            self.suffix = (self.suffix + piece)[-32:]
+            if index == len(pieces) - 1:
+                continue
+            _identity, separator, path = self.prefix.partition(b"\t")
+            if not separator:
+                fail("Protected instruction inventory is malformed.")
+            complete = self.size == len(self.prefix)
+            wanted = (
+                complete and path in (b"AGENTS.md", b".github/copilot-instructions.md")
+                or self.suffix.endswith(b"/AGENTS.md")
+                or path.startswith(b".github/instructions/")
+                and self.suffix.endswith(b".instructions.md")
+            )
+            if wanted:
+                if self.size + 1 > MAX_PROTECTED_ASSET_BYTES:
+                    fail("Protected instruction inventory exceeds its resource limit.")
+                selected.extend(self.prefix)
+                selected.append(0)
+            self.prefix.clear()
+            self.suffix = b""
+            self.size = 0
+        return selected
+
+    def finish(self):
+        if self.size:
+            fail("Protected instruction inventory is truncated.")
+
+
+def protected_review_instructions(git, git_dir, revision, environment):
+    """Read only immutable protected-base instruction blobs, never head files.
+
+    Include directory-scoped AGENTS and all declared review-instruction files;
+    the model applies their original directory/frontmatter scopes. Inventory
+    and instruction metadata retain the existing protected-asset resource bound.
+    """
+    inventory_filter = InstructionInventoryFilter()
+    listing = git_output(
+        git,
+        git_dir,
+        ["ls-tree", "-r", "-z", revision],
+        environment=environment,
+        binary=True,
+        max_bytes=MAX_PROTECTED_ASSET_BYTES + 1,
+        stdout_filter=inventory_filter,
+    )
+    inventory_filter.finish()
+    files = []
+    total = 0
+    for entry in listing.split(b"\0"):
+        if not entry:
+            continue
+        identity, separator, raw_path = entry.partition(b"\t")
+        if not separator:
+            fail("Protected instruction inventory is malformed.")
+        path = raw_path.decode("utf-8", errors="strict")
+        parts = identity.decode("ascii").split()
+        if (
+            len(parts) != 3
+            or parts[0] not in {"100644", "100755"}
+            or parts[1] != "blob"
+        ):
+            fail("Protected review instructions must be regular Git blobs.")
+        object_id = require_sha(parts[2], "Protected instruction blob")
+        content = git_output(
+            git,
+            git_dir,
+            ["cat-file", "blob", object_id],
+            environment=environment,
+            binary=True,
+            max_bytes=MAX_PROTECTED_ASSET_BYTES + 1,
+        )
+        text = content.decode("utf-8", errors="strict")
+        if not text.strip():
+            fail("Protected review instruction file is empty.")
+        total += len(content)
+        if total > MAX_PROTECTED_ASSET_BYTES:
+            fail("Protected instruction metadata exceeds its resource limit.")
+        files.append(
+            {
+                "path": path,
+                "blob_sha": object_id,
+                "sha256": hashlib.sha256(content).hexdigest(),
+                "content": text,
+            }
+        )
+    files.sort(key=lambda value: value["path"])
+    names = {value["path"] for value in files}
+    if not {"AGENTS.md", ".github/copilot-instructions.md"} <= names:
+        fail("Protected AGENTS.md and Copilot review instructions are required.")
+    by_path = {value["path"]: value for value in files}
+    expected_marker = f"<!-- AGENTS_SHA256: {by_path['AGENTS.md']['sha256']} -->"
+    marker_lines = [
+        line
+        for line in by_path[".github/copilot-instructions.md"]["content"].splitlines()
+        if re.search(
+            r"<!--.*\bAGENTS_SHA256\b|^\s*AGENTS_SHA256\b|"
+            r"\bAGENTS_SHA256\s*[:=]",
+            line,
+        )
+    ]
+    if marker_lines != [expected_marker]:
+        fail(
+            "Protected Copilot AGENTS_SHA256 marker is missing, duplicate, "
+            "malformed or stale."
+        )
+    return {"version": 1, "source_sha": revision, "files": files}
 
 
 def materialize(
@@ -987,7 +1127,7 @@ def materialize(
 
         read_live_pull_request(arguments, home=home)
         metadata = {
-            "schema_version": 6 if single_mode(arguments) else 5,
+            "schema_version": 7 if single_mode(arguments) else 5,
             "repository": arguments.repository,
             "pull_request": arguments.pull_request,
             "base_ref": arguments.base_ref,
@@ -1000,6 +1140,15 @@ def materialize(
             "trusted_workflow_sha": arguments.trusted_workflow_sha,
             "trigger": arguments.trigger,
         }
+        if single_mode(arguments):
+            instructions = protected_review_instructions(
+                git, git_dir, arguments.trusted_workflow_sha, git_environment
+            )
+            encoded = json.dumps(
+                instructions, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+            metadata["review_instructions"] = instructions
+            metadata["instructions_sha256"] = hashlib.sha256(encoded).hexdigest()
         write_materialized_workspace(
             output_directory,
             diff,
@@ -1132,6 +1281,8 @@ def verify(
     if not isinstance(expected_metadata, dict):
         fail("Review metadata must be a JSON object.")
     expected_keys = set(IMMUTABLE_METADATA_KEYS)
+    if single_mode(arguments):
+        expected_keys.update({"review_instructions", "instructions_sha256"})
     observed_keys = set(expected_metadata)
     if observed_keys != expected_keys:
         missing = sorted(expected_keys - observed_keys)
@@ -1160,7 +1311,7 @@ def verify(
         )
         if original_diff != fresh_diff:
             fail("The full binary diff changed during exact-revision verification.")
-    for key in IMMUTABLE_METADATA_KEYS:
+    for key in sorted(expected_keys):
         if expected_metadata.get(key) != actual_metadata.get(key):
             fail(f"Exact-revision metadata changed during verification: {key}")
     return actual_metadata

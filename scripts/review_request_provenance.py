@@ -20,12 +20,13 @@ WORKFLOW = ".github/workflows/review-request-continuation.yml"
 
 
 BOT = "copilot-pull-request-reviewer[bot]"
+REVIEWERS = frozenset({BOT, "copilot-pull-request-reviewer"})
 
 
 FAILURE_MARKERS = (
     "unabletoreviewthispullrequest",
-    "wasnotabletoreviewthispullrequest",
-    "nofilestoreview",
+    "notabletoreviewthispullrequest", "wasnotabletoreviewthispullrequest",
+    "nofilestoreview", "nofileswerereviewed",
     "unabletoreviewanyfiles",
     "notabletoreviewanyfiles",
     "wasnotabletoreviewanyfiles",
@@ -305,7 +306,7 @@ def validate_intent(intent, repo, repo_id, key):
 def clean_old_review(repo, pr, review_id, head, after, reference_time=None):
     value = api(f"repos/{repo}/pulls/{pr}/reviews/{review_id}")
     require(positive(value["id"]) and value["id"] == review_id and sha(value["commit_id"])
-            and value["commit_id"] != head and value["user"]["login"] == BOT and value["user"]["type"] == "Bot"
+            and value["commit_id"] != head and value["user"]["login"] in REVIEWERS and value["user"]["type"] == "Bot"
             and value["state"] in {"COMMENTED", "APPROVED"}
             and epoch(value["submitted_at"]) >= epoch(after) - 604800, "old review identity")
     # A stale PR-wide Pending flag may outlive completion before owner creation.
@@ -316,7 +317,7 @@ def clean_old_review(repo, pr, review_id, head, after, reference_time=None):
     inline = [item.get("body") for item in pages(f"repos/{repo}/pulls/{pr}/reviews/{review_id}/comments")]
     require_usable_review_content(value.get("body"), inline)
     candidates = [item for item in pages(f"repos/{repo}/pulls/{pr}/reviews")
-                  if item.get("user", {}).get("login") == BOT and item.get("commit_id") != head
+                  if item.get("user", {}).get("login") in REVIEWERS and item.get("commit_id") != head
                   and epoch(item["submitted_at"]) >= epoch(after) - 604800
                   and (reference_time is None or epoch(item["submitted_at"]) <= reference)]
     require(candidates and max(candidates, key=lambda item: (epoch(item["submitted_at"]), item["id"]))["id"] == review_id,

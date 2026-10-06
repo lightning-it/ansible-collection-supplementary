@@ -1,18 +1,19 @@
 {
   "schema": 1,
   "repository": "lightning-it/ansible-collection-supplementary",
-  "protected_source_commit": null,
-  "status": "content-bound-preparation-requires-protected-source-adoption",
+  "protected_source_commit": "a44cb1762aa6ae3edba91d6cf75ada2a99182af5",
+  "status": "protected-source-adopted-local-port-native-pending",
   "target_base": "c983bb3c8aa26114f682d825bfaca6fa1be187e4",
   "bindings": [
     {
       "source_path": "default/.github/workflows/copilot-review-refresh.yml",
       "target_path": ".github/workflows/copilot-review-refresh.yml",
-      "source_sha256": "b01fcf12921c484ae8d4a4f69c8d86b237f742b39714e8f0f996ed7566a71dd0",
-      "source_blob": "d22ecfc8ce61c7e83cdd42c52e538a4d45a0a9ce",
-      "target_blob": "d22ecfc8ce61c7e83cdd42c52e538a4d45a0a9ce",
-      "target_sha256": "b01fcf12921c484ae8d4a4f69c8d86b237f742b39714e8f0f996ed7566a71dd0",
-      "mode": "byte-identical"
+      "source_sha256": "31e34a9ccd7f5dbfaac62bcb308ebeafb69c00d41b0a80b579f557f66980583b",
+      "source_blob": "a42cd8725cbd4fafc170bc3158631f7f09973fac",
+      "target_blob": "a42cd8725cbd4fafc170bc3158631f7f09973fac",
+      "target_sha256": "31e34a9ccd7f5dbfaac62bcb308ebeafb69c00d41b0a80b579f557f66980583b",
+      "mode": "byte-identical",
+      "target_mode": "0644"
     },
     {
       "source_path": "default/.github/workflows/current-revision-rerun.yml",
@@ -21,7 +22,8 @@
       "source_blob": "86112dc304cbba9e2837e022605eff9f9ff03c97",
       "target_blob": "86112dc304cbba9e2837e022605eff9f9ff03c97",
       "target_sha256": "2febd480773ecbe19840c4c22bf147cd1fbe77abfe0c23b66b2f07a727e58c8f",
-      "mode": "byte-identical"
+      "mode": "byte-identical",
+      "target_mode": "0644"
     },
     {
       "source_path": "default/.github/workflows/review-event-reconcile.yml",
@@ -30,16 +32,18 @@
       "source_blob": "7d292f504eb3aa4e54284a467f3307a6ac6f87e9",
       "target_blob": "7d292f504eb3aa4e54284a467f3307a6ac6f87e9",
       "target_sha256": "bbee309bac5c9831cd4689cb32651c94ade87d832248e21a799e2a706185af5a",
-      "mode": "byte-identical"
+      "mode": "byte-identical",
+      "target_mode": "0644"
     },
     {
       "source_path": "default/scripts/review-event-reconcile.py",
       "target_path": "scripts/review-event-reconcile.py",
-      "source_sha256": "f27c619b276f42256d00d217581c2e028bee4558ba12a86d177aa41b2344bc7e",
-      "source_blob": "bb156ce60d6eee28d0a872c4bdd445f5529925de",
-      "target_blob": "bb156ce60d6eee28d0a872c4bdd445f5529925de",
-      "target_sha256": "f27c619b276f42256d00d217581c2e028bee4558ba12a86d177aa41b2344bc7e",
-      "mode": "byte-identical"
+      "source_sha256": "74bf8eb90116afa0a58ebf57be3e141c95e0127d08d008b33cc28d3b3569602c",
+      "source_blob": "45a9920e640fb220f5f3db06f98f684f15d73735",
+      "target_blob": "45a9920e640fb220f5f3db06f98f684f15d73735",
+      "target_sha256": "74bf8eb90116afa0a58ebf57be3e141c95e0127d08d008b33cc28d3b3569602c",
+      "mode": "byte-identical",
+      "target_mode": "0644"
     },
     {
       "source_path": ".github/workflows/dot-github-current-revision-required.yml",
@@ -48,7 +52,8 @@
       "source_blob": "db644996d86fe14d9b9ccb4d8e8156b5180ddabf",
       "target_blob": "db644996d86fe14d9b9ccb4d8e8156b5180ddabf",
       "target_sha256": "734f922840311920ea0c78a3f2e4ded3a0a74c53381bec4671f89d5c5d8fa2a6",
-      "mode": "byte-identical"
+      "mode": "byte-identical",
+      "target_mode": "0644"
     },
     {
       "source_path": "default/tests/test_dot_github_current_revision.py",
@@ -57,16 +62,18 @@
       "source_blob": "0a97dd52adb77038698bf2bd4d04f92daa475dc3",
       "target_blob": "d177347f454591bd7f1098255279de7904ac7b82",
       "target_sha256": "4bc64c849028106ece888291920429518e622ce083d65832a965c71eccc20241",
-      "mode": "adapted-local"
+      "mode": "adapted-local",
+      "target_mode": "0644"
     },
     {
       "source_path": "scripts/review_content_markers.py",
       "target_path": "scripts/review_content_markers.py",
-      "source_sha256": "1c6714882222f0956533ac5c2d0b5219ab3931288cefda625dd7259a2883e140",
-      "source_blob": "8f84e491ecf22ff43b6e8923cf20ef3df420c810",
-      "target_blob": "8f84e491ecf22ff43b6e8923cf20ef3df420c810",
-      "target_sha256": "1c6714882222f0956533ac5c2d0b5219ab3931288cefda625dd7259a2883e140",
-      "mode": "byte-identical"
+      "source_sha256": "00e73bad77fc2b7eaf3182f302f375a981deb6578a21f219ff410d52d62daf09",
+      "source_blob": "617ac13543c358f1abb44da7c7885907abd8ab4c",
+      "target_blob": "617ac13543c358f1abb44da7c7885907abd8ab4c",
+      "target_sha256": "00e73bad77fc2b7eaf3182f302f375a981deb6578a21f219ff410d52d62daf09",
+      "mode": "byte-identical",
+      "target_mode": "0644"
     },
     {
       "source_path": "scripts/verify-dot-github-current-revision.py",
@@ -75,56 +82,62 @@
       "source_blob": "708db09e084a20e25ba0f980b05f076a1074119a",
       "target_blob": "71ccba4048a891dcd8146adba4a7b8464c807864",
       "target_sha256": "7cdb3f5ee93ccd15055486807ed393c91cdeefddbbf561ef3d31bb9681ccd32d",
-      "mode": "adapted-local"
+      "mode": "adapted-local",
+      "target_mode": "0644"
     },
     {
       "source_path": "default/.github/workflows/copilot-review.yml",
       "target_path": ".github/workflows/copilot-review.yml",
-      "source_sha256": "73d6195b6b5f7ec9c13c5f1916e3739e93a4d2fdea22c689d06d6caf9a875950",
-      "source_blob": "fb7bf8bc945a75f220450f7567d1b91c7e5af286",
-      "target_blob": "93208c9ff769b3269fbbe3c55d2ae77d8f58a571",
-      "target_sha256": "71aae2e232c138bcc4c8c6e0963c8c0971bd08b10bf753e49ab7c8a7ce78cabd",
-      "mode": "adapted-local"
+      "source_sha256": "1bdbb4bd62ebda00ef689ce063e6b74299d9b1ee067c1c972730cd1212114b98",
+      "source_blob": "9f8d54e95bccffd7de815826ea8bba1bdab66f81",
+      "target_blob": "7d42beba82d235635a011b5c312bdbca1c676bb0",
+      "target_sha256": "6b6fed60247718a565cce268161527daab6c70648b1f42dcac7b8112d2a3045b",
+      "mode": "adapted-local",
+      "target_mode": "0644"
     },
     {
       "source_path": "default/scripts/lit-push-ready.py",
       "target_path": "scripts/lit-push-ready.py",
-      "source_sha256": "085d4c5666ce27539df818b43bb63f8f6f63ff91a9d42e1c0566f85b0e40237f",
-      "source_blob": "f9ddd6dc164474ae1791e27fd48b7ffc93bd0c92",
-      "target_blob": "7f53b434ebce3a5ee00146905aece2e24efed2cd",
-      "target_sha256": "fdaab1a101fd85cef3e606cb8f4107ffda1f73934cc0ff510ab440673c7d33c8",
-      "mode": "adapted-local"
+      "source_sha256": "7184b923f21f4a8cca8ca5e3c856dfc0184cf702543ce718ff6352d78a581ddf",
+      "source_blob": "570b3bc8ab012c0a28473ed5129da2565b244681",
+      "target_blob": "e8b4d48c2fa8a0eeac0615f23c7f27b905f639d5",
+      "target_sha256": "db193b223525796bc22e8d17deaf60890520e3779f10d4136485ebb0b95a7567",
+      "mode": "adapted-local",
+      "target_mode": "0644"
     },
     {
       "source_path": "default/.github/workflows/review-request-continuation.yml",
       "target_path": ".github/workflows/review-request-continuation.yml",
-      "source_sha256": "2afa9c12cf60977fe969536d9806f29946a1c083df3a9e01f71795380ec4c429",
-      "source_blob": "857f886b41e0fb7fa418f46ce6c273dafadd9fef",
-      "target_blob": "857f886b41e0fb7fa418f46ce6c273dafadd9fef",
-      "target_sha256": "2afa9c12cf60977fe969536d9806f29946a1c083df3a9e01f71795380ec4c429",
-      "mode": "byte-identical"
+      "source_sha256": "5d5de0d48ab51f2fb742aaed82fef9eb06f5d05aa5c5cbbbf4ee21fd27c29584",
+      "source_blob": "ae826a6b3efa7df6bec8e1b567112605a92d8815",
+      "target_blob": "ae826a6b3efa7df6bec8e1b567112605a92d8815",
+      "target_sha256": "5d5de0d48ab51f2fb742aaed82fef9eb06f5d05aa5c5cbbbf4ee21fd27c29584",
+      "mode": "byte-identical",
+      "target_mode": "0644"
     },
     {
       "source_path": "default/scripts/review_request_continuation.py",
       "target_path": "scripts/review_request_continuation.py",
-      "source_sha256": "dda71c5573aa915208e305f01433e8cd979d60ea7bcc57e7704ded3e2305b878",
-      "source_blob": "32de0f07de677855ec2016c71b04f6847f660662",
-      "target_blob": "32de0f07de677855ec2016c71b04f6847f660662",
-      "target_sha256": "dda71c5573aa915208e305f01433e8cd979d60ea7bcc57e7704ded3e2305b878",
-      "mode": "byte-identical"
+      "source_sha256": "29014fe17a418763f294e9724354809abf56d051333e690768b5d17cce24452f",
+      "source_blob": "da7bba5c5faba9f7abfe5285f3f8a5a3c561ff17",
+      "target_blob": "da7bba5c5faba9f7abfe5285f3f8a5a3c561ff17",
+      "target_sha256": "29014fe17a418763f294e9724354809abf56d051333e690768b5d17cce24452f",
+      "mode": "byte-identical",
+      "target_mode": "0644"
     },
     {
       "source_path": "default/scripts/review_request_provenance.py",
       "target_path": "scripts/review_request_provenance.py",
-      "source_sha256": "149bc3ef72f992d638a9e7399af8bd414679487eaba14c288325c5d5366b01e0",
-      "source_blob": "a0f0f00f9619fd8aa97c443ff7516a4b4b63ae89",
-      "target_blob": "a0f0f00f9619fd8aa97c443ff7516a4b4b63ae89",
-      "target_sha256": "149bc3ef72f992d638a9e7399af8bd414679487eaba14c288325c5d5366b01e0",
-      "mode": "byte-identical"
+      "source_sha256": "742d38d26c580c7220acb03462c27146327608ea964915efad9d0be2b0f6d8f3",
+      "source_blob": "17ae4e232221846a4865fa2fe728caa85b33b45c",
+      "target_blob": "17ae4e232221846a4865fa2fe728caa85b33b45c",
+      "target_sha256": "742d38d26c580c7220acb03462c27146327608ea964915efad9d0be2b0f6d8f3",
+      "mode": "byte-identical",
+      "target_mode": "0644"
     }
   ],
   "prior_preparation_source_commit": "3eff591b19da313ea501c4962f1452d3f35545e6",
-  "source_content_sha256": "9f9bfa412ff84be1670f8b5cf69704585ae9cc0de0610ce5cb6f47f5066f6f6d",
+  "source_content_sha256": "7b47be706ce91c1689317c4de59b5940f4144dc48c240de3f5953fdf2f7a6021",
   "prior_preparation_source_tree": "23997920b8f94f6da46608c02233d0f80ceed1b2",
   "prior_test_sources": [
     {
@@ -159,14 +172,20 @@
     }
   ],
   "instructions": {
-    "source_agents_sha256": "8edb3353ffd993b5b2250d923d2b443bd09cac2ac83ab255bc4df29443267a79",
-    "target_agents_sha256": "0654d4aa8e7ab81bd41730f6dd39d3378dbae828cab0791585849d76f173ebe3",
-    "target_copilot_sha256": "c7f2e740591369c1defa57a28b45d174687f4fa0ea69c8238168ed920fdc677d"
+    "source_agents_sha256": "00aa090f2a662cbbe9704bf2fa94a455b4107127f850694e8ec68dd19fe4e779",
+    "target_agents_sha256": "65e33dd50e786d84b4e9f11b639051a9b2c80f8bde9082fb5cc6d2403253a307",
+    "target_copilot_sha256": "693aad497f9f2780fbf18f2735e077357b8925f02a54df74845e965458078ff3"
   },
-  "local_preparation_source_commit": "65ce52fe1814a91699d5fee425502e7f608e0ff5",
-  "local_preparation_source_tree": "94e309975231effcdddd4d947d7032a79f19c4c2",
-  "final_protected_source_agents_sha256": null,
-  "final_target_agents_sha256": null,
-  "final_target_copilot_sha256": null,
-  "final_acceptance_status": "HOLD: actual protected Source MAIN and final Owner/independent acceptance pending"
+  "local_preparation_source_commit": "ab6dd8bec5958508b8b4d66920d08d3dd8251e65",
+  "local_preparation_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
+  "final_protected_source_agents_sha256": "00aa090f2a662cbbe9704bf2fa94a455b4107127f850694e8ec68dd19fe4e779",
+  "final_target_agents_sha256": "65e33dd50e786d84b4e9f11b639051a9b2c80f8bde9082fb5cc6d2403253a307",
+  "final_target_copilot_sha256": "693aad497f9f2780fbf18f2735e077357b8925f02a54df74845e965458078ff3",
+  "final_acceptance_status": "PENDING_INDEPENDENT_AND_NATIVE_PORT_ACCEPTANCE",
+  "protected_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
+  "protected_source_receipt": {
+    "path": "/Users/rene/Documents/Codex/2026-10-05/analyisere-warum-das-so-lange-daurt/outputs/source6b-main-admission-c56a480e-9f0b-45cc-b3a9-120caa89f540.json",
+    "sha256": "9fb53417e0bfcd0ba5be2bffad5d2825661df19b093a8b9d9fae567681a5fc0d"
+  },
+  "native_acceptance": false
 }

@@ -31,9 +31,12 @@ def cgroup_headroom() -> dict[str, int]:
             memberships.append(("cgroup2", location))
         elif "memory" in controllers.split(","):
             memberships.append(("cgroup", location))
-    if len(memberships) != 1:
+    if not memberships or len({kind for kind, _ in memberships}) != len(memberships):
         raise ValueError("single-memory-cgroup-membership")
-    kind, location = memberships[0]
+    # In a hybrid hierarchy the explicit v1 memory controller owns the limit.
+    # A unified entry may coexist; duplicate entries of either kind remain invalid.
+    memory_memberships = [item for item in memberships if item[0] == "cgroup"]
+    kind, location = (memory_memberships or memberships)[0]
 
     def unescape(value):
         return re.sub(r"\\([0-7]{3})", lambda m: chr(int(m[1], 8)), value)

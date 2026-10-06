@@ -28,8 +28,8 @@ REVIEWERS = {"copilot-pull-request-reviewer", "copilot-pull-request-reviewer[bot
 # Match the canonical producer/refresh terminal marker vocabulary.
 MARKERS = (
     "unabletoreviewthispullrequest",
-    "wasnotabletoreviewthispullrequest",
-    "nofilestoreview",
+    "notabletoreviewthispullrequest", "wasnotabletoreviewthispullrequest",
+    "nofilestoreview", "nofileswerereviewed",
     "unabletoreviewanyfiles",
     "notabletoreviewanyfiles",
     "wasnotabletoreviewanyfiles",

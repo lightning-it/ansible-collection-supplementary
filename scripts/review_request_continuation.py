@@ -20,10 +20,11 @@ PILOTS = {"lightning-it/.github", "lightning-it/shared-assets-lit",
 PRODUCER = ".github/workflows/copilot-review.yml"
 WORKFLOW = ".github/workflows/review-request-continuation.yml"
 BOT = "copilot-pull-request-reviewer[bot]"
+REVIEWERS = frozenset({BOT, "copilot-pull-request-reviewer"})
 FAILURE_MARKERS = (
     "unabletoreviewthispullrequest",
-    "wasnotabletoreviewthispullrequest",
-    "nofilestoreview",
+    "notabletoreviewthispullrequest", "wasnotabletoreviewthispullrequest",
+    "nofilestoreview", "nofileswerereviewed",
     "unabletoreviewanyfiles",
     "notabletoreviewanyfiles",
     "wasnotabletoreviewanyfiles",
@@ -398,7 +399,7 @@ def validate_intent(intent, repo, repo_id, key):
 def clean_old_review(repo, pr, review_id, head, after, reference_time=None):
     value = api(f"repos/{repo}/pulls/{pr}/reviews/{review_id}")
     require(positive(value["id"]) and value["id"] == review_id and sha(value["commit_id"])
-            and value["commit_id"] != head and value["user"]["login"] == BOT and value["user"]["type"] == "Bot"
+            and value["commit_id"] != head and value["user"]["login"] in REVIEWERS and value["user"]["type"] == "Bot"
             and value["state"] in {"COMMENTED", "APPROVED"}
             and epoch(value["submitted_at"]) >= epoch(after) - 604800, "old review identity")
     # A stale PR-wide Pending flag may outlive completion before owner creation.
@@ -409,7 +410,7 @@ def clean_old_review(repo, pr, review_id, head, after, reference_time=None):
     inline = [item.get("body") for item in pages(f"repos/{repo}/pulls/{pr}/reviews/{review_id}/comments")]
     require_usable_review_content(value.get("body"), inline)
     candidates = [item for item in pages(f"repos/{repo}/pulls/{pr}/reviews")
-                  if item.get("user", {}).get("login") == BOT and item.get("commit_id") != head
+                  if item.get("user", {}).get("login") in REVIEWERS and item.get("commit_id") != head
                   and epoch(item["submitted_at"]) >= epoch(after) - 604800
                   and (reference_time is None or epoch(item["submitted_at"]) <= reference)]
     require(candidates and max(candidates, key=lambda item: (epoch(item["submitted_at"]), item["id"]))["id"] == review_id,
@@ -426,9 +427,9 @@ def unconsumed(repo, intent, journal):
     rerun_key = f"li219-verifier-operation:v1:{intent['pr']}:{intent['base']}:{intent['head']}:{intent['owner_run']}"
     require(journal.read(record_path(rerun_key)) is None and journal.read(record_path(intent["operation"])) is None, "consumed operation")
     reviews = pages(f"repos/{repo}/pulls/{intent['pr']}/reviews")
-    require(not any(review.get("commit_id") == intent["head"] and review.get("user", {}).get("login") == BOT for review in reviews), "current-head review exists")
+    require(not any(review.get("commit_id") == intent["head"] and review.get("user", {}).get("login") in REVIEWERS for review in reviews), "current-head review exists")
     pending = api(f"repos/{repo}/pulls/{intent['pr']}/requested_reviewers")
-    require(isinstance(pending["users"], list) and not any(item["login"] in {BOT, BOT.removesuffix('[bot]')} for item in pending["users"]), "review still pending")
+    require(isinstance(pending["users"], list) and not any(item["login"] in REVIEWERS for item in pending["users"]), "review still pending")
     comments = pages(f"repos/{repo}/issues/{intent['pr']}/comments")
     markers = (f"<!-- mlx90-copilot-request head={intent['head']} -->",
                f"<!-- mlx90-copilot-request-uncertain head={intent['head']} -->")
@@ -453,7 +454,7 @@ def reconcile_candidate(repo, repo_id, pr, head, now):
     owner = validate_intent(intent, repo, repo_id, key)
     require(0 <= now.timestamp() - epoch(owner["created_at"]) <= 604800, "expired intent")
     candidates = [item for item in pages(f"repos/{repo}/pulls/{pr}/reviews")
-                  if item.get("user", {}).get("login") == BOT and item.get("commit_id") != head
+                  if item.get("user", {}).get("login") in REVIEWERS and item.get("commit_id") != head
                   and epoch(item["submitted_at"]) >= epoch(owner["created_at"]) - 604800]
     if not candidates:
         return None
@@ -516,7 +517,7 @@ def locate():
         pr_number = run["pull_requests"][0]["number"] if run["pull_requests"] else branch_pr(repo, run)["number"]
     else:
         require(event_name == "pull_request_review" and event["action"] == "submitted"
-                and event["review"]["user"]["login"] == BOT, "review completion event")
+                and event["review"]["user"]["login"] in REVIEWERS, "review completion event")
         pr_number = event["pull_request"]["number"]
     pr = live_pr(repo, pr_number)
     key = key_for(repo_id, pr_number, pr["head"]["sha"])
@@ -528,7 +529,7 @@ def locate():
     if event_name == "workflow_run":
         require(run["id"] == owner["id"], "companion owner")
         reviews = [item for item in pages(f"repos/{repo}/pulls/{pr_number}/reviews")
-                   if item.get("user", {}).get("login") == BOT and item.get("commit_id") != intent["head"]
+                   if item.get("user", {}).get("login") in REVIEWERS and item.get("commit_id") != intent["head"]
                    and epoch(item["submitted_at"]) >= epoch(owner["created_at"]) - 604800]
         if not reviews:
             return
