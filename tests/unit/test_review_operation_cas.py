@@ -98,12 +98,19 @@ elif post and route.endswith('/check-runs'):
 elif route.endswith('/requested_reviewers'):
     if post:
         call['request'] = True
-        if mode in ('request-success', 'lost-request-response'):
+        if mode == 'rejected-old-pending':
+            call['accepted'] = False
             s['requested'] = True
-            if mode == 'lost-request-response': rc = 42
+            s['pending_head'] = 'a' * 40
+            rc = 42
+        elif mode in ('request-success', 'lost-request-response', 'lost-request-response-cleared'):
+            s['requested'] = True
+            call['accepted'] = True
+            if mode != 'request-success': rc = 42
         else:
             rc = 42
     else:
+        if mode == 'lost-request-response-cleared' and worker != '500': s['requested'] = False
         result = {'users': [{'login': 'copilot-pull-request-reviewer[bot]'}]
               if mode == 'pending-review' or s.get('requested') else []}
 elif '/comments' in route:
@@ -363,6 +370,7 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
             if new_head:
                 workers.append(("502", "d" * 40, "e" * 40))
             observations = []
+            outcomes = []
             for worker, base, head in workers:
                 env = {
                     **os.environ,
@@ -409,9 +417,11 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                 if interrupt and worker == "500":
                     allowed = (73,)
                 self.assertIn(result.returncode, allowed, result.stderr)
+                outcomes.append(result.returncode)
                 observations.append(json.loads(state.read_text()))
             final = json.loads(state.read_text())
             final["observations"] = observations
+            final["outcomes"] = outcomes
             return final
 
     def test_legacy_interruption_before_post_cannot_reserve_marker(self):
@@ -602,8 +612,41 @@ marker="<!-- mlx90-copilot-request head=${EXPECTED_HEAD} -->"
                 self.assertFalse(allowed(action=action))
 
     def test_lost_original_post_response_never_publishes_accepted_marker(self):
-        state = self.probe("lost-request-response")
-        self.assertTrue(state["requested"])
-        self.assertEqual(1, sum(bool(c.get("cas")) for c in state["calls"]))
-        self.assertEqual(1, sum(bool(c.get("request")) for c in state["calls"]))
-        self.assertFalse(any(c.get("comment") for c in state["calls"]))
+        for prefix in ("",):
+            for flag in (None, "disabled", "enabled"):
+                for new_head in (False, True):
+                    with self.subTest(source=prefix, flag=flag, new_head=new_head):
+                        state = self.probe(
+                            "lost-request-response", new_head=new_head, event_mode=flag, source_prefix=prefix
+                        )
+                        self.assertTrue(state["requested"])
+                        self.assertEqual(1, state["outcomes"][0])
+                        self.assertEqual(1, sum(bool(c.get("request")) for c in state["calls"]))
+                        self.assertEqual(int(flag == "enabled"), sum(bool(c.get("cas")) for c in state["calls"]))
+                        self.assertFalse(any(c.get("comment") for c in state["calls"]))
+
+    def test_lost_original_post_keeps_claim_consumed_after_pending_clears(self):
+        for prefix in ("",):
+            for new_head in (False, True):
+                with self.subTest(source=prefix, new_head=new_head):
+                    state = self.probe("lost-request-response-cleared", new_head=new_head, source_prefix=prefix)
+                    expected = ["500", "502"] if new_head else ["500"]
+                    self.assertEqual(expected, [c["worker"] for c in state["calls"] if c.get("request")])
+                    self.assertEqual(len(expected), sum(bool(c.get("cas")) for c in state["calls"]))
+                    self.assertFalse(any(c.get("comment") for c in state["calls"]))
+
+    def test_rejected_original_post_then_old_pending_never_accepts_new_head(self):
+        for prefix in ("",):
+            for flag in (None, "disabled", "enabled"):
+                for new_head in (False, True):
+                    with self.subTest(source=prefix, flag=flag, new_head=new_head):
+                        state = self.probe(
+                            "rejected-old-pending", new_head=new_head, event_mode=flag, source_prefix=prefix
+                        )
+                        attempts = [c for c in state["calls"] if c.get("request")]
+                        self.assertEqual(1, len(attempts))
+                        self.assertIs(False, attempts[0]["accepted"])
+                        self.assertEqual(BASE, state["pending_head"])
+                        self.assertEqual(1, state["outcomes"][0])
+                        self.assertEqual(int(flag == "enabled"), sum(bool(c.get("cas")) for c in state["calls"]))
+                        self.assertFalse(any(c.get("comment") for c in state["calls"]))

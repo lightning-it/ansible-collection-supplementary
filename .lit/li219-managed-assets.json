@@ -54,7 +54,7 @@
     {
       "path": ".github/workflows/copilot-review.yml",
       "category": "local-required",
-      "sha256": "c9ac1710fb2c70c7a13a01a567237e21b490fcbb328fbd75acc2b96000c6464f",
+      "sha256": "d3baf6596bd49242a98afc79870f685eb031c84efffc848e4144612efebe3f0e",
       "owner": "ansible-collection-supplementary",
       "purpose": "Locally adapted LI-219 contract; preserve Supplementary semantics."
     },
