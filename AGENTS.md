@@ -96,6 +96,96 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
     be mounted into it. A scenario that needs a managed runtime belongs to a protected pipeline and MUST fail closed
     locally instead of weakening this boundary.
 
+## 1.3 LI-219 Three-Pilot Adoption (2026-10-05)
+
+This owner-authorized local adoption is restricted to `lightning-it/.github`,
+`lightning-it/shared-assets-lit`, and `lightning-it/ansible-collection-supplementary`.
+The event behavior requires the exact repository variable `LI219_EVENT_MODE=enabled`.
+Absent or disabled flags retain legacy execution. Fleet admission remains frozen.
+
+The Supplementary producer remains repository-owned. Its exact protected source
+checks, Release-App exclusion, ancestry-only exemption, Renovate restrictions,
+fork identity, metadata/label binding, and branch-specific legacy helper routes
+remain local contracts. The bounded port adopts the audited Source request claim,
+refresh, helper and reconciler. This explicit adoption does not authorize a generic
+sync to overwrite the producer or Security release and main-authorization files.
+The independent DotGithub verifier retains its native promotion-aggregation checks.
+
+Events locate evidence; protected consumers independently authorize mutations.
+The request consumes one repository-ID/PR/head CAS operation on
+`refs/heads/lit-review-operations` before its sole POST. Uncertain outcomes never
+permit a blind retry. The event refresh may consume the sole producer rerun;
+the request job is attempt-one-only. The helper validates the completed producer
+attempt and full Required inventory before the sole verifier rerun. CAS receipts
+never replace native review evidence. Terminal review content consumes no retry.
+
+The canonical donor is protected Source MAIN `a44cb1762aa6ae3edba91d6cf75ada2a99182af5`
+(tree `77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762`), adopted through the actual protected Main merge.
+`.lit/li219-pilot-source.json` and `.lit/li219-gateway-source.json` bind the immutable
+Source blobs, target digests, and protected adoption receipt. This local Port has
+not yet received independent or native acceptance; event activation remains separate.
+The original Supplementary request job keeps its six-job producer
+context and exact source/author/actor predicate. Only the enabled three pilots
+admit `synchronize`. PR-wide Pending writes a separate immutable deferred intent,
+never an accepted-head marker or a consumed request claim. An unconfirmed original
+POST also must not publish an accepted marker; a consumed claim remains consumed.
+
+The protected first-request continuation validates that original intent and native
+request steps, the completed old-head review, current PR/source identity and all
+existing budgets. Its schema-2 receipt consumes the SAME repository-ID/PR/head
+request key; either schema-1 or schema-2 presence blocks another request. Review
+and owner-completion events only locate work; completed `Copilot` and
+`Running Copilot Code Review` events also only wake the protected inventory locator; the existing ten-minute reconciler
+is the bounded delayed-visibility fallback. All three dispatch workflow families
+share the existing 256-GET inventory budget and native cooldown. The original
+producer remains the owner; no third verifier attempt or LI-259 route is added.
+The exact-review SINGLE gateway is distributed with its workflow, materializer,
+and all six runtime modules, including single_review_resources.py. The protected-source and final local instruction digests are content-bound; native
+acceptance remains pending.
+
+The repository-owned Push-Ready engine retains Supplementary classification,
+full-index patch shape, local Git/source guards and no-AI behavior. It adopts the
+canonical complete streaming path and aggregate 500000000-byte tracked-workspace
+read budget; this is not a PR or diff-size ceiling. Its adapted target digest is
+explicitly recorded. The canonical pilot installer retains its earlier allowlisted
+engine; the scoped local adapter is applied after that installer without changing
+Source. Existing canonical-file lint exceptions remain limited to the materializer.
+
+The adjacent continuation module and read-only provenance module are explicit
+scoped managed assets. Locator jobs receive read access plus dispatch authority;
+only the protected consumer receives the audited request/CAS write scopes.
+
+Only an exact confirmed native STALE_DATA journal conflict permits retrying the
+eligibility-only intent write, with at most three attempts. Unknown delivery is
+readback-only; request CAS and AI POST remain single-attempt. Legacy uncertain request
+consumption survives cleared Pending and terminal review content; it never funds
+a second same-head request. Explicit negation (including isn’t/isn't) marks
+failure; positive able-to-review text does not. Keyed inventories
+require stable exact totals. Historical review provenance uses its bound request
+event time, authenticated inside the native request step. Supplementary has no protected empty-association sender:
+an empty native PR association fails closed in original/continuation/provenance
+callers. Existing fully bound nonempty associations retain their original route.
+
+The required static Contents/Checks write scopes apply only to the audited jobs;
+legacy helper jobs retain read scopes. Workflow token permissions remain
+repository-wide. Enable only after protected source/target controllers and the
+CAS manifest/rules are verified and old/new writers are quiesced and drained.
+Rollback also drains writers and preserves consumed operations.
+
+Normal Copilot PR size is advisory: Push-Ready version 3 retains its existing risk
+classification and protected-policy binding, using `review.warn_diff_bytes: 500000`.
+Legacy positive `max_diff_bytes` remains readable without imposing a diff ceiling.
+Null disables the notice. Full deterministic checks and complete input remain
+mandatory; no automatic splitting, truncation or additional AI review follows.
+Per-file safe-read limits, historical evidence schemas and model-call contracts
+remain separate. No new model-call route is introduced by this pilot.
+
+`.lit/li219-pilot-source.json` records the actual protected Source MAIN and exact
+local hashes; a local feature-source hash is not protected rollout authority. The scoped inventory
+`.lit/li219-managed-assets.json`, validated by the pilot contract tests,
+distinguishes byte-identical source assets from locally adapted contracts. It
+does not opt the collection into a repository-wide managed inventory or fleet sync.
+
 ## 2. Repository Baseline (This Repo)
 
 1. Repository identity values (namespace, name, license, tags, dependencies) MUST be read from `galaxy.yml`.
@@ -903,3 +993,44 @@ Before finalizing, confirm all items below:
     attestation, signing, signature verification, and exact-SHA release eligibility gates pass.
 12. CI and release behavior remains fail-closed, and documentation contains no stronger support claim than executed
     evidence proves.
+
+
+### Protected SINGLE controller host exception (2026-10-06)
+
+The owner-authorized exception to the Devtools execution boundary applies only
+in the protected Exact-Revision SINGLE workflow. Its immutable controller may
+use host Python for tuple-bound materialization and regeneration, host/cgroup
+resource admission, root-owned `/run` bootstrap and loopback supervision, and
+the authenticated receipt lifecycle. Controller and imported runtime assets
+must remain bound to the protected workflow/base Git blobs; candidate code is
+review data and must never be imported or executed.
+
+These narrowly admitted controller checks are not generic host acceptance
+evidence or native review acceptance. Lint, test, build, package and unrelated
+validators remain in pinned Devtools. The deterministic receipt collector must
+start before `drop-sudo`, with the original runner UID/GID, read-only inputs and
+no network or service-socket mount. Its existing protected supervisor may
+publish only the successful collector's bounded output. No sudo/Docker access
+is restored after privilege removal. This exception grants no extra inference,
+request, retry, replay, funding or promotion authority; Devtools still never
+runs a model invocation.
+
+<!-- LIT at-most-once review funding: start -->
+
+## At-most-once review funding
+
+The owner-authorized 2026-10-06 amendment requires a durable, exact-head
+reservation before the one review-request POST. Enabled pilot requests confirm
+the protected Git CAS claim before the effect; disabled/default and non-pilot
+requests confirm the durable UNCERTAIN comment reservation without CAS.
+Reservation proves consumption only, never delivery, review quality, or acceptance.
+After an unknown POST outcome, observe review delivery only through GET reads;
+do not repeat the same-head AI request. Base drift, a new run, or missing pending
+state never restores that consumed opportunity. Every completed same-head review
+from the trusted Copilot bot consumes the funding opportunity, including failed,
+quota-blocked, changes-requested, and dismissed reviews, regardless of body or
+inline content. The separate policy/evidence gate must still reject unusable
+content and unresolved findings. This amendment grants no bypass or weaker
+platform, protected-source, actor, Required-Workflow, or merge authority.
+
+<!-- LIT at-most-once review funding: end -->

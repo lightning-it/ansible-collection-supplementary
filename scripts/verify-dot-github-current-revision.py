@@ -833,7 +833,13 @@ def main() -> int:
             os.environ.get("GH_TOKEN", ""),
             os.environ.get("GITHUB_API_URL", "https://api.github.com"),
         )
-        verify(client, os.environ)
+        attempts = (
+            1
+            if os.environ.get("REPOSITORY") == TARGET_REPOSITORY
+            and os.environ.get("LI219_EVENT_MODE") == "enabled"
+            else 60
+        )
+        verify(client, os.environ, attempts=attempts)
     except VerificationError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

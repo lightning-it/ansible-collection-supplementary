@@ -480,6 +480,7 @@ jobs:
           fi
 
           gh workflow run release-bot-exact-head-review.yml \
+            -f bounded_mode=single \
             --repo "$REPOSITORY" \
             --ref develop \
             -f "pr_number=${RECOVERY_PR_NUMBER}" \

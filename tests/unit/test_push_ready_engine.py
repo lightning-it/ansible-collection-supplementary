@@ -260,11 +260,13 @@ class PushReadyEngineTests(unittest.TestCase):
         main_globals = ENGINE["main"].__globals__
         replacements = {
             "check_instruction_contract": mock.Mock(),
+            "reject_hidden_index_entries": mock.Mock(),
             "load_config": mock.Mock(return_value={}),
             "require_clean_head": mock.Mock(),
             "refresh_authoritative_base": mock.Mock(),
             "verify_evidence": mock.Mock(return_value={}),
             "verify_pre_push_updates": verify,
+            "evidence_path": mock.Mock(return_value=Path("fixture-evidence.json")),
         }
         with (
             mock.patch.dict(main_globals, replacements),
@@ -345,7 +347,10 @@ class PushReadyEngineTests(unittest.TestCase):
             original = function_globals["CONFIG"]
             function_globals["CONFIG"] = path
             try:
-                with self.assertRaisesRegex(RuntimeError, "define checks"):
+                with (
+                    mock.patch.dict(function_globals, reject_hidden_index_entries=mock.Mock()),
+                    self.assertRaisesRegex(RuntimeError, "define checks"),
+                ):
                     ENGINE["load_config"]()
             finally:
                 function_globals["CONFIG"] = original
@@ -686,14 +691,22 @@ class PushReadyEngineTests(unittest.TestCase):
                     classification=classification,
                 )
 
-    def test_review_size_limit_is_exclusive(self) -> None:
-        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "0123456789", (), {}, "f" * 64)
-        with self.assertRaisesRegex(RuntimeError, "exceeds local review limit"):
-            ENGINE["review_size_evidence"]({"review": {"max_diff_bytes": 10}}, change)
-        self.assertEqual(
-            {"bytes": 10, "limit_exclusive": 11, "path_count": 0},
-            ENGINE["review_size_evidence"]({"review": {"max_diff_bytes": 11}}, change),
-        )
+    def test_review_size_is_advisory_and_legacy_limit_does_not_block(self) -> None:
+        change = ENGINE["PlannedChange"]("base", "a" * 40, "a" * 40, "b" * 40, "x" * 500001, (), {}, "f" * 64)
+        for review, threshold, warned in (
+            ({"max_diff_bytes": 10}, 500000, True),
+            ({"warn_diff_bytes": 600000}, 600000, False),
+            ({"warn_diff_bytes": None}, None, False),
+        ):
+            with self.subTest(review=review):
+                result = ENGINE["review_size_evidence"]({"review": review}, change)
+                self.assertEqual(500001, result["bytes"])
+                self.assertEqual(threshold, result["warning_bytes"])
+                self.assertEqual(warned, result["warning_exceeded"])
+                self.assertEqual("advisory/v1", result["profile"])
+        for invalid in (True, 0, -1, "500000"):
+            with self.subTest(invalid=invalid), self.assertRaises(RuntimeError):
+                ENGINE["review_warning_bytes"]({"warn_diff_bytes": invalid})
 
     def test_review_evidence_and_metrics_record_no_local_ai_egress(self) -> None:
         classification = ENGINE["ReviewClassification"]("trust-root", (), "a" * 64, "test")
