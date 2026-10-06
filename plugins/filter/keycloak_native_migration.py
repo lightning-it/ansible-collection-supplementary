@@ -79,6 +79,7 @@ def database_binding(components, database_host):
     if (
         network not in bindings["keycloak"]
         or bindings["keycloak"][network]["address"] == address
+        or bindings["keycloak"][network]["alias"] == database_host
         or not ipaddress.IPv4Address(address).is_private
     ):
         raise ValueError("database requires distinct private peer addresses on its declared network")
