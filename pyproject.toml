@@ -6,6 +6,11 @@ target-version = "py311"
 select = ["B", "E", "F", "I", "S", "UP"]
 ignore = ["S101"]
 
+[tool.ruff.lint.per-file-ignores]
+# Canonical Source asset: SHA1 reproduces Git blob OIDs; content bindings use SHA256.
+# Preserve the Source bytes and digest recorded in .lit/li219-gateway-source.json.
+"scripts/materialize-exact-revision-review.py" = ["S324"]
+
 [tool.mypy]
 python_version = "3.11"
 check_untyped_defs = true
