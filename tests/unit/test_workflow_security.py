@@ -330,7 +330,9 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertNotIn('gh api --method DELETE "${requested_reviewers_url}"', request_job)
         self.assertNotIn("review_is_visible_for_head()", request_job)
         self.assertNotIn("Copilot reviewer request did not become visible", request_job)
-        self.assertNotIn("concurrency:", request_job)
+        self.assertIn("concurrency:", request_job)
+        self.assertIn("group: copilot-review-request-${{ github.event.pull_request.number }}", request_job)
+        self.assertIn("cancel-in-progress: false", request_job)
         verify_job = copilot.split("  verify-current-revision-policy:", 1)[1]
         self.assertIn(
             "group: copilot-review-verify-${{ github.event.pull_request.number }}",
@@ -340,7 +342,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             "group: copilot-review-${{ github.event.pull_request.number }}-${{ github.event.action }}",
             copilot,
         )
-        self.assertEqual(2, copilot.count("cancel-in-progress: false"))
+        self.assertEqual(3, copilot.count("cancel-in-progress: false"))
         self.assertIn("pull_request_target:", copilot)
         for action in (
             "opened",
