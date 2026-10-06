@@ -236,6 +236,27 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
         with self.assertRaises(AnsibleFilterError):
             NATIVE.prepare_transition(components, "postgres", 5432)
 
+    def test_existing_managed_alias_is_atomically_replaced_or_removed(self):
+        components = fixtures()
+        components["postgres"]["pod_name"] = "keycloak-postgres"
+        components["postgres"]["manifest"]["metadata"]["name"] = "keycloak-postgres"
+        first = NATIVE.prepare_transition(components, "keycloak-postgres", 5432)
+        for name, prepared in first["components"].items():
+            components[name].update(prepared)
+
+        replacement = NATIVE.prepare_transition(components, "postgres", 5432)
+        self.assertEqual(
+            replacement["components"]["keycloak"]["manifest"]["spec"]["hostAliases"],
+            [{"ip": "192.0.2.3", "hostnames": ["postgres"]}],
+        )
+        for name, prepared in replacement["components"].items():
+            components[name].update(prepared)
+
+        removal = NATIVE.prepare_transition(components, "192.0.2.3", 5432)
+        self.assertNotIn("hostAliases", removal["components"]["keycloak"]["manifest"]["spec"])
+        environment = removal["components"]["keycloak"]["manifest"]["spec"]["containers"][0]["env"]
+        self.assertIn({"name": "KC_DB_URL_HOST", "value": "192.0.2.3"}, environment)
+
     def test_prepares_both_networks_and_database_endpoint_without_other_changes(self):
         components = fixtures()
         original = deepcopy(components)
