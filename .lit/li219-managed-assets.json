@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "assets": [
+    {
+      "path": ".github/workflows/copilot-review-refresh.yml",
+      "category": "local-required",
+      "sha256": "4f81cd074aa838698ebdab5da04d69c6f676f863d26b671e46bf12ecd858ede3",
+      "source": "shared-assets-lit/default/.github/workflows/copilot-review-refresh.yml",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Protected PR base-ref dispatch/consumer binding and native sanity source compatibility; strict schema types and runtime Unicode content semantics retained."
+    },
+    {
+      "path": ".github/workflows/current-revision-rerun.yml",
+      "category": "central-managed",
+      "sha256": "2febd480773ecbe19840c4c22bf147cd1fbe77abfe0c23b66b2f07a727e58c8f",
+      "source": "shared-assets-lit/default/.github/workflows/current-revision-rerun.yml"
+    },
+    {
+      "path": ".github/workflows/review-event-reconcile.yml",
+      "category": "central-managed",
+      "sha256": "bbee309bac5c9831cd4689cb32651c94ade87d832248e21a799e2a706185af5a",
+      "source": "shared-assets-lit/default/.github/workflows/review-event-reconcile.yml"
+    },
+    {
+      "path": "scripts/review-event-reconcile.py",
+      "category": "local-required",
+      "sha256": "bf5470663d66afcc6a3d8257dac88605487fd246123b0e255603c14c41108a28",
+      "source": "shared-assets-lit/default/scripts/review-event-reconcile.py",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Protected PR base-ref dispatch/consumer binding and native sanity source compatibility; strict schema types and runtime Unicode content semantics retained."
+    },
+    {
+      "path": ".github/workflows/dot-github-current-revision-required.yml",
+      "category": "central-managed",
+      "sha256": "734f922840311920ea0c78a3f2e4ded3a0a74c53381bec4671f89d5c5d8fa2a6",
+      "source": "shared-assets-lit/.github/workflows/dot-github-current-revision-required.yml"
+    },
+    {
+      "path": "tests/unit/test_dot_github_current_revision.py",
+      "category": "local-required",
+      "sha256": "4bc64c849028106ece888291920429518e622ce083d65832a965c71eccc20241",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Canonical verifier tests adapted to repository formatting."
+    },
+    {
+      "path": "scripts/review_content_markers.py",
+      "category": "local-required",
+      "sha256": "846efa703a39d59ffeefe946958fdb8ac82eb32617c91bdbb1eae9ae084d4a44",
+      "source": "shared-assets-lit/scripts/review_content_markers.py",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Protected PR base-ref dispatch/consumer binding and native sanity source compatibility; strict schema types and runtime Unicode content semantics retained."
+    },
+    {
+      "path": "scripts/verify-dot-github-current-revision.py",
+      "category": "local-required",
+      "sha256": "7cdb3f5ee93ccd15055486807ed393c91cdeefddbbf561ef3d31bb9681ccd32d",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Locally adapted LI-219 contract; preserve Supplementary semantics."
+    },
+    {
+      "path": ".github/workflows/copilot-review.yml",
+      "category": "local-required",
+      "sha256": "5b10872d52d5bc52967519dc4d896368a349b1a332db3671ab08b96fa02c2242",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Protected PR base-ref dispatch/consumer binding and native sanity source compatibility; strict schema types and runtime Unicode content semantics retained."
+    },
+    {
+      "path": "scripts/lit-push-ready.py",
+      "category": "local-required",
+      "sha256": "e2ffdb26feebf9e58d9e4d4d389941cd041fe72b1e3e37fb891f2b6e0b895231",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Protected PR base-ref dispatch/consumer binding and native sanity source compatibility; strict schema types and runtime Unicode content semantics retained."
+    },
+    {
+      "path": ".github/workflows/review-request-continuation.yml",
+      "category": "local-required",
+      "source": "shared-assets-lit/default/.github/workflows/review-request-continuation.yml",
+      "sha256": "e89dcebc08fb644cf4393ede380f001f581add5fcd827c8d5ae8d4e3d73b68de",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Protected PR base-ref dispatch/consumer binding and native sanity source compatibility; strict schema types and runtime Unicode content semantics retained."
+    },
+    {
+      "path": "scripts/review_request_continuation.py",
+      "category": "local-required",
+      "source": "shared-assets-lit/default/scripts/review_request_continuation.py",
+      "sha256": "b66506dd37ff90d808a99a1f3168650df23d5313a032a3ee66274af4e194bbcb",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Protected PR base-ref dispatch/consumer binding and native sanity source compatibility; strict schema types and runtime Unicode content semantics retained."
+    },
+    {
+      "path": "scripts/review_request_provenance.py",
+      "category": "local-required",
+      "source": "shared-assets-lit/default/scripts/review_request_provenance.py",
+      "sha256": "a391a41cea27b673062865b958035d60b107cc9c1f0f1cbf8d6d168beaf764ab",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Protected PR base-ref dispatch/consumer binding and native sanity source compatibility; strict schema types and runtime Unicode content semantics retained."
+    }
+  ],
+  "scope": "li219-three-pilot",
+  "repository": "lightning-it/ansible-collection-supplementary"
+}
