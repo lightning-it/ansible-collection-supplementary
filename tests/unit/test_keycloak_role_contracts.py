@@ -691,6 +691,10 @@ exit 0
                 )
                 self.assertEqual(validator["when"], "':ip=' in item")
 
+        migration_filter = (ROOT / "plugins" / "filter" / "keycloak_native_migration.py").read_text(encoding="utf-8")
+        self.assertIn("def parse_network_entry(entry):", migration_filter)
+        self.assertIn("parse_network_entry(entry)[1]", migration_filter)
+
     def test_managed_bridge_database_requires_a_shared_normalized_network(self) -> None:
         assertions = (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
         defaults = self._role_defaults("keycloak_deploy")

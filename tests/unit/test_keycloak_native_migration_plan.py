@@ -22,7 +22,7 @@ def fixtures():
         image = "example.invalid/" + name + "@sha256:" + ("1" if name == "keycloak" else "2") * 64
         host_data = f"/srv/fixture/{name}"
         container_data = "/data"
-        networks = ["database.network:ip=192.0.2." + ("2" if name == "keycloak" else "3")]
+        networks = ["database.network:ip=192.0.2." + ("2" if name == "keycloak" else "3,alias=postgres")]
         manifest = {
             "apiVersion": "v1",
             "kind": "Pod",
@@ -80,6 +80,57 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
         for host in ("other", "postgres.example.invalid", "POSTGRES", "postgres\n", "8.8.8.8"):
             with self.subTest(host=host), self.assertRaises(AnsibleFilterError):
                 NATIVE.prepare_transition(components, host, 5432)
+
+    def test_alias_is_parsed_across_endpoint_transition_runtime_and_dns_validation(self):
+        components = fixtures()
+        self.assertTrue(
+            NATIVE.private_database_endpoint_valid(
+                "postgres",
+                components["keycloak"]["networks"],
+                components["postgres"]["networks"],
+                "keycloak-postgres",
+                "postgres",
+            )
+        )
+        prepared = NATIVE.prepare_transition(components, "postgres", 5432)
+        self.assertIn(
+            "Network=database.network:ip=192.0.2.3,alias=postgres",
+            prepared["components"]["postgres"]["quadlet_content"],
+        )
+        self.assertEqual(NATIVE.expected_runtime_networks(components["postgres"]), {"database": "192.0.2.3"})
+        self.assertTrue(NATIVE.database_resolution_valid("192.0.2.3 STREAM postgres", components, "postgres"))
+
+    def test_alias_grammar_rejects_malformed_names_and_unsupported_options(self):
+        for invalid in (
+            "database.network:ip=192.0.2.3,alias=",
+            "database.network:ip=192.0.2.3,alias=POSTGRES",
+            "database.network:ip=192.0.2.3,alias=post_gres",
+            "database.network:ip=192.0.2.3,alias=postgres,alias=other",
+            "database.network:ip=192.0.2.3,mac=00:11:22:33:44:55",
+            "database.network:alias=postgres",
+        ):
+            components = fixtures()
+            components["postgres"]["networks"] = [invalid]
+            with self.subTest(network=invalid), self.assertRaises(AnsibleFilterError):
+                NATIVE.private_database_endpoint_valid(
+                    "postgres",
+                    components["keycloak"]["networks"],
+                    components["postgres"]["networks"],
+                    "keycloak-postgres",
+                    "postgres",
+                )
+
+    def test_explicit_database_alias_must_match_the_selected_endpoint(self):
+        components = fixtures()
+        components["postgres"]["networks"] = ["database.network:ip=192.0.2.3,alias=other"]
+        with self.assertRaises(AnsibleFilterError):
+            NATIVE.private_database_endpoint_valid(
+                "postgres",
+                components["keycloak"]["networks"],
+                components["postgres"]["networks"],
+                "keycloak-postgres",
+                "postgres",
+            )
 
     def test_dns_runtime_requires_exclusively_the_bound_private_peer(self):
         components = fixtures()
