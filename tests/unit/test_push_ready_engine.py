@@ -266,6 +266,7 @@ class PushReadyEngineTests(unittest.TestCase):
             "refresh_authoritative_base": mock.Mock(),
             "verify_evidence": mock.Mock(return_value={}),
             "verify_pre_push_updates": verify,
+            "evidence_path": mock.Mock(return_value=Path("fixture-evidence.json")),
         }
         with (
             mock.patch.dict(main_globals, replacements),

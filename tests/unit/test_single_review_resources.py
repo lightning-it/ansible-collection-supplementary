@@ -15,7 +15,7 @@ SPEC.loader.exec_module(MODULE)
 
 class SingleResourcesTests(unittest.TestCase):
     def test_finite_cgroup_ancestor_binds_unlimited_leaf_and_large_host(self):
-        for v2 in (True, False):
+        for v2, hybrid in ((True, False), (False, False), (False, True)):
             maximum = "memory.max" if v2 else "memory.limit_in_bytes"
             current = "memory.current" if v2 else "memory.usage_in_bytes"
             files = {
@@ -24,13 +24,16 @@ class SingleResourcesTests(unittest.TestCase):
                 "/proc/self/mountinfo": "1 0 0:1 / /sys/fs/cgroup rw - "
                 + ("cgroup2 cgroup rw" if v2 else "cgroup cgroup rw,memory"),
             }
+            if hybrid:
+                files["/proc/self/cgroup"] += "0::/unified/jobs/review\n"
+                files["/proc/self/mountinfo"] += "\n2 0 0:2 / /sys/fs/cgroup/unified rw - cgroup2 cgroup rw"
             for directory in ("/sys/fs/cgroup", "/sys/fs/cgroup/jobs/review"):
                 files[directory + "/" + maximum] = "max" if v2 else str(2**63 - 1)
                 files[directory + "/" + current] = "0"
             files["/sys/fs/cgroup/jobs/" + maximum] = str(256 * 1024**2)
             files["/sys/fs/cgroup/jobs/" + current] = str(128 * 1024**2)
             with (
-                self.subTest(v2=v2),
+                self.subTest(v2=v2, hybrid=hybrid),
                 patch.object(Path, "read_text", lambda p, files=files, **kw: files[str(p)]),
                 patch.object(resource, "getrlimit", return_value=(resource.RLIM_INFINITY, resource.RLIM_INFINITY)),
             ):

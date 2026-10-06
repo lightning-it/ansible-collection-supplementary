@@ -8,8 +8,8 @@ from __future__ import annotations
 
 FAILURE_MARKERS = (
     "unabletoreviewthispullrequest",
-    "wasnotabletoreviewthispullrequest",
-    "nofilestoreview",
+    "notabletoreviewthispullrequest", "wasnotabletoreviewthispullrequest",
+    "nofilestoreview", "nofileswerereviewed",
     "unabletoreviewanyfiles",
     "notabletoreviewanyfiles",
     "wasnotabletoreviewanyfiles",

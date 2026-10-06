@@ -17,6 +17,7 @@ import signal
 import ssl
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -55,16 +56,48 @@ def strict_json(payload: bytes | str, *, json_limits: tuple[int, int] | None = N
         raise ReviewError("transport-invalid-json") from None
 
 
-def completed_response(payload: bytes, *, streaming: bool) -> dict[str, Any]:
+def response_limit(response_byte_limit: int | None) -> int:
+    if response_byte_limit is None:
+        return MAX_RESPONSE_BYTES
+    integer(response_byte_limit, 1, MAX_RESPONSE_BYTES, "transport-response-limit")
+    return response_byte_limit
+
+
+def bounded_response(payload: bytes, response_byte_limit: int | None) -> bytes:
+    require(
+        type(payload) is bytes and 0 < len(payload) <= response_limit(response_byte_limit), "transport-response-size"
+    )
+    return payload
+
+
+def separated(text: str, delimiter: str):
+    """Yield segments without retaining a list of every SSE comment or line."""
+    start = 0
+    while True:
+        end = text.find(delimiter, start)
+        if end < 0:
+            yield text[start:]
+            return
+        yield text[start:end]
+        start = end + len(delimiter)
+
+
+def completed_response(
+    payload: bytes,
+    *,
+    streaming: bool,
+    json_limits: tuple[int, int] | None = None,
+    response_byte_limit: int | None = None,
+) -> dict[str, Any]:
     """Find one complete upstream response before releasing any response bytes.
 
     Source: https://developers.openai.com/api/reference/resources/responses/streaming-events
     SSE events carry a typed JSON object and sequence_number; completed carries
     the full response and usage. Reject ambiguous, truncated or failed streams.
     """
-    require(0 < len(payload) <= MAX_RESPONSE_BYTES, "transport-response-size")
+    bounded_response(payload, response_byte_limit)
     if not streaming:
-        response = strict_json(payload)
+        response = strict_json(payload, json_limits=json_limits)
         require(type(response) is dict, "transport-response-shape")
         return response
     text = payload.decode("utf-8", errors="strict")
@@ -74,12 +107,12 @@ def completed_response(payload: bytes, *, streaming: bool) -> dict[str, Any]:
     identity = None
     sequence = -1
     count = 0
-    for block in text.split("\n\n"):
+    for block in separated(text, "\n\n"):
         if not block:
             continue
         event_name = None
         data = []
-        for line in block.split("\n"):
+        for line in separated(block, "\n"):
             if line.startswith(":"):
                 continue
             field, separator, value = line.partition(":")
@@ -96,7 +129,7 @@ def completed_response(payload: bytes, *, streaming: bool) -> dict[str, Any]:
             require(event_name is None, "transport-sse-data")
             continue
         require(result is None, "transport-after-completion")
-        event = strict_json("\n".join(data))
+        event = strict_json("\n".join(data), json_limits=json_limits)
         require(type(event) is dict, "transport-sse-event")
         kind = event.get("type")
         require(type(kind) is str and kind.startswith("response."), "transport-sse-event")
@@ -145,14 +178,24 @@ COUNT_FIELDS = frozenset(
 )
 
 
-def count_request(request: dict[str, Any]) -> dict[str, Any]:
-    return json.loads(canonical({key: value for key, value in request.items() if key in COUNT_FIELDS}))
+def count_request(request: dict[str, Any], *, json_limits: tuple[int, int] | None = None) -> dict[str, Any]:
+    return strict_json(
+        canonical({key: value for key, value in request.items() if key in COUNT_FIELDS}), json_limits=json_limits
+    )
 
 
-def fetch_once(request: dict[str, Any], credential: str, timeout: float, *, counting: bool = False) -> bytes:
+def fetch_once(
+    request: dict[str, Any],
+    credential: str,
+    timeout: float,
+    *,
+    counting: bool = False,
+    response_byte_limit: int | None = None,
+) -> bytes:
     """Worker-only fixed TLS endpoint. No provider retry is ever attempted."""
     require(type(credential) is str and 1 <= len(credential) <= 4096, "transport-credential")
     require(all(32 < ord(c) < 127 for c in credential), "transport-credential")
+    maximum = response_limit(response_byte_limit)
     connection = http.client.HTTPSConnection("api.openai.com", timeout=timeout, context=ssl.create_default_context())
     try:
         connection.request(
@@ -173,9 +216,8 @@ def fetch_once(request: dict[str, Any], credential: str, timeout: float, *, coun
             response.getheader("Content-Type", "").split(";", 1)[0].strip().lower() == expected,
             "transport-content-type",
         )
-        payload = response.read(MAX_RESPONSE_BYTES + 1)
-        require(0 < len(payload) <= MAX_RESPONSE_BYTES, "transport-response-size")
-        return payload
+        payload = response.read(maximum + 1)
+        return bounded_response(payload, maximum)
     finally:
         connection.close()
 
@@ -192,6 +234,7 @@ def run_worker(
     counting: bool = False,
     input_limit: int = MAX_WORKER_INPUT,
     json_limits: tuple[int, int] | None = None,
+    response_byte_limit: int | None = None,
 ) -> bytes:
     """Perform one fixed-endpoint operation within the shared absolute deadline.
 
@@ -201,7 +244,9 @@ def run_worker(
     output or a success event before authenticated usage is settled.
     """
     child = None
+    output = None
     try:
+        maximum = response_limit(response_byte_limit)
         require(type(credential) is str and 1 <= len(credential) <= 4096, "transport-credential")
         remaining = deadline - monotonic_ms()
         require(remaining > 0, "provider-timeout")
@@ -210,11 +255,16 @@ def run_worker(
         )
         integer(input_limit, 1, 2**63 - 1, "transport-resource-limit")
         require(len(message) <= input_limit, "transport-request-size")
+        if response_byte_limit is not None:
+            # Parent never captures an unbounded worker stdout pipe in RAM.
+            # Trusted worker HTTP reads independently enforce the same limit.
+            output = tempfile.TemporaryFile(mode="w+b")
         child = subprocess.Popen(
             [sys.executable, "-E", "-s", str(Path(__file__).resolve()), "--worker", str(len(message))]
-            + ([] if json_limits is None else [str(value) for value in json_limits]),
+            + ([] if json_limits is None else [str(value) for value in json_limits])
+            + ([] if response_byte_limit is None else ["--response-byte-limit", str(maximum)]),
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            stdout=subprocess.PIPE if output is None else output,
             stderr=subprocess.DEVNULL,
             env=WORKER_ENVIRONMENT,
             cwd="/",
@@ -224,7 +274,11 @@ def run_worker(
         require(remaining > 0, "provider-timeout")
         payload, _ = child.communicate(message, timeout=remaining)
         require(child.returncode == 0, "transport-upstream-failure")
-        return payload
+        if output is not None:
+            require(0 < os.fstat(output.fileno()).st_size <= maximum, "transport-response-size")
+            output.seek(0)
+            payload = output.read(maximum + 1)
+        return bounded_response(payload, maximum)
     finally:
         if child is not None:
             if child.poll() is None:
@@ -232,7 +286,17 @@ def run_worker(
                     os.killpg(child.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
-            child.communicate()
+            if output is None:
+                child.communicate()
+            else:
+                # Never drain an unknown oversized output during failure cleanup.
+                for name in ("stdin", "stdout"):
+                    pipe = getattr(child, name, None)
+                    if pipe is not None:
+                        pipe.close()
+                child.wait()
+        if output is not None:
+            output.close()
 
 
 def exchange(
@@ -242,6 +306,7 @@ def exchange(
     *,
     worker_input_limit: int | None = None,
     json_limits: tuple[int, int] | None = None,
+    response_byte_limit: int | None = None,
 ) -> bytes:
     """Count the complete normalized input, admit its reserve, then send once.
 
@@ -250,13 +315,34 @@ def exchange(
     """
     try:
         digest, bounded = ledger.reserve(request, now_ms=monotonic_ms())
+        maximum = response_limit(response_byte_limit)
         options = {} if worker_input_limit is None else {"input_limit": worker_input_limit}
+        if response_byte_limit is not None:
+            options["response_byte_limit"] = maximum
         if json_limits is not None:
-            options["json_limits"] = json_limits
-        count = strict_json(run_worker(count_request(bounded), credential, ledger.deadline, counting=True, **options))
+            # Only the local worker envelope gets framing overhead. Provider data
+            # and inner JSON retain the actual admitted node/depth allowance.
+            from single_review_resources import ENVELOPE_NODES
+
+            options["json_limits"] = (json_limits[0] + ENVELOPE_NODES, json_limits[1] + 1)
+        count = strict_json(
+            bounded_response(
+                run_worker(
+                    count_request(bounded, json_limits=json_limits),
+                    credential,
+                    ledger.deadline,
+                    counting=True,
+                    **options,
+                ),
+                maximum,
+            ),
+            json_limits=json_limits,
+        )
         ledger.admit_tokens(digest, bounded, count, now_ms=monotonic_ms())
         payload = run_worker(bounded, credential, ledger.deadline, **options)
-        response = completed_response(payload, streaming=bounded.get("stream", False))
+        response = completed_response(
+            payload, streaming=bounded.get("stream", False), json_limits=json_limits, response_byte_limit=maximum
+        )
         ledger.complete(digest, response, now_ms=monotonic_ms())
         return payload
     except BaseException:
@@ -264,7 +350,12 @@ def exchange(
         raise
 
 
-def worker(input_limit: int = MAX_WORKER_INPUT, json_limits: tuple[int, int] | None = None) -> int:
+def worker(
+    input_limit: int = MAX_WORKER_INPUT,
+    json_limits: tuple[int, int] | None = None,
+    *,
+    response_byte_limit: int | None = None,
+) -> int:
     try:
         integer(input_limit, 1, 2**63 - 1, "transport-resource-limit")
         payload = sys.stdin.buffer.read(input_limit + 1)
@@ -276,10 +367,15 @@ def worker(input_limit: int = MAX_WORKER_INPUT, json_limits: tuple[int, int] | N
         )
         integer(message["timeout_ms"], 1, 100_000, "transport-worker-timeout")
         require(type(message["counting"]) is bool, "transport-worker-operation")
+        options = {} if response_byte_limit is None else {"response_byte_limit": response_limit(response_byte_limit)}
         result = fetch_once(
-            message["request"], message["credential"], message["timeout_ms"] / 1000, counting=message["counting"]
+            message["request"],
+            message["credential"],
+            message["timeout_ms"] / 1000,
+            counting=message["counting"],
+            **options,
         )
-        sys.stdout.buffer.write(result)
+        sys.stdout.buffer.write(bounded_response(result, response_byte_limit))
         return 0
     except Exception:
         # Never expose error bodies, request data, credentials, headers or a
@@ -288,7 +384,12 @@ def worker(input_limit: int = MAX_WORKER_INPUT, json_limits: tuple[int, int] | N
 
 
 if __name__ == "__main__":
-    if len(sys.argv) in (3, 5) and sys.argv[1] == "--worker":
-        limits = tuple(int(value) for value in sys.argv[3:]) if len(sys.argv) == 5 else None
-        raise SystemExit(worker(int(sys.argv[2]), limits))
-    raise SystemExit(worker() if sys.argv[1:] == ["--worker"] else 2)
+    arguments = sys.argv[1:]
+    output_limit = None
+    if len(arguments) >= 3 and arguments[-2] == "--response-byte-limit":
+        output_limit = int(arguments[-1])
+        arguments = arguments[:-2]
+    if len(arguments) in (2, 4) and arguments[0] == "--worker":
+        limits = tuple(int(value) for value in arguments[2:]) if len(arguments) == 4 else None
+        raise SystemExit(worker(int(arguments[1]), limits, response_byte_limit=output_limit))
+    raise SystemExit(worker(response_byte_limit=output_limit) if arguments == ["--worker"] else 2)

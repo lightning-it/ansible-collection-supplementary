@@ -119,10 +119,11 @@ the request job is attempt-one-only. The helper validates the completed producer
 attempt and full Required inventory before the sole verifier rerun. CAS receipts
 never replace native review evidence. Terminal review content consumes no retry.
 
-The preparation donor content is Source bundle `9f9bfa412ff84be1670f8b5cf69704585ae9cc0de0610ce5cb6f47f5066f6f6d`.
-This is a local preparation binding; `protected_source_commit` remains null until actual protected Source main
-adoption. Local immutable Source snapshot: `65ce52fe1814a91699d5fee425502e7f608e0ff5`
-(tree `94e309975231effcdddd4d947d7032a79f19c4c2`), preparation only.
+The canonical donor is protected Source MAIN `a44cb1762aa6ae3edba91d6cf75ada2a99182af5`
+(tree `77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762`), adopted through the actual protected Main merge.
+`.lit/li219-pilot-source.json` and `.lit/li219-gateway-source.json` bind the immutable
+Source blobs, target digests, and protected adoption receipt. This local Port has
+not yet received independent or native acceptance; event activation remains separate.
 The original Supplementary request job keeps its six-job producer
 context and exact source/author/actor predicate. Only the enabled three pilots
 admit `synchronize`. PR-wide Pending writes a separate immutable deferred intent,
@@ -139,8 +140,17 @@ is the bounded delayed-visibility fallback. All three dispatch workflow families
 share the existing 256-GET inventory budget and native cooldown. The original
 producer remains the owner; no third verifier attempt or LI-259 route is added.
 The exact-review SINGLE gateway is distributed with its workflow, materializer,
-and all six runtime modules, including single_review_resources.py. This is local
-preparation only; final protected-source and final instruction digests remain HOLD.
+and all six runtime modules, including single_review_resources.py. The protected-source and final local instruction digests are content-bound; native
+acceptance remains pending.
+
+The repository-owned Push-Ready engine retains Supplementary classification,
+full-index patch shape, local Git/source guards and no-AI behavior. It adopts the
+canonical complete streaming path and aggregate 500000000-byte tracked-workspace
+read budget; this is not a PR or diff-size ceiling. Its adapted target digest is
+explicitly recorded. The canonical pilot installer retains its earlier allowlisted
+engine; the scoped local adapter is applied after that installer without changing
+Source. Existing canonical-file lint exceptions remain limited to the materializer.
+
 The adjacent continuation module and read-only provenance module are explicit
 scoped managed assets. Locator jobs receive read access plus dispatch authority;
 only the protected consumer receives the audited request/CAS write scopes.
@@ -170,9 +180,8 @@ mandatory; no automatic splitting, truncation or additional AI review follows.
 Per-file safe-read limits, historical evidence schemas and model-call contracts
 remain separate. No new model-call route is introduced by this pilot.
 
-`.lit/li219-pilot-source.json` records exact preparation hashes. Its protected-source
-field must be bound by the publisher after the real Source promotion; a local
-feature-source hash is not protected rollout authority. The scoped inventory
+`.lit/li219-pilot-source.json` records the actual protected Source MAIN and exact
+local hashes; a local feature-source hash is not protected rollout authority. The scoped inventory
 `.lit/li219-managed-assets.json`, validated by the pilot contract tests,
 distinguishes byte-identical source assets from locally adapted contracts. It
 does not opt the collection into a repository-wide managed inventory or fleet sync.
@@ -984,3 +993,44 @@ Before finalizing, confirm all items below:
     attestation, signing, signature verification, and exact-SHA release eligibility gates pass.
 12. CI and release behavior remains fail-closed, and documentation contains no stronger support claim than executed
     evidence proves.
+
+
+### Protected SINGLE controller host exception (2026-10-06)
+
+The owner-authorized exception to the Devtools execution boundary applies only
+in the protected Exact-Revision SINGLE workflow. Its immutable controller may
+use host Python for tuple-bound materialization and regeneration, host/cgroup
+resource admission, root-owned `/run` bootstrap and loopback supervision, and
+the authenticated receipt lifecycle. Controller and imported runtime assets
+must remain bound to the protected workflow/base Git blobs; candidate code is
+review data and must never be imported or executed.
+
+These narrowly admitted controller checks are not generic host acceptance
+evidence or native review acceptance. Lint, test, build, package and unrelated
+validators remain in pinned Devtools. The deterministic receipt collector must
+start before `drop-sudo`, with the original runner UID/GID, read-only inputs and
+no network or service-socket mount. Its existing protected supervisor may
+publish only the successful collector's bounded output. No sudo/Docker access
+is restored after privilege removal. This exception grants no extra inference,
+request, retry, replay, funding or promotion authority; Devtools still never
+runs a model invocation.
+
+<!-- LIT at-most-once review funding: start -->
+
+## At-most-once review funding
+
+The owner-authorized 2026-10-06 amendment requires a durable, exact-head
+reservation before the one review-request POST. Enabled pilot requests confirm
+the protected Git CAS claim before the effect; disabled/default and non-pilot
+requests confirm the durable UNCERTAIN comment reservation without CAS.
+Reservation proves consumption only, never delivery, review quality, or acceptance.
+After an unknown POST outcome, observe review delivery only through GET reads;
+do not repeat the same-head AI request. Base drift, a new run, or missing pending
+state never restores that consumed opportunity. Every completed same-head review
+from the trusted Copilot bot consumes the funding opportunity, including failed,
+quota-blocked, changes-requested, and dismissed reviews, regardless of body or
+inline content. The separate policy/evidence gate must still reject unusable
+content and unresolved findings. This amendment grants no bypass or weaker
+platform, protected-source, actor, Required-Workflow, or merge authority.
+
+<!-- LIT at-most-once review funding: end -->

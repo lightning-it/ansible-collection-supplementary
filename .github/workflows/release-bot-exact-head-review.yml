@@ -870,7 +870,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${BOUNDED_MODE}" = single ]; then
-            python3 "/run/exact-review-${GITHUB_RUN_ID}/code/exact_revision_gateway.py" collect --run-id "${GITHUB_RUN_ID}"
+            set -euo pipefail
+            python3 -B -E -s "/run/exact-review-${GITHUB_RUN_ID}/code/exact_revision_gateway.py" consume --run-id "${GITHUB_RUN_ID}"
           else
             python3 "/run/bounded-review-${GITHUB_RUN_ID}/code/bounded_review_controller.py" collect
           fi

@@ -10,3 +10,9 @@ bugfixes:
     Prepare a protected deferred first-request continuation using the same request
     budget, preserving original Supplementary authorization and refusing accepted
     markers for unconfirmed requests.
+  - >-
+    Adopt the protected Source MAIN review gateway and complete runtime closure,
+    including bounded provider responses and protected instruction admission.
+  - >-
+    Stream complete Push-Ready patches, fingerprints and secret scans while
+    preserving local review classification and the aggregate workspace budget.

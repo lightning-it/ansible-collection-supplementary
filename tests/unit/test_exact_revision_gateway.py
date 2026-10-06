@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-import exact_revision_gateway as gateway  # noqa: E402 -- Import the installed protected module.
+import exact_revision_gateway as gateway  # noqa: E402 -- load the actual repository module after the scoped path binding.
 
 
 class SingleReviewGatewayTests(unittest.TestCase):
@@ -27,11 +27,35 @@ class SingleReviewGatewayTests(unittest.TestCase):
         schema = (ROOT / ".github/codex/schemas/exact-head-review.schema.json").read_bytes()
         self.metadata = {key: "a" * (64 if key.endswith("sha256") else 40) for key in gateway.BINDINGS}
         self.metadata.update(
-            schema_version=6,
+            schema_version=7,
             diff_sha256=gateway.review.sha(self.payload),
             review_bytes=len(self.payload),
             prompt_sha256=gateway.review.sha(prompt),
             schema_sha256=gateway.review.sha(schema),
+        )
+        import hashlib
+
+        policy_files = []
+        agents = "Complete deterministic checks regardless of diff size; no automatic splitting.\n"
+        marker = f"<!-- AGENTS_SHA256: {gateway.review.sha(agents.encode())} -->\n"
+        for path, content in (
+            (".github/copilot-instructions.md", "Follow protected AGENTS.md.\n" + marker),
+            ("AGENTS.md", agents),
+        ):
+            encoded = content.encode()
+            policy_files.append(
+                {
+                    "path": path,
+                    "content": content,
+                    "sha256": gateway.review.sha(encoded),
+                    "blob_sha": hashlib.sha1(b"blob " + str(len(encoded)).encode() + b"\0" + encoded).hexdigest(),  # noqa: S324 -- reproduce Git object IDs in the fixture.
+                }
+            )
+        instructions = {"version": 1, "source_sha": self.metadata["base_sha"], "files": policy_files}
+        self.metadata.update(
+            trusted_workflow_sha=self.metadata["base_sha"],
+            review_instructions=instructions,
+            instructions_sha256=gateway.review.sha(gateway.review.canonical(instructions)),
         )
         for name, data in (
             ("change.patch", self.payload),
@@ -106,7 +130,10 @@ class SingleReviewGatewayTests(unittest.TestCase):
                 case.assertIn("--worker", argv)
                 index = argv.index("--worker")
                 self.limit = int(argv[index + 1])
-                self.json_limits = tuple(int(value) for value in argv[index + 2 :])
+                suffix = argv.index("--response-byte-limit") if "--response-byte-limit" in argv else len(argv)
+                self.response_limit = int(argv[suffix + 1]) if suffix < len(argv) else None
+                self.destination = kwargs["stdout"] if self.response_limit is not None else None
+                self.json_limits = tuple(int(value) for value in argv[index + 2 : suffix])
 
             def communicate(self, message=None, timeout=None):
                 if message is None:
@@ -118,13 +145,22 @@ class SingleReviewGatewayTests(unittest.TestCase):
                     patch.object(gateway.transport.sys, "stdin", type("Input", (), {"buffer": io.BytesIO(message)})()),
                     patch.object(gateway.transport.sys, "stdout", type("Output", (), {"buffer": output})()),
                 ):
-                    self.returncode = gateway.transport.worker(self.limit, self.json_limits)
+                    self.returncode = gateway.transport.worker(
+                        self.limit, self.json_limits, response_byte_limit=self.response_limit
+                    )
+                if self.destination is not None:
+                    self.destination.write(output.getvalue())
+                    self.destination.flush()
+                    return None, None
                 return output.getvalue(), b""
 
             def poll(self):
                 return self.returncode
 
-        def upstream(payload, credential, timeout, *, counting=False):
+            def wait(self):
+                return self.returncode
+
+        def upstream(payload, credential, timeout, *, counting=False, response_byte_limit=None):
             calls.append((counting, copy.deepcopy(payload)))
             if counting:
                 return gateway.review.canonical({"object": "response.input_tokens", "input_tokens": 170_000})
@@ -226,7 +262,16 @@ class SingleReviewGatewayTests(unittest.TestCase):
     def test_full_context_count_precedes_paid_call_and_root_receipt_wins(self):
         calls = []
 
-        def worker(request, credential, deadline, *, counting=False, input_limit=None, json_limits=None):
+        def worker(
+            request,
+            credential,
+            deadline,
+            *,
+            counting=False,
+            input_limit=None,
+            json_limits=None,
+            response_byte_limit=None,
+        ):
             calls.append((counting, copy.deepcopy(request)))
             if counting:
                 return gateway.review.canonical({"object": "response.input_tokens", "input_tokens": 10})
@@ -329,7 +374,16 @@ class SingleReviewGatewayTests(unittest.TestCase):
     def test_fresh_node_admission_is_bound_to_both_workers_and_receipt(self):
         current = self.small_current_memory()
 
-        def worker(request, credential, deadline, *, counting=False, input_limit=None, json_limits=None):
+        def worker(
+            request,
+            credential,
+            deadline,
+            *,
+            counting=False,
+            input_limit=None,
+            json_limits=None,
+            response_byte_limit=None,
+        ):
             self.assertEqual((current["max_json_nodes"] + gateway.resources.ENVELOPE_NODES, 65), json_limits)
             return gateway.review.canonical(
                 {"object": "response.input_tokens", "input_tokens": 10} if counting else self.response()
@@ -346,7 +400,16 @@ class SingleReviewGatewayTests(unittest.TestCase):
         self.assertEqual(2048, receipt["admission_resources"]["node_limit"])
 
     def test_over_budget_never_calls_response_endpoint(self):
-        def worker(request, credential, deadline, *, counting=False, input_limit=None, json_limits=None):
+        def worker(
+            request,
+            credential,
+            deadline,
+            *,
+            counting=False,
+            input_limit=None,
+            json_limits=None,
+            response_byte_limit=None,
+        ):
             self.assertTrue(counting)
             return gateway.review.canonical({"object": "response.input_tokens", "input_tokens": 400_001})
 
@@ -360,7 +423,16 @@ class SingleReviewGatewayTests(unittest.TestCase):
         self.assertFalse((self.root / "public/receipt.json").exists())
 
     def test_unknown_response_terminal_no_second_count_or_model(self):
-        def worker(request, credential, deadline, *, counting=False, input_limit=None, json_limits=None):
+        def worker(
+            request,
+            credential,
+            deadline,
+            *,
+            counting=False,
+            input_limit=None,
+            json_limits=None,
+            response_byte_limit=None,
+        ):
             if counting:
                 return gateway.review.canonical({"object": "response.input_tokens", "input_tokens": 10})
             raise TimeoutError
@@ -381,7 +453,16 @@ class SingleReviewGatewayTests(unittest.TestCase):
     def test_malformed_or_wrong_binding_never_yields_receipt(self):
         self.result["head_sha"] = "b" * 40
 
-        def worker(request, credential, deadline, *, counting=False, input_limit=None, json_limits=None):
+        def worker(
+            request,
+            credential,
+            deadline,
+            *,
+            counting=False,
+            input_limit=None,
+            json_limits=None,
+            response_byte_limit=None,
+        ):
             return gateway.review.canonical(
                 {"object": "response.input_tokens", "input_tokens": 10} if counting else self.response()
             )
@@ -413,8 +494,8 @@ class SingleReviewGatewayTests(unittest.TestCase):
         self.assertNotIn("bounded_review_controller.py", install["run"].split("else")[0])
         barrier = next(step for step in steps if step["name"].startswith("Require complete-request"))
         for value, expected in (("", 1), ("false", 1), ("true", 0)):
-            result = subprocess.run(  # noqa: S603 -- Fixed repository workflow with fixture transport.
-                ["/bin/bash", "-c", barrier["run"]],
+            result = subprocess.run(  # noqa: S603 -- fixed repository/fixture command and isolated environment.
+                ["bash", "-c", barrier["run"]],  # noqa: S607 -- fixed executable from the pinned runtime.
                 env={**os.environ, "BUDGETED_GATEWAY_INSTALLED": value},
                 capture_output=True,
             )
@@ -446,8 +527,8 @@ class SingleReviewGatewayTests(unittest.TestCase):
             output = Path(self.temporary.name) / "install-output"
             calls.write_text("")
             output.write_text("")
-            result = subprocess.run(  # noqa: S603 -- Fixed repository workflow with fixture transport.
-                ["/bin/bash", "-c", shell],
+            result = subprocess.run(  # noqa: S603 -- fixed repository/fixture command and isolated environment.
+                ["bash", "-c", shell],  # noqa: S607 -- fixed executable from the pinned runtime.
                 text=True,
                 capture_output=True,
                 env={
@@ -466,6 +547,52 @@ class SingleReviewGatewayTests(unittest.TestCase):
             )
             self.assertIn("endpoint=http://127.0.0.1:42555/responses", output.read_text())
             self.assertIn("installed=true", output.read_text())
+
+    def test_actual_collection_shell_consumes_without_engine_after_drop_sudo(self):
+        import yaml
+
+        workflow = yaml.safe_load((ROOT / ".github/workflows/release-bot-exact-head-review.yml").read_text())
+        steps = workflow["jobs"]["exact-revision-codex-review"]["steps"]
+        shell = next(step["run"] for step in steps if step.get("id") == "bounded-collect")
+        install_index = next(i for i, step in enumerate(steps) if step.get("id") == "bounded-subject")
+        action_index = next(
+            i for i, step in enumerate(steps) if step.get("uses", "").startswith("openai/codex-action@")
+        )
+        collect_index = next(i for i, step in enumerate(steps) if step.get("id") == "bounded-collect")
+        self.assertLess(install_index, action_index)
+        self.assertLess(action_index, collect_index)
+        self.assertEqual("drop-sudo", steps[action_index]["with"]["safety-strategy"])
+        enforce = next(
+            step for step in steps if step["name"] == "Re-prove exact revision and enforce the Codex verdict"
+        )
+        self.assertNotIn("if", enforce)  # Default success gating: no failed-collection fallback.
+        binary = Path(self.temporary.name) / "post-drop-bin"
+        binary.mkdir()
+        calls = binary / "calls"
+        (binary / "python3").write_text('#!/bin/bash\nprintf "%s\\n" "$*" >>"$CALLS"\n')
+        for name in ("docker", "sudo"):
+            (binary / name).write_text("#!/bin/bash\nexit 99\n")
+        for path in binary.iterdir():
+            path.chmod(0o755)
+        result = subprocess.run(  # noqa: S603 -- fixed repository/fixture command and isolated environment.
+            ["bash", "-c", shell],  # noqa: S607 -- fixed executable from the pinned runtime.
+            text=True,
+            capture_output=True,
+            check=False,
+            env={
+                **os.environ,
+                "PATH": str(binary) + os.pathsep + os.environ["PATH"],
+                "BOUNDED_MODE": "single",
+                "GITHUB_RUN_ID": "42",
+                "CALLS": str(calls),
+                "BASH_ENV": os.devnull,
+            },
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(
+            ["-B -E -s /run/exact-review-42/code/exact_revision_gateway.py consume --run-id 42"],
+            calls.read_text().splitlines(),
+        )
 
     def test_actual_production_dispatchers_select_single(self):
         import re

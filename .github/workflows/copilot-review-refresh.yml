@@ -1504,8 +1504,8 @@ jobs:
               if jq -e '
                 any(.[]; length > 0) and all(.[];
                   (contains("unabletoreviewthispullrequest")
-                   or contains("wasnotabletoreviewthispullrequest")
-                   or contains("nofilestoreview")
+                   or contains("notabletoreviewthispullrequest")
+                   or contains("nofilestoreview") or contains("nofileswerereviewed")
                    or contains("unabletoreviewanyfiles")
                    or contains("notabletoreviewanyfiles")
                    or contains("wasnotabletoreviewanyfiles")
@@ -2728,7 +2728,7 @@ jobs:
             ' <(printf '%s\n' "${review_payload}") \
               <(printf '%s\n' "${review_comment_pages}"))"
             case "${normalized_review_body}" in
-              *unabletoreviewthispullrequest*|*wasnotabletoreviewthispullrequest*|*nofilestoreview*|*notabletoreviewanyfiles*|*unabletoreviewanyfiles*|*quotaexhausted*|*quotaexceeded*|*premiumrequestquota*|*premiumrequestsquota*|*suppressedcomment*|*encounteredanerror*)
+              *unabletoreviewthispullrequest*|*notabletoreviewthispullrequest*|*nofilestoreview*|*nofileswerereviewed*|*notabletoreviewanyfiles*|*unabletoreviewanyfiles*|*quotaexhausted*|*quotaexceeded*|*premiumrequestquota*|*premiumrequestsquota*|*suppressedcomment*|*encounteredanerror*)
                 return 1
                 ;;
             esac
