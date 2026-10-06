@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "repository": "lightning-it/ansible-collection-supplementary",
-  "preparation_source_commit": "465cb86936d5cdf95db00caa62f045d6bbd5a073",
+  "preparation_source_commit": "3eff591b19da313ea501c4962f1452d3f35545e6",
   "protected_source_commit": null,
   "status": "local-continuation-port-prepared-awaits-final-review-and-actual-protected-source-main",
   "target_base": "c983bb3c8aa26114f682d825bfaca6fa1be187e4",
@@ -33,10 +33,10 @@
     {
       "source_path": "default/scripts/review-event-reconcile.py",
       "target_path": "scripts/review-event-reconcile.py",
-      "source_sha256": "994222315d8cff4a3c0461088a59afc3c0505e632d7177dede4d5bda570f0438",
-      "source_blob": "31e7cce816df91039639b7874048bb71ab143566",
+      "source_sha256": "4409823aa3c26e7a1dfccd2167d3865674893db2f2f14e2a3205ee10f5a90ee0",
+      "source_blob": "1c9b257fe79fc981c2e75a6552e60bfb820fa08e",
       "mode": "byte-identical",
-      "target_sha256": "994222315d8cff4a3c0461088a59afc3c0505e632d7177dede4d5bda570f0438"
+      "target_sha256": "4409823aa3c26e7a1dfccd2167d3865674893db2f2f14e2a3205ee10f5a90ee0"
     },
     {
       "source_path": ".github/workflows/dot-github-current-revision-required.yml",
@@ -74,10 +74,10 @@
     {
       "source_path": "default/.github/workflows/copilot-review.yml",
       "target_path": ".github/workflows/copilot-review.yml",
-      "source_sha256": "45f7be1bb597afbe3ca2a3d0b547fb6e51d546cb3989cb0eb9775e303aaad096",
-      "source_blob": "2e2f09558db7d0219d7f204c0deb63da65b7ee2b",
+      "source_sha256": "91e58008386a4ff1ef7d3631071cd55dc1893150461f295e29281605131e1a79",
+      "source_blob": "fa748d5de9f8f744446e8cf0bd947f0ab1e88c2e",
       "mode": "adapted-local",
-      "target_sha256": "d3baf6596bd49242a98afc79870f685eb031c84efffc848e4144612efebe3f0e",
+      "target_sha256": "e74b1da9848941a5517b8e304436a8cc1f87b3f1623ad85e5789799bb13b3102",
       "adaptation": "Preserve six Supplementary jobs and exact original trust; enabled sync and canonical intent helper in existing step; canonical failed original POST performs read-only Pending check, exits without acceptance or retry."
     },
     {
@@ -92,25 +92,25 @@
       "source_path": "default/.github/workflows/review-request-continuation.yml",
       "target_path": ".github/workflows/review-request-continuation.yml",
       "mode": "byte-identical",
-      "source_sha256": "d86f4147e8a4fc8996621ae60bb38d7dc803842ad68525a531cdd8b808b7cc49",
-      "source_blob": "ef13ff186198289ed1bd60c593de5d8b461d2203",
-      "target_sha256": "d86f4147e8a4fc8996621ae60bb38d7dc803842ad68525a531cdd8b808b7cc49"
+      "source_sha256": "1faa5bc6b22a476c5dc08cb4868a4797af96900c221e2ff6c77317ee9786f80c",
+      "source_blob": "2ee23cb10dbf8ac3dd73ef38173baa293c619752",
+      "target_sha256": "1faa5bc6b22a476c5dc08cb4868a4797af96900c221e2ff6c77317ee9786f80c"
     },
     {
       "source_path": "default/scripts/review_request_continuation.py",
       "target_path": "scripts/review_request_continuation.py",
       "mode": "byte-identical",
-      "source_sha256": "5cdb0409c39f68cd7941db1fe854f6bf7ee0a92eff1a8e92d4524a33a469d49b",
-      "source_blob": "3a70562d783f3c74596d3152ef3d76fe6b411096",
-      "target_sha256": "5cdb0409c39f68cd7941db1fe854f6bf7ee0a92eff1a8e92d4524a33a469d49b"
+      "source_sha256": "b4fe0f89c7f7f8eb4fd84fc99cb09a17364b832d82f6d4376333b4de142a196a",
+      "source_blob": "ba97444949a004a02b007093510c0a8d0d6ea0ba",
+      "target_sha256": "b4fe0f89c7f7f8eb4fd84fc99cb09a17364b832d82f6d4376333b4de142a196a"
     },
     {
       "source_path": "default/scripts/review_request_provenance.py",
       "target_path": "scripts/review_request_provenance.py",
       "mode": "byte-identical",
-      "source_sha256": "4f66eb97af799edd22a19f9ab4f17bba9647ae62086e73538b3bf3d6dcc378d9",
-      "source_blob": "2f1c043235032a2764a123464eb0c9fb77f49c3e",
-      "target_sha256": "4f66eb97af799edd22a19f9ab4f17bba9647ae62086e73538b3bf3d6dcc378d9"
+      "source_sha256": "d49188a4b2b5de87f354bb75c38195a4b1fb6fb9d4b173dd2a1e5ab58068ecb1",
+      "source_blob": "f534e07ac652b49b21f2b070d3e945e6330ec7bf",
+      "target_sha256": "d49188a4b2b5de87f354bb75c38195a4b1fb6fb9d4b173dd2a1e5ab58068ecb1"
     }
   ],
   "test_sources": [
@@ -126,7 +126,7 @@
     },
     {
       "path": "tests/test_review_event_reconcile.py",
-      "sha256": "baa3c50d27eee628ef1a99f7f6c1cb73f6111c929cf31c1b9deb164d2919c925",
+      "sha256": "c5403b9f499ce9c3fcb0db363611f9095ddf5d4a3cf35ced9c70833c3b9be6f5",
       "adaptation": "Supplementary package path and identities; bind producer PR associations and live PR numbers; omit Source-only optional mirror check; repository formatting."
     },
     {
@@ -141,9 +141,9 @@
     },
     {
       "path": "tests/test_review_request_continuation.py",
-      "sha256": "ebc0c2e29f31d6980050517c19686f399a9d6593a9a63649134ce98c89f0b8bf",
-      "adaptation": "Supplementary identity/package and actual six-job owner topology; read-only schema2 provenance acceptance and native source/step/time/locator rejection."
+      "sha256": "dcef0f095cdb97da34d76d6682490647a81a9d3c36e457f078144787676f6bc9",
+      "adaptation": "Actual Supplementary six-job owner and existing step names; nonempty association succeeds, absent protected fallback sender rejects empty association in original/locators/resume/read-only provenance; bounded intent conflicts and historical reference-time regression."
     }
   ],
-  "preparation_source_tree": "d05b388b62c16b68e579dba00385e2e85f518abf"
+  "preparation_source_tree": "23997920b8f94f6da46608c02233d0f80ceed1b2"
 }

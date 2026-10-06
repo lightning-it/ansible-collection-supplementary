@@ -119,8 +119,8 @@ the request job is attempt-one-only. The helper validates the completed producer
 attempt and full Required inventory before the sole verifier rerun. CAS receipts
 never replace native review evidence. Terminal review content consumes no retry.
 
-The immutable preparation donor is Source `465cb86936d5cdf95db00caa62f045d6bbd5a073`
-(tree `d05b388b62c16b68e579dba00385e2e85f518abf`). This is a local preparation
+The immutable preparation donor is Source `3eff591b19da313ea501c4962f1452d3f35545e6`
+(tree `23997920b8f94f6da46608c02233d0f80ceed1b2`). This is a local preparation
 binding; `protected_source_commit` remains null until actual protected Source main
 adoption. The original Supplementary request job keeps its six-job producer
 context and exact source/author/actor predicate. Only the enabled three pilots
@@ -139,6 +139,14 @@ producer remains the owner; no third verifier attempt or LI-259 route is added.
 The adjacent continuation module and read-only provenance module are explicit
 scoped managed assets. Locator jobs receive read access plus dispatch authority;
 only the protected consumer receives the audited request/CAS write scopes.
+
+Only an exact confirmed native STALE_DATA journal conflict permits retrying the
+eligibility-only intent write, with at most three attempts. Unknown delivery is
+readback-only; request CAS and AI POST remain single-attempt. Keyed inventories
+require stable exact totals. Historical review provenance uses its bound request
+step reference time. Supplementary has no protected empty-association sender:
+an empty native PR association fails closed in original/continuation/provenance
+callers. Existing fully bound nonempty associations retain their original route.
 
 The required static Contents/Checks write scopes apply only to the audited jobs;
 legacy helper jobs retain read scopes. Workflow token permissions remain

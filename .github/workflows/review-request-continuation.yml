@@ -74,6 +74,7 @@ jobs:
           import json
           import os
           from pathlib import Path
+          from urllib.parse import urlencode
           import re
           import subprocess
           import sys
@@ -101,6 +102,14 @@ jobs:
                             "Request Copilot review for the current revision", "Complete job"]
           RESUME_STEPS = ["Set up job", "Materialize protected first-request continuation",
                           "Resume the deferred first request", "Complete job"]
+
+
+          class ConfirmedIntentConflict(ValueError):
+              """The server explicitly rejected the expected journal head."""
+
+
+          class UnknownWriteResult(ValueError):
+              """Only readback is allowed after an unconfirmed journal write."""
 
 
           class ReviewContentError(ValueError):
@@ -163,6 +172,31 @@ jobs:
               return json.loads(result.stdout, object_pairs_hook=unique) if result.stdout.strip() else None
 
 
+          def commit_response(payload):
+              transport_failed = False
+              try:
+                  result = api("graphql", payload)
+              except subprocess.CalledProcessError as exc:
+                  transport_failed = True
+                  try:
+                      result = json.loads(exc.stdout, object_pairs_hook=unique)
+                  except (TypeError, ValueError):
+                      raise UnknownWriteResult("unconfirmed journal transport") from exc
+              except (OSError, subprocess.SubprocessError, ValueError) as exc:
+                  raise UnknownWriteResult("unconfirmed journal transport") from exc
+              prior = payload["variables"]["input"]["expectedHeadOid"]
+              errors = result.get("errors") if isinstance(result, dict) else None
+              if (isinstance(result, dict) and result.get("data") == {"createCommitOnBranch": None}
+                      and isinstance(errors, list) and len(errors) == 1 and isinstance(errors[0], dict)
+                      and errors[0].get("type") == "STALE_DATA"
+                      and errors[0].get("path") == ["createCommitOnBranch"]
+                      and errors[0].get("message") == f'Expected branch to point to "{prior}" but it did not. Pull and try again.'):
+                  raise ConfirmedIntentConflict("confirmed journal head conflict")
+              if transport_failed or not isinstance(result, dict) or "errors" in result:
+                  raise UnknownWriteResult("unconfirmed journal response")
+              return result
+
+
           def pages(route, key=None):
               result, total = [], None
               for page in range(1, 11):
@@ -222,7 +256,7 @@ jobs:
 
               def create(self, path, record):
                   require(self.read(path) is None, "record already exists")
-                  result = api("graphql", {"query": "mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid parents(first:2){nodes{oid}}}}}",
+                  result = commit_response({"query": "mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid parents(first:2){nodes{oid}}}}}",
                       "variables": {"input": {"branch": {"repositoryNameWithOwner": self.repo, "branchName": "lit-review-operations"},
                       "expectedHeadOid": self.oid, "message": {"headline": "Record LI-219 first-request continuation"},
                       "fileChanges": {"additions": [{"path": path, "contents": base64.b64encode(json.dumps(record, sort_keys=True, separators=(",", ":")).encode()).decode()}]}}}})
@@ -269,14 +303,63 @@ jobs:
                       and run["triggering_actor"]["login"] == "litroc"
                       and run["repository"]["full_name"] == repo and run["head_repository"]["full_name"] == repo, "original run")
               prs = run["pull_requests"]
-              require(isinstance(prs, list) and len(prs) == 1, "original PR inventory")
-              pr = prs[0]
-              require(pr["number"] == intent["pr"] and all(pr[side][field] == intent[side if field == "sha" else side + "_ref"]
-                      for side in ("base", "head") for field in ("sha", "ref"))
-                      and all(pr[side]["repo"]["url"] == f"https://api.github.com/repos/{repo}" for side in ("base", "head")), "original recorded PR")
+              require(isinstance(prs, list) and len(prs) <= 1, "original PR inventory")
+              if not prs:
+                  pr = empty_owner(repo, run, intent["pr"], intent["base"], intent["head"], intent["base_ref"])
+                  require(pr["head"]["ref"] == intent["head_ref"], "fallback head ref")
+              else:
+                  recorded_pr(repo, intent, prs[0])
               if completed:
                   require(run["status"] == "completed" and run["conclusion"] == "failure", "original not completed failure")
               return run
+
+
+          def empty_owner(repo, run, owner, base, head, base_ref):
+              require(repo in PILOTS and positive(owner) and positive(run.get("id"))
+                      and type(run.get("run_attempt")) is int and run["run_attempt"] in (1, 2)
+                      and run["event"] == "pull_request_target" and run["path"] == PRODUCER
+                      and run["name"] == "Current revision review gate" and run["head_sha"] == head
+                      and run["actor"]["login"] == "litroc"
+                      and run["triggering_actor"]["login"] == ("litroc" if run["run_attempt"] == 1 else "github-actions[bot]")
+                      and run["repository"]["full_name"] == repo and run["head_repository"]["full_name"] == repo
+                      and run["pull_requests"] == [] and sha(base) and sha(head), "fallback native owner")
+              pr = branch_pr(repo, run)
+              require(pr["number"] == owner and pr["base"]["sha"] == base and pr["base"]["ref"] == base_ref, "fallback PR binding")
+              jobs = pages(f"repos/{repo}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?filter=all", "jobs")
+              policy = [job for job in jobs if job.get("name") == "Verify current revision policy"]
+              require(len(policy) == 1, "fallback policy job")
+              job = policy[0]
+              require(type(job.get("run_id")) is int and job["run_id"] == run["id"]
+                      and type(job.get("run_attempt")) is int and job["run_attempt"] == run["run_attempt"]
+                      and job["head_sha"] == head and positive(job.get("runner_id"))
+                      and job["status"] in {"in_progress", "completed"}
+                      and (job["conclusion"] is None if job["status"] == "in_progress"
+                           else job["conclusion"] in {"success", "failure"}), "fallback native policy")
+              require(repo in {"lightning-it/.github", "lightning-it/shared-assets-lit"}, "no native fallback sender")
+              binding = (f"Event binding #{owner}:{base}:{head}:{run['id']}" if repo == "lightning-it/.github" else
+                         f"Current revision tuple #{owner} {base_ref}@{base} -> {repo}:{run['head_branch']}@{head} run {run['id']}")
+              steps = job["steps"]
+              require(isinstance(steps, list) and all(isinstance(step, dict) and isinstance(step.get("name"), str) for step in steps)
+                      and sum(step["name"] == binding for step in steps) == 1, "fallback event binding")
+              step = next(step for step in steps if step["name"] == binding)
+              require(type(step.get("number")) is int and step["number"] == 2
+                      and step["status"] == "completed" and step["conclusion"] == "success", "fallback binding step")
+              return pr
+
+
+          def branch_pr(repo, run):
+              query = urlencode({"state": "open", "head": repo.split('/')[0] + ':' + run["head_branch"]})
+              candidates = pages(f"repos/{repo}/pulls?{query}")
+              require(len(candidates) == 1, "ambiguous live branch")
+              pr = live_pr(repo, candidates[0]["number"], run["head_sha"])
+              require(pr["head"]["ref"] == run["head_branch"], "branch drift")
+              return pr
+
+
+          def recorded_pr(repo, intent, pr):
+              require(pr["number"] == intent["pr"] and all(pr[side][field] == intent[side if field == "sha" else side + "_ref"]
+                      for side in ("base", "head") for field in ("sha", "ref"))
+                      and all(pr[side]["repo"]["url"] == f"https://api.github.com/repos/{repo}" for side in ("base", "head")), "original recorded PR")
 
 
           def native_job(repo, run, name, names):
@@ -342,7 +425,8 @@ jobs:
               require_usable_review_content(value.get("body"), inline)
               candidates = [item for item in pages(f"repos/{repo}/pulls/{pr}/reviews")
                             if item.get("user", {}).get("login") == BOT and item.get("commit_id") != head
-                            and epoch(item["submitted_at"]) >= epoch(after) - 604800]
+                            and epoch(item["submitted_at"]) >= epoch(after) - 604800
+                            and (reference_time is None or epoch(item["submitted_at"]) <= reference)]
               require(candidates and max(candidates, key=lambda item: (epoch(item["submitted_at"]), item["id"]))["id"] == review_id,
                       "superseded old review")
               return value
@@ -415,7 +499,22 @@ jobs:
               if journal.read(record_path(key)) is not None or journal.read(record_path(key, True)) is not None:
                   return
               # This records eligibility only. No request marker or request budget is spent.
-              journal.create(record_path(key, True), intent)
+              for attempt in range(3):
+                  try:
+                      journal.create(record_path(key, True), intent)
+                      return
+                  except ConfirmedIntentConflict:
+                      journal = Journal(repo, repo_id)
+                      if journal.read(record_path(key)) is not None or journal.read(record_path(key, True)) is not None:
+                          return
+                      require(attempt < 2, "deferred intent conflict budget exhausted")
+                      live_pr(repo, intent["pr"], intent["head"], intent["base"])
+                  except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError):
+                      # Unknown delivery is GET-only, even when the record is absent.
+                      journal = Journal(repo, repo_id)
+                      require(journal.read(record_path(key, True)) == intent
+                              and journal.read(record_path(key)) is None, "unconfirmed deferred intent")
+                      return
 
 
           def locate():
@@ -425,8 +524,9 @@ jobs:
               if event_name == "workflow_run":
                   run = event["workflow_run"]
                   require(event["action"] == "completed" and run["event"] == "pull_request_target" and run["path"] == PRODUCER
-                          and run["run_attempt"] == 1 and len(run["pull_requests"]) == 1, "companion event")
-                  pr_number = run["pull_requests"][0]["number"]
+                          and type(run["run_attempt"]) is int and run["run_attempt"] == 1
+                          and isinstance(run["pull_requests"], list) and len(run["pull_requests"]) <= 1, "companion event")
+                  pr_number = run["pull_requests"][0]["number"] if run["pull_requests"] else branch_pr(repo, run)["number"]
               else:
                   require(event_name == "pull_request_review" and event["action"] == "submitted"
                           and event["review"]["user"]["login"] == BOT, "review completion event")
@@ -578,6 +678,7 @@ jobs:
           import json
           import os
           from pathlib import Path
+          from urllib.parse import urlencode
           import re
           import subprocess
           import sys
@@ -605,6 +706,14 @@ jobs:
                             "Request Copilot review for the current revision", "Complete job"]
           RESUME_STEPS = ["Set up job", "Materialize protected first-request continuation",
                           "Resume the deferred first request", "Complete job"]
+
+
+          class ConfirmedIntentConflict(ValueError):
+              """The server explicitly rejected the expected journal head."""
+
+
+          class UnknownWriteResult(ValueError):
+              """Only readback is allowed after an unconfirmed journal write."""
 
 
           class ReviewContentError(ValueError):
@@ -667,6 +776,31 @@ jobs:
               return json.loads(result.stdout, object_pairs_hook=unique) if result.stdout.strip() else None
 
 
+          def commit_response(payload):
+              transport_failed = False
+              try:
+                  result = api("graphql", payload)
+              except subprocess.CalledProcessError as exc:
+                  transport_failed = True
+                  try:
+                      result = json.loads(exc.stdout, object_pairs_hook=unique)
+                  except (TypeError, ValueError):
+                      raise UnknownWriteResult("unconfirmed journal transport") from exc
+              except (OSError, subprocess.SubprocessError, ValueError) as exc:
+                  raise UnknownWriteResult("unconfirmed journal transport") from exc
+              prior = payload["variables"]["input"]["expectedHeadOid"]
+              errors = result.get("errors") if isinstance(result, dict) else None
+              if (isinstance(result, dict) and result.get("data") == {"createCommitOnBranch": None}
+                      and isinstance(errors, list) and len(errors) == 1 and isinstance(errors[0], dict)
+                      and errors[0].get("type") == "STALE_DATA"
+                      and errors[0].get("path") == ["createCommitOnBranch"]
+                      and errors[0].get("message") == f'Expected branch to point to "{prior}" but it did not. Pull and try again.'):
+                  raise ConfirmedIntentConflict("confirmed journal head conflict")
+              if transport_failed or not isinstance(result, dict) or "errors" in result:
+                  raise UnknownWriteResult("unconfirmed journal response")
+              return result
+
+
           def pages(route, key=None):
               result, total = [], None
               for page in range(1, 11):
@@ -726,7 +860,7 @@ jobs:
 
               def create(self, path, record):
                   require(self.read(path) is None, "record already exists")
-                  result = api("graphql", {"query": "mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid parents(first:2){nodes{oid}}}}}",
+                  result = commit_response({"query": "mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid parents(first:2){nodes{oid}}}}}",
                       "variables": {"input": {"branch": {"repositoryNameWithOwner": self.repo, "branchName": "lit-review-operations"},
                       "expectedHeadOid": self.oid, "message": {"headline": "Record LI-219 first-request continuation"},
                       "fileChanges": {"additions": [{"path": path, "contents": base64.b64encode(json.dumps(record, sort_keys=True, separators=(",", ":")).encode()).decode()}]}}}})
@@ -773,14 +907,63 @@ jobs:
                       and run["triggering_actor"]["login"] == "litroc"
                       and run["repository"]["full_name"] == repo and run["head_repository"]["full_name"] == repo, "original run")
               prs = run["pull_requests"]
-              require(isinstance(prs, list) and len(prs) == 1, "original PR inventory")
-              pr = prs[0]
-              require(pr["number"] == intent["pr"] and all(pr[side][field] == intent[side if field == "sha" else side + "_ref"]
-                      for side in ("base", "head") for field in ("sha", "ref"))
-                      and all(pr[side]["repo"]["url"] == f"https://api.github.com/repos/{repo}" for side in ("base", "head")), "original recorded PR")
+              require(isinstance(prs, list) and len(prs) <= 1, "original PR inventory")
+              if not prs:
+                  pr = empty_owner(repo, run, intent["pr"], intent["base"], intent["head"], intent["base_ref"])
+                  require(pr["head"]["ref"] == intent["head_ref"], "fallback head ref")
+              else:
+                  recorded_pr(repo, intent, prs[0])
               if completed:
                   require(run["status"] == "completed" and run["conclusion"] == "failure", "original not completed failure")
               return run
+
+
+          def empty_owner(repo, run, owner, base, head, base_ref):
+              require(repo in PILOTS and positive(owner) and positive(run.get("id"))
+                      and type(run.get("run_attempt")) is int and run["run_attempt"] in (1, 2)
+                      and run["event"] == "pull_request_target" and run["path"] == PRODUCER
+                      and run["name"] == "Current revision review gate" and run["head_sha"] == head
+                      and run["actor"]["login"] == "litroc"
+                      and run["triggering_actor"]["login"] == ("litroc" if run["run_attempt"] == 1 else "github-actions[bot]")
+                      and run["repository"]["full_name"] == repo and run["head_repository"]["full_name"] == repo
+                      and run["pull_requests"] == [] and sha(base) and sha(head), "fallback native owner")
+              pr = branch_pr(repo, run)
+              require(pr["number"] == owner and pr["base"]["sha"] == base and pr["base"]["ref"] == base_ref, "fallback PR binding")
+              jobs = pages(f"repos/{repo}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?filter=all", "jobs")
+              policy = [job for job in jobs if job.get("name") == "Verify current revision policy"]
+              require(len(policy) == 1, "fallback policy job")
+              job = policy[0]
+              require(type(job.get("run_id")) is int and job["run_id"] == run["id"]
+                      and type(job.get("run_attempt")) is int and job["run_attempt"] == run["run_attempt"]
+                      and job["head_sha"] == head and positive(job.get("runner_id"))
+                      and job["status"] in {"in_progress", "completed"}
+                      and (job["conclusion"] is None if job["status"] == "in_progress"
+                           else job["conclusion"] in {"success", "failure"}), "fallback native policy")
+              require(repo in {"lightning-it/.github", "lightning-it/shared-assets-lit"}, "no native fallback sender")
+              binding = (f"Event binding #{owner}:{base}:{head}:{run['id']}" if repo == "lightning-it/.github" else
+                         f"Current revision tuple #{owner} {base_ref}@{base} -> {repo}:{run['head_branch']}@{head} run {run['id']}")
+              steps = job["steps"]
+              require(isinstance(steps, list) and all(isinstance(step, dict) and isinstance(step.get("name"), str) for step in steps)
+                      and sum(step["name"] == binding for step in steps) == 1, "fallback event binding")
+              step = next(step for step in steps if step["name"] == binding)
+              require(type(step.get("number")) is int and step["number"] == 2
+                      and step["status"] == "completed" and step["conclusion"] == "success", "fallback binding step")
+              return pr
+
+
+          def branch_pr(repo, run):
+              query = urlencode({"state": "open", "head": repo.split('/')[0] + ':' + run["head_branch"]})
+              candidates = pages(f"repos/{repo}/pulls?{query}")
+              require(len(candidates) == 1, "ambiguous live branch")
+              pr = live_pr(repo, candidates[0]["number"], run["head_sha"])
+              require(pr["head"]["ref"] == run["head_branch"], "branch drift")
+              return pr
+
+
+          def recorded_pr(repo, intent, pr):
+              require(pr["number"] == intent["pr"] and all(pr[side][field] == intent[side if field == "sha" else side + "_ref"]
+                      for side in ("base", "head") for field in ("sha", "ref"))
+                      and all(pr[side]["repo"]["url"] == f"https://api.github.com/repos/{repo}" for side in ("base", "head")), "original recorded PR")
 
 
           def native_job(repo, run, name, names):
@@ -846,7 +1029,8 @@ jobs:
               require_usable_review_content(value.get("body"), inline)
               candidates = [item for item in pages(f"repos/{repo}/pulls/{pr}/reviews")
                             if item.get("user", {}).get("login") == BOT and item.get("commit_id") != head
-                            and epoch(item["submitted_at"]) >= epoch(after) - 604800]
+                            and epoch(item["submitted_at"]) >= epoch(after) - 604800
+                            and (reference_time is None or epoch(item["submitted_at"]) <= reference)]
               require(candidates and max(candidates, key=lambda item: (epoch(item["submitted_at"]), item["id"]))["id"] == review_id,
                       "superseded old review")
               return value
@@ -919,7 +1103,22 @@ jobs:
               if journal.read(record_path(key)) is not None or journal.read(record_path(key, True)) is not None:
                   return
               # This records eligibility only. No request marker or request budget is spent.
-              journal.create(record_path(key, True), intent)
+              for attempt in range(3):
+                  try:
+                      journal.create(record_path(key, True), intent)
+                      return
+                  except ConfirmedIntentConflict:
+                      journal = Journal(repo, repo_id)
+                      if journal.read(record_path(key)) is not None or journal.read(record_path(key, True)) is not None:
+                          return
+                      require(attempt < 2, "deferred intent conflict budget exhausted")
+                      live_pr(repo, intent["pr"], intent["head"], intent["base"])
+                  except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError):
+                      # Unknown delivery is GET-only, even when the record is absent.
+                      journal = Journal(repo, repo_id)
+                      require(journal.read(record_path(key, True)) == intent
+                              and journal.read(record_path(key)) is None, "unconfirmed deferred intent")
+                      return
 
 
           def locate():
@@ -929,8 +1128,9 @@ jobs:
               if event_name == "workflow_run":
                   run = event["workflow_run"]
                   require(event["action"] == "completed" and run["event"] == "pull_request_target" and run["path"] == PRODUCER
-                          and run["run_attempt"] == 1 and len(run["pull_requests"]) == 1, "companion event")
-                  pr_number = run["pull_requests"][0]["number"]
+                          and type(run["run_attempt"]) is int and run["run_attempt"] == 1
+                          and isinstance(run["pull_requests"], list) and len(run["pull_requests"]) <= 1, "companion event")
+                  pr_number = run["pull_requests"][0]["number"] if run["pull_requests"] else branch_pr(repo, run)["number"]
               else:
                   require(event_name == "pull_request_review" and event["action"] == "submitted"
                           and event["review"]["user"]["login"] == BOT, "review completion event")

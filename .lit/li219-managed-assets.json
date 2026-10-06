@@ -22,7 +22,7 @@
     {
       "path": "scripts/review-event-reconcile.py",
       "category": "central-managed",
-      "sha256": "994222315d8cff4a3c0461088a59afc3c0505e632d7177dede4d5bda570f0438",
+      "sha256": "4409823aa3c26e7a1dfccd2167d3865674893db2f2f14e2a3205ee10f5a90ee0",
       "source": "shared-assets-lit/default/scripts/review-event-reconcile.py"
     },
     {
@@ -54,7 +54,7 @@
     {
       "path": ".github/workflows/copilot-review.yml",
       "category": "local-required",
-      "sha256": "d3baf6596bd49242a98afc79870f685eb031c84efffc848e4144612efebe3f0e",
+      "sha256": "e74b1da9848941a5517b8e304436a8cc1f87b3f1623ad85e5789799bb13b3102",
       "owner": "ansible-collection-supplementary",
       "purpose": "Locally adapted LI-219 contract; preserve Supplementary semantics."
     },
@@ -69,19 +69,19 @@
       "path": ".github/workflows/review-request-continuation.yml",
       "category": "central-managed",
       "source": "shared-assets-lit/default/.github/workflows/review-request-continuation.yml",
-      "sha256": "d86f4147e8a4fc8996621ae60bb38d7dc803842ad68525a531cdd8b808b7cc49"
+      "sha256": "1faa5bc6b22a476c5dc08cb4868a4797af96900c221e2ff6c77317ee9786f80c"
     },
     {
       "path": "scripts/review_request_continuation.py",
       "category": "central-managed",
       "source": "shared-assets-lit/default/scripts/review_request_continuation.py",
-      "sha256": "5cdb0409c39f68cd7941db1fe854f6bf7ee0a92eff1a8e92d4524a33a469d49b"
+      "sha256": "b4fe0f89c7f7f8eb4fd84fc99cb09a17364b832d82f6d4376333b4de142a196a"
     },
     {
       "path": "scripts/review_request_provenance.py",
       "category": "central-managed",
       "source": "shared-assets-lit/default/scripts/review_request_provenance.py",
-      "sha256": "4f66eb97af799edd22a19f9ab4f17bba9647ae62086e73538b3bf3d6dcc378d9"
+      "sha256": "d49188a4b2b5de87f354bb75c38195a4b1fb6fb9d4b173dd2a1e5ab58068ecb1"
     }
   ],
   "scope": "li219-three-pilot",
