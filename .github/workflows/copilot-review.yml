@@ -625,8 +625,10 @@ jobs:
               expected = {"schema", "kind", "repository", "repository_id", "operation", "pr", "base", "head",
                           "base_ref", "head_ref", "owner_run", "owner_attempt", "source_sha", "event", "action",
                           "author", "actor", "triggering_actor", "created_at"}
+              if isinstance(intent, dict) and intent.get("schema") == 2:
+                  expected.add("source_ref")
               require(isinstance(intent, dict) and set(intent) == expected and type(intent["schema"]) is int
-                      and intent["schema"] == 1 and intent["kind"] == "deferred-first-request"
+                      and intent["schema"] in (1, 2) and intent["kind"] == "deferred-first-request"
                       and intent["repository"] == repo and intent["repository_id"] == repo_id and intent["operation"] == key
                       and positive(intent["pr"]) and positive(intent["owner_run"]) and type(intent["owner_attempt"]) is int
                       and intent["owner_attempt"] == 1 and intent["event"] == "pull_request_target"
@@ -635,7 +637,15 @@ jobs:
                       and intent["base_ref"] in {"develop", "main"} and isinstance(intent["head_ref"], str) and intent["head_ref"]
                       and all(sha(intent[field]) for field in ("base", "head", "source_sha")), "deferred intent")
               require(key == key_for(repo_id, intent["pr"], intent["head"]), "intent budget key")
-              repository(repo, repo_id, intent["source_sha"], intent["base_ref"])
+              if intent["schema"] == 1:
+                  # Legacy facts retain their original meaning; they cannot describe a
+                  # default-controller/Main-base split that the old schema never carried.
+                  require(intent["base_ref"] == "develop" and intent["source_sha"] == intent["base"], "legacy original controller")
+                  source_ref = "develop"
+              else:
+                  require(intent["source_ref"] == "develop", "original default controller ref")
+                  source_ref = intent["source_ref"]
+              repository(repo, repo_id, intent["source_sha"], source_ref)
               run = original_run(repo, intent)
               job = native_job(repo, run, "Request Copilot review for current revision", ORIGINAL_STEPS)
               require(epoch(job["steps"][2]["started_at"]) <= epoch(intent["created_at"]) <= epoch(job["steps"][2]["completed_at"]), "intent outside original step")
@@ -720,12 +730,16 @@ jobs:
               require(event["action"] in {"opened", "ready_for_review", "synchronize"}, "original action")
               pr = live_pr(repo, int(os.environ["PR_NUMBER"]), os.environ["EXPECTED_HEAD"], os.environ["EXPECTED_BASE"])
               require(event["pull_request"]["number"] == pr["number"] and event["pull_request"]["head"]["sha"] == pr["head"]["sha"]
-                      and event["pull_request"]["base"]["sha"] == pr["base"]["sha"] and event["pull_request"]["user"]["login"] == "litroc", "event PR")
-              require(os.environ["GITHUB_REF"] == f"refs/heads/{pr['base']['ref']}"
-                      and source == pr["base"]["sha"], "original protected base source")
-              repository(repo, repo_id, source, pr["base"]["ref"])
+                      and event["pull_request"]["base"]["sha"] == pr["base"]["sha"] and event["pull_request"]["user"]["login"] == "litroc"
+                      and all(event["pull_request"][side]["ref"] == pr[side]["ref"]
+                              and event["pull_request"][side]["repo"]["full_name"] == repo for side in ("base", "head")), "event PR")
+              require(os.environ["GITHUB_REF"] == "refs/heads/develop"
+                      and os.environ["GITHUB_SHA"] == source
+                      and os.environ["GITHUB_WORKFLOW_REF"] == f"{repo}/{PRODUCER}@refs/heads/develop", "original default controller execution")
+              require(repository(repo, repo_id, source, "develop") == source, "current default controller")
+              require(repository(repo, repo_id, pr["base"]["sha"], pr["base"]["ref"]) == pr["base"]["sha"], "current PR base")
               key = key_for(repo_id, pr["number"], pr["head"]["sha"])
-              intent = {"schema": 1, "kind": "deferred-first-request", "repository": repo, "repository_id": repo_id,
+              intent = {"schema": 2, "source_ref": "develop", "kind": "deferred-first-request", "repository": repo, "repository_id": repo_id,
                         "operation": key, "pr": pr["number"], "base": pr["base"]["sha"], "head": pr["head"]["sha"],
                         "base_ref": pr["base"]["ref"], "head_ref": pr["head"]["ref"], "owner_run": int(os.environ["GITHUB_RUN_ID"]),
                         "owner_attempt": 1, "source_sha": source, "event": "pull_request_target", "action": event["action"],
@@ -738,12 +752,16 @@ jobs:
               # This records eligibility only. No request marker or request budget is spent.
               for attempt in range(3):
                   try:
+                      current = live_pr(repo, intent["pr"], intent["head"], intent["base"])
+                      require(current["base"]["ref"] == intent["base_ref"] and current["head"]["ref"] == intent["head_ref"], "intent ref drift")
+                      require(repository(repo, repo_id, source, intent["source_ref"]) == source, "intent controller drift")
+                      require(repository(repo, repo_id, intent["base"], intent["base_ref"]) == intent["base"], "intent PR base drift")
                       journal.create(record_path(key, True), intent)
-                      return
+                      break
                   except ConfirmedIntentConflict:
                       journal = Journal(repo, repo_id)
                       if journal.read(record_path(key)) is not None or journal.read(record_path(key, True)) is not None:
-                          return
+                          break
                       require(attempt < 2, "deferred intent conflict budget exhausted")
                       live_pr(repo, intent["pr"], intent["head"], intent["base"])
                   except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError):
@@ -751,7 +769,14 @@ jobs:
                       journal = Journal(repo, repo_id)
                       require(journal.read(record_path(key, True)) == intent
                               and journal.read(record_path(key)) is None, "unconfirmed deferred intent")
-                      return
+                      break
+
+              # This fence is outside unknown-write reconciliation: an observed intent
+              # cannot turn a stale controller into a successful original requester job.
+              current = live_pr(repo, intent["pr"], intent["head"], intent["base"])
+              require(current["base"]["ref"] == intent["base_ref"] and current["head"]["ref"] == intent["head_ref"], "recorded intent ref drift")
+              require(repository(repo, repo_id, source, intent["source_ref"]) == source, "recorded intent controller drift")
+              require(repository(repo, repo_id, intent["base"], intent["base_ref"]) == intent["base"], "recorded intent PR base drift")
 
 
           def locate():
@@ -812,8 +837,9 @@ jobs:
               owner = validate_intent(intent, repo, repo_id, key)
               require(intent["owner_run"] == owner_id, "resume original owner")
               require(os.environ["GITHUB_REF"] == f"refs/heads/{intent['base_ref']}"
-                      and source == intent["source_sha"] == intent["base"], "resume protected base source")
-              repository(repo, repo_id, source, intent["base_ref"])
+                      and os.environ["GITHUB_SHA"] == source == intent["base"]
+                      and os.environ["GITHUB_WORKFLOW_REF"] == f"{repo}/{WORKFLOW}@refs/heads/{intent['base_ref']}", "resume protected base source")
+              require(repository(repo, repo_id, source, intent["base_ref"]) == source, "current protected base controller")
               require(0 <= dt.datetime.now(dt.timezone.utc).timestamp() - epoch(owner["created_at"]) <= 604800, "expired intent")
               old = clean_old_review(repo, pr, review_id, intent["head"], owner["created_at"])
               native_resume_run(repo, os.environ["GITHUB_RUN_ID"], source, intent, review_id, completed=False)
@@ -821,10 +847,14 @@ jobs:
               record = {"schema": 2, "repository": repo, "repository_id": repo_id, "action": "request", "operation": key,
                         "claim_run": os.environ["GITHUB_RUN_ID"], "claim_attempt": "1", "source_sha": source,
                         "intent": intent, "intent_commit": journal.oid, "old_review": review_id, "old_head": old["commit_id"]}
+              current = live_pr(repo, pr, intent["head"], intent["base"])
+              require(current["base"]["ref"] == intent["base_ref"] and current["head"]["ref"] == intent["head_ref"], "claim ref drift")
+              require(repository(repo, repo_id, source, intent["base_ref"]) == source, "claim controller drift")
               journal.create(record_path(key), record)
               # Recheck the live PR at the effect boundary; a consumed stale claim stays closed.
               current = live_pr(repo, pr, intent["head"], intent["base"])
               require(current["base"]["ref"] == intent["base_ref"] and current["head"]["ref"] == intent["head_ref"], "effect ref drift")
+              require(repository(repo, repo_id, source, intent["base_ref"]) == source, "effect controller drift")
               api(f"repos/{repo}/pulls/{pr}/requested_reviewers", {"reviewers": [BOT]})
 
 
@@ -2639,7 +2669,8 @@ jobs:
       needs.verify-current-revision-policy.result == 'success' &&
       github.event_name == 'pull_request_target' &&
       github.ref_protected && github.event.pull_request.draft == false &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.base.repo.full_name == github.repository &&
+      github.event.pull_request.head.repo.full_name != ''
     permissions:
       actions: write
       contents: read
@@ -2654,9 +2685,39 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
           [[ "${BASE_REF}" =~ ^(main|develop)$ ]]
+          [[ "${HEAD_REPOSITORY}" =~ ^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+$ ]]
+          validate_controller_and_base() {
+            test "${GITHUB_REF}" = "refs/heads/develop"
+            test "${GITHUB_SHA}" = "${WORKFLOW_SHA}"
+            test "${GITHUB_WORKFLOW_REF}" = "${REPOSITORY}/.github/workflows/copilot-review.yml@refs/heads/develop"
+            gh api "repos/${REPOSITORY}" --jq .default_branch | grep -qx develop
+            controller="$(gh api "repos/${REPOSITORY}/branches/develop")"
+            jq -e --arg source "${WORKFLOW_SHA}" '
+              .name == "develop" and .protected == true and .commit.sha == $source
+              ' <<<"${controller}" >/dev/null
+            base="$(gh api "repos/${REPOSITORY}/branches/${BASE_REF}")"
+            jq -e --arg branch "${BASE_REF}" --arg source "${BASE_SHA}" '
+              .name == $branch and .protected == true and .commit.sha == $source
+              ' <<<"${base}" >/dev/null
+          }
+          validate_controller_and_base
+          pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
+          jq -e --arg repo "${REPOSITORY}" --arg head_repo "${HEAD_REPOSITORY}" \
+            --arg ref "${HEAD_REF}" --arg head "${HEAD_SHA}" --arg base "${BASE_SHA}" \
+            --arg branch "${BASE_REF}" --arg author "${PR_AUTHOR}" --argjson number "${PR_NUMBER}" '
+            .number == $number and .state == "open" and .draft == false
+            and .user.login == $author and .user.type == "User"
+            and .base.repo.full_name == $repo and .base.ref == $branch and .base.sha == $base
+            and .head.repo.full_name == $head_repo and .head.ref == $ref and .head.sha == $head
+            ' <<<"${pr}" >/dev/null
+          validate_controller_and_base
           gh api --method POST "repos/${REPOSITORY}/actions/workflows/current-revision-rerun.yml/dispatches" \
             -f "ref=${BASE_REF}" -f "inputs[base_ref]=${BASE_REF}" \
             -f "inputs[pr_number]=${PR_NUMBER}" -f "inputs[expected_base]=${BASE_SHA}" \

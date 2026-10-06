@@ -37,12 +37,12 @@ def promotion_pr() -> dict[str, Any]:
         "base": {
             "ref": "main",
             "sha": BASE,
-            "repo": {"full_name": MODULE.TARGET_REPOSITORY},
+            "repo": {"full_name": MODULE.TARGET_REPOSITORY, "owner": {"login": "lightning-it"}},
         },
         "head": {
             "ref": "develop",
             "sha": HEAD,
-            "repo": {"full_name": MODULE.TARGET_REPOSITORY},
+            "repo": {"full_name": MODULE.TARGET_REPOSITORY, "owner": {"login": "lightning-it"}},
         },
     }
 
@@ -118,6 +118,12 @@ def verification_environment(workflow_sha: str) -> dict[str, str]:
         "EVENT_ACTION": "opened",
         "EVENT_BASE": BASE,
         "EVENT_HEAD": HEAD,
+        "EVENT_HEAD_REPOSITORY": MODULE.TARGET_REPOSITORY,
+        "EVENT_HEAD_REPOSITORY_OWNER": "lightning-it",
+        "EVENT_HEAD_REF": "develop",
+        "EVENT_BASE_REF": "main",
+        "EVENT_AUTHOR": MODULE.RELEASE_APP_LOGIN,
+        "EVENT_AUTHOR_TYPE": "Bot",
         "PR_NUMBER": str(PR_NUMBER),
         "GITHUB_SERVER_URL": "https://github.com",
         "WORKFLOW_REF": MODULE.SOURCE_WORKFLOW_REF,

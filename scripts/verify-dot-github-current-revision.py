@@ -188,11 +188,40 @@ def validate_source(
             raise VerificationError(f"source file {path} has no immutable blob")
 
 
+def event_pr_binding(environment: Mapping[str, str]) -> Mapping[str, str]:
+    """Freeze identity from the protected pull_request_target event, never fork code."""
+    fields = {
+        "head_repository": "EVENT_HEAD_REPOSITORY",
+        "head_owner": "EVENT_HEAD_REPOSITORY_OWNER",
+        "head_ref": "EVENT_HEAD_REF",
+        "base_ref": "EVENT_BASE_REF",
+        "author": "EVENT_AUTHOR",
+        "author_type": "EVENT_AUTHOR_TYPE",
+    }
+    binding = {}
+    for key, name in fields.items():
+        value = environment.get(name)
+        if not isinstance(value, str) or not value or any(char.isspace() for char in value):
+            raise VerificationError(f"{name} must be a nonempty event string")
+        binding[key] = value
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+", binding["head_repository"]):
+        raise VerificationError("event head repository is malformed")
+    require_equal(binding["head_repository"].split("/")[0], binding["head_owner"], "event head owner")
+    if binding["base_ref"] not in {"develop", "main"}:
+        raise VerificationError("event base branch is outside protected scope")
+    if binding["author_type"] not in {"User", "Bot"}:
+        raise VerificationError("event author type is invalid")
+    if binding["head_repository"] != TARGET_REPOSITORY and binding["author_type"] != "User":
+        raise VerificationError("automation must remain same-repository")
+    return binding
+
+
 def validate_live_pr(
     client: GitHubClient,
     pr_number: int,
     event_base: str,
     event_head: str,
+    binding: Mapping[str, str],
 ) -> Mapping[str, Any]:
     repository = require_mapping(
         client.get(f"repos/{TARGET_REPOSITORY}"), "target repository"
@@ -204,6 +233,7 @@ def validate_live_pr(
     pr = require_mapping(
         client.get(f"repos/{TARGET_REPOSITORY}/pulls/{pr_number}"), "pull request"
     )
+    require_equal(pr.get("number"), pr_number, "pull request number")
     require_equal(pr.get("state"), "open", "pull request state")
     require_equal(pr.get("draft"), False, "pull request draft state")
     base = require_mapping(pr.get("base"), "pull request base")
@@ -217,14 +247,17 @@ def validate_live_pr(
     )
     require_equal(
         require_mapping(head.get("repo"), "head repository").get("full_name"),
-        TARGET_REPOSITORY,
+        binding["head_repository"],
         "head repository",
     )
-    if base.get("ref") not in {"main", "develop"}:
-        raise VerificationError("pull request base branch is not protected scope")
-    author = require_mapping(pr.get("user"), "pull request author").get("login")
-    if not isinstance(author, str) or not author:
-        raise VerificationError("pull request author is missing")
+    head_repository = require_mapping(head.get("repo"), "head repository")
+    require_equal(require_mapping(head_repository.get("owner"), "head owner").get("login"),
+                  binding["head_owner"], "head repository owner")
+    require_equal(base.get("ref"), binding["base_ref"], "live base ref")
+    require_equal(head.get("ref"), binding["head_ref"], "live head ref")
+    author = require_mapping(pr.get("user"), "pull request author")
+    require_equal(author.get("login"), binding["author"], "live author")
+    require_equal(author.get("type"), binding["author_type"], "live author type")
     return pr
 
 
@@ -659,6 +692,32 @@ def validate_reservation(
     require_equal(producer.get("head_sha"), event_head, "verifier run head")
     head_ref = require_mapping(pr.get("head"), "pull request head").get("ref")
     require_equal(producer.get("head_branch"), head_ref, "verifier run head branch")
+    head_repository = require_mapping(require_mapping(pr.get("head"), "pull request head").get("repo"), "head repository")
+    require_equal(require_mapping(producer.get("repository"), "verifier repository").get("full_name"),
+                  TARGET_REPOSITORY, "verifier repository")
+    producer_head_repository = require_mapping(producer.get("head_repository"), "verifier head repository")
+    require_equal(producer_head_repository.get("full_name"), head_repository.get("full_name"),
+                  "verifier head repository")
+    require_equal(require_mapping(producer_head_repository.get("owner"), "verifier head owner").get("login"),
+                  require_mapping(head_repository.get("owner"), "head owner").get("login"), "verifier head owner")
+    associated = require_list(producer.get("pull_requests"), "verifier pull requests")
+    # Empty associations remain legitimate for genuine pull_request_target runs;
+    # the native run/head/owner, event title and protected reservation still bind them.
+    if associated:
+        if len(associated) != 1:
+            raise VerificationError("verifier pull request association is ambiguous")
+        recorded = require_mapping(associated[0], "verifier pull request")
+        require_equal(recorded.get("number"), pr_number, "verifier pull request number")
+        require_equal(recorded.get("url"), f"{client.api_url}/repos/{TARGET_REPOSITORY}/pulls/{pr_number}",
+                      "verifier pull request URL")
+        for side, repository_name in (("base", TARGET_REPOSITORY), ("head", head_repository["full_name"])):
+            native = require_mapping(recorded.get(side), f"verifier {side}")
+            live = require_mapping(pr.get(side), f"live {side}")
+            require_equal(native.get("sha"), live.get("sha"), f"verifier {side} SHA")
+            require_equal(native.get("ref"), live.get("ref"), f"verifier {side} ref")
+            require_equal(require_mapping(native.get("repo"), f"verifier {side} repository").get("url"),
+                          f"{client.api_url}/repos/{repository_name}", f"verifier {side} repository URL")
+
     author = require_mapping(pr.get("user"), "pull request author").get("login")
     require_equal(
         require_mapping(producer.get("actor"), "verifier actor").get("login"),
@@ -754,8 +813,9 @@ def verify(
     workflow_ref = environment.get("WORKFLOW_REF", "")
     workflow_sha = environment.get("WORKFLOW_SHA", "")
 
+    binding = event_pr_binding(environment)
     validate_source(client, workflow_ref, workflow_sha)
-    pr = validate_live_pr(client, pr_number, event_base, event_head)
+    pr = validate_live_pr(client, pr_number, event_base, event_head, binding)
     if is_aggregated_promotion(pr):
         validate_aggregated_promotion_shape(pr)
         evidence = wait_for_aggregated_promotion(
@@ -778,7 +838,7 @@ def verify(
         # Re-read every mutable binding and ensure the selected native result
         # remains the newest exact evidence at the final mutation boundary.
         validate_source(client, workflow_ref, workflow_sha)
-        final_pr = validate_live_pr(client, pr_number, event_base, event_head)
+        final_pr = validate_live_pr(client, pr_number, event_base, event_head, binding)
         if not is_aggregated_promotion(final_pr):
             raise VerificationError("protected promotion shape drifted")
         validate_aggregated_promotion_shape(final_pr)
@@ -819,7 +879,7 @@ def verify(
     )
     # Re-read every mutable binding after evidence verification.
     validate_source(client, workflow_ref, workflow_sha)
-    validate_live_pr(client, pr_number, event_base, event_head)
+    validate_live_pr(client, pr_number, event_base, event_head, binding)
     final_matches = matching_reservations(
         client, pr_number, event_base, event_head
     )

@@ -81,9 +81,12 @@ If generic guidance conflicts with repository behavior, you MUST prefer reposito
    read-only REST convergence wait before and after publishing the protected result. It MUST NOT request AI again.
 8. Candidate-controlled Codex output is not a protected attestation. Until a separately governed, identity-bound
    personal-Codex evidence contract exists, it cannot satisfy `Current revision review`; the gate fails closed.
-9. The protected controller MUST execute from the exact protected PR base revision (`develop` or `main`), not from
-   a merely descendant default-branch controller. Its attestation MUST bind the base ref, base SHA, head repository,
-   head SHA, and the exact protected workflow SHA.
+9. The original `pull_request_target` requester and event handoff execute from the exact protected default
+   `develop` controller. Bind that execution ref/SHA independently of the authenticated PR base ref/SHA.
+   A deferred-request `workflow_dispatch` consumer executes from the exact protected PR base revision
+   (`develop` or `main`); a descendant controller is insufficient at its CAS and request effect fences.
+   Attestations MUST retain both source roles without relabelling the original default source as the PR base,
+   together with the actual head repository and head SHA.
 10. The neutral result MUST bind the sorted live label set by SHA-256. Every title, body, label, base, head,
     repository, or bound-review change invalidates prior evidence and requires fail-closed revalidation; it MUST NOT
     request AI again merely because metadata changed.
@@ -129,6 +132,15 @@ context and exact source/author/actor predicate. Only the enabled three pilots
 admit `synchronize`. PR-wide Pending writes a separate immutable deferred intent,
 never an accepted-head marker or a consumed request claim. An unconfirmed original
 POST also must not publish an accepted marker; a consumed claim remains consumed.
+
+New deferred eligibility uses typed intent schema2: source_ref/source_sha bind the original
+protected default develop execution, while base_ref/base bind the independent PR target.
+The request receipt keeps the later base-controller source_sha separate from its nested
+original intent. Legacy schema1 is readable only for its original develop/base-equal facts.
+Exact live controller and PR-base fences apply before/after eligibility CAS, and before
+request CAS and after CAS/before POST; unknown writes remain consumed/readback-only.
+Ordinary human fork verification/handoff/refresh preserves native head repository identity;
+funded requests and continuations remain same-repository and litroc-only.
 
 The protected first-request continuation validates that original intent and native
 request steps, the completed old-head review, current PR/source identity and all

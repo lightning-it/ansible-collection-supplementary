@@ -298,8 +298,10 @@ def validate_intent(intent, repo, repo_id, key):
     expected = {"schema", "kind", "repository", "repository_id", "operation", "pr", "base", "head",
                 "base_ref", "head_ref", "owner_run", "owner_attempt", "source_sha", "event", "action",
                 "author", "actor", "triggering_actor", "created_at"}
+    if isinstance(intent, dict) and intent.get("schema") == 2:
+        expected.add("source_ref")
     require(isinstance(intent, dict) and set(intent) == expected and type(intent["schema"]) is int
-            and intent["schema"] == 1 and intent["kind"] == "deferred-first-request"
+            and intent["schema"] in (1, 2) and intent["kind"] == "deferred-first-request"
             and intent["repository"] == repo and intent["repository_id"] == repo_id and intent["operation"] == key
             and positive(intent["pr"]) and positive(intent["owner_run"]) and type(intent["owner_attempt"]) is int
             and intent["owner_attempt"] == 1 and intent["event"] == "pull_request_target"
@@ -308,7 +310,15 @@ def validate_intent(intent, repo, repo_id, key):
             and intent["base_ref"] in {"develop", "main"} and isinstance(intent["head_ref"], str) and intent["head_ref"]
             and all(sha(intent[field]) for field in ("base", "head", "source_sha")), "deferred intent")
     require(key == key_for(repo_id, intent["pr"], intent["head"]), "intent budget key")
-    repository(repo, repo_id, intent["source_sha"], intent["base_ref"])
+    if intent["schema"] == 1:
+        # Legacy facts retain their original meaning; they cannot describe a
+        # default-controller/Main-base split that the old schema never carried.
+        require(intent["base_ref"] == "develop" and intent["source_sha"] == intent["base"], "legacy original controller")
+        source_ref = "develop"
+    else:
+        require(intent["source_ref"] == "develop", "original default controller ref")
+        source_ref = intent["source_ref"]
+    repository(repo, repo_id, intent["source_sha"], source_ref)
     run = original_run(repo, intent)
     job = native_job(repo, run, "Request Copilot review for current revision", ORIGINAL_STEPS)
     require(epoch(job["steps"][2]["started_at"]) <= epoch(intent["created_at"]) <= epoch(job["steps"][2]["completed_at"]), "intent outside original step")

@@ -5,8 +5,8 @@
   "local_preparation_source_commit": "ab6dd8bec5958508b8b4d66920d08d3dd8251e65",
   "local_preparation_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
   "protected_source_commit": "a44cb1762aa6ae3edba91d6cf75ada2a99182af5",
-  "final_target_agents_sha256": "82a3f0df0579560aba7b3021b221f1fdc208a424d6ea667c9559117cc2888657",
-  "final_target_copilot_sha256": "6af201707af78aa734398c046d00b7fd2290fd9483abc2a07fb7b2a3c9eccc5b",
+  "final_target_agents_sha256": "52f55fc8252d7b5714a1758f20a19946d06729d8ee6ac51a2ada312a51266290",
+  "final_target_copilot_sha256": "683e27e7dd39c90b2c64e18b65dc311dc75a0e8e91293e55bcebcbac9afbef7e",
   "bindings": [
     {
       "source_path": "default/.github/workflows/release-bot-exact-head-review.yml",

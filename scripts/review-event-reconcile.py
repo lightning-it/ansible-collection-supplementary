@@ -211,6 +211,15 @@ def recent_dispatch(runs, path, title, now=None):
     return False
 
 
+def head_repository(pr):
+    head = pr.get("head")
+    repository = head.get("repo") if isinstance(head, dict) else None
+    value = repository.get("full_name") if isinstance(repository, dict) else None
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+", value):
+        raise ValueError("invalid head repository")
+    return value
+
+
 def required_locator(run, repository, pr):
     """Locate only the native organization authority; never authorize a rerun."""
     central = repository == "lightning-it/.github"
@@ -232,14 +241,14 @@ def required_locator(run, repository, pr):
         and run.get("path") == f".github/workflows/{path}"
         and run.get("workflow_url") == f"{api_url}/actions/required_workflows/{workflow_id}"
         and run.get("repository", {}).get("full_name") == repository
-        and run.get("head_repository", {}).get("full_name") == repository
+        and run.get("head_repository", {}).get("full_name") == head_repository(pr)
         and run.get("head_sha") == pr["head"]["sha"]
         and run.get("head_branch") == pr["head"]["ref"]
         and recorded.get("number") == pr["number"]
         and recorded.get("url") == f"{api_url}/pulls/{pr['number']}"
         and recorded.get("head", {}).get("sha") == pr["head"]["sha"]
         and recorded.get("head", {}).get("ref") == pr["head"]["ref"]
-        and recorded.get("head", {}).get("repo", {}).get("url") == api_url
+        and recorded.get("head", {}).get("repo", {}).get("url") == f"https://api.github.com/repos/{head_repository(pr)}"
         and recorded.get("base", {}).get("sha") == pr["base"]["sha"]
         and recorded.get("base", {}).get("ref") == pr["base"]["ref"]
         and recorded.get("base", {}).get("repo", {}).get("url") == api_url
@@ -302,9 +311,10 @@ def reconcile(repository, now):
             or not re.fullmatch(r"[0-9a-f]{40}", base)
         ):
             raise ValueError("malformed PR binding")
+        head_repo = head_repository(pr)
         if (
             pr["draft"]
-            or pr["head"]["repo"]["full_name"] != repository
+            or pr["base"].get("repo", {}).get("full_name") != repository
             or pr["base"]["ref"] not in {"develop", "main"}
             or pr["user"]["type"] != "User"
         ):
@@ -318,7 +328,7 @@ def reconcile(repository, now):
             for run in runs
             if run.get("event") == "pull_request_target"
             and run.get("repository", {}).get("full_name") == repository
-            and run.get("head_repository", {}).get("full_name") == repository
+            and run.get("head_repository", {}).get("full_name") == head_repository(pr)
             and run.get("path") == PRODUCER
             and run.get("head_sha") == head
             and run.get("head_branch") == pr["head"]["ref"]
@@ -419,6 +429,8 @@ def reconcile(repository, now):
                     if clean_review(review, comments, head):
                         usable.append(review)
             if not usable:
+                if head_repo != repository:
+                    continue
                 # The existing periodic locator also covers delayed job/pending
                 # visibility. It never requests AI or grants a verifier attempt.
                 if not reviews or any(item.get("commit_id") == head and item.get("user", {}).get("login") in REVIEWERS for item in reviews):
@@ -450,6 +462,10 @@ def reconcile(repository, now):
         if (
             live["state"] != "open"
             or live["draft"]
+            or head_repository(live) != head_repo
+            or live["head"]["ref"] != pr["head"]["ref"]
+            or live["user"] != pr["user"]
+            or live["base"].get("repo", {}).get("full_name") != repository
             or live["head"]["sha"] != head
             or live["base"]["sha"] != base
             or live["base"]["ref"] != pr["base"]["ref"]

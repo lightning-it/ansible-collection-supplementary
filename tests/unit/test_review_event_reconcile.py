@@ -137,6 +137,9 @@ class ReviewEventTests(unittest.TestCase):
         required=None,
         inventory_transform=None,
         base_ref="develop",
+        head_repo="lightning-it/.github",
+        producer_head_repo=None,
+        final_head_repo=None,
     ):
         prefix = "repos/lightning-it/.github"
         pr = {
@@ -145,28 +148,32 @@ class ReviewEventTests(unittest.TestCase):
             "draft": False,
             "state": "open",
             "user": {"login": "litroc", "type": "User"},
-            "head": {"sha": self.head, "ref": "fix/final", "repo": {"full_name": "lightning-it/.github"}},
-            "base": {"sha": self.base, "ref": base_ref},
+            "head": {"sha": self.head, "ref": "fix/final", "repo": {"full_name": head_repo}},
+            "base": {"sha": self.base, "ref": base_ref, "repo": {"full_name": "lightning-it/.github"}},
         }
         run = {
             "id": 77,
             "path": EVENT.PRODUCER,
             "event": "pull_request_target",
             "repository": {"full_name": "lightning-it/.github"},
-            "head_repository": {"full_name": "lightning-it/.github"},
+            "head_repository": {"full_name": producer_head_repo or head_repo},
             "run_attempt": 1,
             "head_sha": self.head,
             "head_branch": "fix/final",
-            "pull_requests": [{"number": 23 + i} for i in range(pr_count)],
+            "pull_requests": [],
             "status": state,
             "created_at": (self.now - dt.timedelta(seconds=delay)).isoformat(),
         }
+        default_required = self.required_run()
+        default_required["head_repository"]["full_name"] = head_repo
+        default_required["pull_requests"][0]["head"]["repo"]["url"] = "https://api.github.com/repos/" + head_repo
+        default_required["pull_requests"][0]["base"]["ref"] = base_ref
         inventories = {
             f"{prefix}/pulls?state=open": [{**pr, "id": 23 + i, "number": 23 + i} for i in range(pr_count)],
             f"{prefix}/actions/runs?event=pull_request_target&head_sha={self.head}": [run],
             f"{prefix}/actions/runs?head_sha={self.head}": [
                 run,
-                *(required if required is not None else [self.required_run()]),
+                *(required if required is not None else [default_required]),
             ],
             f"{prefix}/actions/runs/77/attempts/1/jobs": [
                 {"id": 78, "name": "Verify current revision policy", "status": "completed", "conclusion": "success"}
@@ -218,8 +225,9 @@ class ReviewEventTests(unittest.TestCase):
             if route == prefix:
                 return {"default_branch": "develop"}
             if route.startswith(f"{prefix}/pulls/"):
-                live = {**pr, "id": int(route.rsplit("/", 1)[1]), "number": int(route.rsplit("/", 1)[1])}
-                return {**live, "head": {**live["head"], "sha": self.base}} if drift else live
+                if final_head_repo is not None:
+                    return {**pr, "head": {**pr["head"], "repo": {"full_name": final_head_repo}}}
+                return {**pr, "head": {**pr["head"], "sha": self.base}} if drift else pr
             raise AssertionError(route)
 
         with (
@@ -362,7 +370,7 @@ class ReviewEventTests(unittest.TestCase):
             run["display_title"] = f"Protected current revision PR #23 opened {self.head}"
             pr = {
                 "number": 23,
-                "head": {"sha": self.head, "ref": "fix/final"},
+                "head": {"sha": self.head, "ref": "fix/final", "repo": {"full_name": repo}},
                 "base": {"sha": self.base, "ref": "develop"},
             }
             self.assertTrue(EVENT.required_locator(run, repo, pr))

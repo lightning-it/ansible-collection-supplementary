@@ -10,8 +10,8 @@
       "target_path": ".github/workflows/copilot-review-refresh.yml",
       "source_sha256": "31e34a9ccd7f5dbfaac62bcb308ebeafb69c00d41b0a80b579f557f66980583b",
       "source_blob": "a42cd8725cbd4fafc170bc3158631f7f09973fac",
-      "target_blob": "e10185595cc09bceda4d450a04cc9acb95077507",
-      "target_sha256": "4f81cd074aa838698ebdab5da04d69c6f676f863d26b671e46bf12ecd858ede3",
+      "target_blob": "1570453ee482fdb8d3424b330409e475b7d5e494",
+      "target_sha256": "d720b3f895cc315f6a20f8f2295fa3708e639f35de12d288c08123a3af5f04f2",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -40,8 +40,8 @@
       "target_path": "scripts/review-event-reconcile.py",
       "source_sha256": "74bf8eb90116afa0a58ebf57be3e141c95e0127d08d008b33cc28d3b3569602c",
       "source_blob": "45a9920e640fb220f5f3db06f98f684f15d73735",
-      "target_blob": "0d3fb00e2453c9bffcfb219a827ce18cc3a9bf57",
-      "target_sha256": "bf5470663d66afcc6a3d8257dac88605487fd246123b0e255603c14c41108a28",
+      "target_blob": "535dbcdbb7a0a081cbb3f6b4e43975506ad3f8cd",
+      "target_sha256": "52177b4abacf0458fc8bca1871e7572156da49d0640dae3fc3df7cbd240b4583",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -50,9 +50,9 @@
       "target_path": ".github/workflows/dot-github-current-revision-required.yml",
       "source_sha256": "734f922840311920ea0c78a3f2e4ded3a0a74c53381bec4671f89d5c5d8fa2a6",
       "source_blob": "db644996d86fe14d9b9ccb4d8e8156b5180ddabf",
-      "target_blob": "db644996d86fe14d9b9ccb4d8e8156b5180ddabf",
-      "target_sha256": "734f922840311920ea0c78a3f2e4ded3a0a74c53381bec4671f89d5c5d8fa2a6",
-      "mode": "byte-identical",
+      "target_blob": "48ff2cd8ed56ce605fdb15ef2939ba0b50979918",
+      "target_sha256": "69abcb288f22f3a525a491acf59d4f4e2e7b7b01b24abf8c8d452757dd2d1726",
+      "mode": "adapted-local",
       "target_mode": "0644"
     },
     {
@@ -80,8 +80,8 @@
       "target_path": "scripts/verify-dot-github-current-revision.py",
       "source_sha256": "4ac1573add6dd927b236966dc22ae68f23f6fbb89c4244f8e7f40d7ab1c95863",
       "source_blob": "708db09e084a20e25ba0f980b05f076a1074119a",
-      "target_blob": "71ccba4048a891dcd8146adba4a7b8464c807864",
-      "target_sha256": "7cdb3f5ee93ccd15055486807ed393c91cdeefddbbf561ef3d31bb9681ccd32d",
+      "target_blob": "42e7af2d5088f644b4a60cc9db6c0cbe010ff56b",
+      "target_sha256": "335ff0df92731c29df169fcf45c8e050274f5e7d04aef6d4aadf64757e4168a4",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -90,8 +90,8 @@
       "target_path": ".github/workflows/copilot-review.yml",
       "source_sha256": "1bdbb4bd62ebda00ef689ce063e6b74299d9b1ee067c1c972730cd1212114b98",
       "source_blob": "9f8d54e95bccffd7de815826ea8bba1bdab66f81",
-      "target_blob": "a7ccf140996ee6a33d3eb6476a81a3867476ada4",
-      "target_sha256": "5b10872d52d5bc52967519dc4d896368a349b1a332db3671ab08b96fa02c2242",
+      "target_blob": "d2937ef862259d4c782a4248821173999aa77dbe",
+      "target_sha256": "8e986d677e44153b0bc54b17318262c4a9e9940e14b59f4a84aa8e06495b92e9",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -110,8 +110,8 @@
       "target_path": ".github/workflows/review-request-continuation.yml",
       "source_sha256": "5d5de0d48ab51f2fb742aaed82fef9eb06f5d05aa5c5cbbbf4ee21fd27c29584",
       "source_blob": "ae826a6b3efa7df6bec8e1b567112605a92d8815",
-      "target_blob": "5c1b88607284a480cc5c3b18c27ffdc0064badae",
-      "target_sha256": "e89dcebc08fb644cf4393ede380f001f581add5fcd827c8d5ae8d4e3d73b68de",
+      "target_blob": "d172d2f1712e371b497a334125cde61f01864338",
+      "target_sha256": "51db6b88700eb625f215993c54b76038729606d71a6b26404d15eeb459ddbe0f",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -120,8 +120,8 @@
       "target_path": "scripts/review_request_continuation.py",
       "source_sha256": "29014fe17a418763f294e9724354809abf56d051333e690768b5d17cce24452f",
       "source_blob": "da7bba5c5faba9f7abfe5285f3f8a5a3c561ff17",
-      "target_blob": "7fff9ba68e814ca168feedb9a3d40984038fe0dd",
-      "target_sha256": "b66506dd37ff90d808a99a1f3168650df23d5313a032a3ee66274af4e194bbcb",
+      "target_blob": "1da6c5c0b6ed69f06b1883bba043d3016849b19f",
+      "target_sha256": "98f13fa58b6d1d87ffec7eba321108a4826bb79d9f2c4a140cceae2dd6279d72",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -130,8 +130,8 @@
       "target_path": "scripts/review_request_provenance.py",
       "source_sha256": "742d38d26c580c7220acb03462c27146327608ea964915efad9d0be2b0f6d8f3",
       "source_blob": "17ae4e232221846a4865fa2fe728caa85b33b45c",
-      "target_blob": "b5038b2c7b4dec1671dede6ff51494fb9b7fbe7f",
-      "target_sha256": "a391a41cea27b673062865b958035d60b107cc9c1f0f1cbf8d6d168beaf764ab",
+      "target_blob": "69406a2d6b1193d74c2de12582780f53213b1b11",
+      "target_sha256": "e4fe6f64012399295269c122d87c7b702a3155ca33dcbf560fd07d7a531bed97",
       "mode": "adapted-local",
       "target_mode": "0644"
     }

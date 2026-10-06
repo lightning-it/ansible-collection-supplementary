@@ -1,0 +1,10 @@
+---
+bugfixes:
+  - >-
+    Bind deferred first-review eligibility to the original protected default
+    controller separately from the later PR-base controller, with fresh
+    controller fences before and after claims and before request effects.
+  - >-
+    Preserve authenticated ordinary-human fork identity through review handoff,
+    refresh, reconciliation, and the hosted Core verifier while retaining the
+    same-repository litroc-only funding and at-most-once request budget.

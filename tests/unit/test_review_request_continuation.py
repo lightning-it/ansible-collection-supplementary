@@ -62,6 +62,12 @@ if route == 'graphql' and payload:
         oid = format(int(old, 16) + 1, '040x')
         s['versions'][oid] = {**s['versions'][old], item['path']: json.loads(base64.b64decode(item['contents']))}
         s['oid'] = oid
+        if s.get('intent_drift_after_cas') and item['path'].startswith('deferred/'):
+            branch = s['intent_drift_after_cas']
+            s['routes']['repos/' + s['repo'] + '/branches/' + branch]['commit']['sha'] = 'f' * 40
+        if s.get('controller_drift_after_cas') and item['path'].startswith('operations/'):
+            branch = s['routes']['repos/' + s['repo'] + '/pulls/23']['base']['ref']
+            s['routes']['repos/' + s['repo'] + '/branches/' + branch]['commit']['sha'] = 'f' * 40
         if s.get('drift_after_cas') and item['path'].startswith('operations/'):
             s['routes']['repos/' + s['repo'] + '/pulls/23']['head']['ref'] = 'fix/changed'
         result = {'data': {'createCommitOnBranch': {'commit': {'oid': oid, 'parents': {'nodes': [{'oid': old}]}}}}}
@@ -71,6 +77,10 @@ elif route == 'graphql':
     oid = fields['oid']
     assert fields['manifest'] == oid + ':manifest.json'
     path = fields['record'].split(':', 1)[1]
+    if s.get('default_drift_before_intent'):
+        s['routes']['repos/' + s['repo'] + '/branches/develop']['commit']['sha'] = 'f' * 40
+    if s.get('base_drift_before_intent'):
+        s['routes']['repos/' + s['repo'] + '/branches/main']['commit']['sha'] = 'f' * 40
     result = {'data': {'repository': {'nameWithOwner': s['repo'], 'source': {'__typename': 'Commit', 'oid': oid},
         'manifest': blob({'schema': 1, 'repository': s['repo'], 'repository_id': s['repo_id'],
                           'ref': 'refs/heads/lit-review-operations'}),
@@ -99,6 +109,9 @@ else:
     parsed = urlsplit(route)
     result = s['routes'].get(route, s['routes'].get(parsed.path))
     assert result is not None, route
+    if parsed.path.endswith('/requested_reviewers') and s.get('controller_drift_before_claim'):
+        branch = s['routes']['repos/' + s['repo'] + '/pulls/23']['base']['ref']
+        s['routes']['repos/' + s['repo'] + '/branches/' + branch]['commit']['sha'] = 'f' * 40
     if isinstance(result, list) and parse_qs(parsed.query).get('page', ['1'])[0] != '1': result = []
 file.write_text(json.dumps(s))
 if result is not None: print(json.dumps(result))
@@ -254,6 +267,8 @@ class ContinuationTests(unittest.TestCase):
             "GITHUB_REPOSITORY": REPO,
             "GITHUB_REPOSITORY_ID": RID,
             "WORKFLOW_SHA": SOURCE,
+            "GITHUB_SHA": SOURCE,
+            "GITHUB_WORKFLOW_REF": REPO + "/.github/workflows/copilot-review.yml@refs/heads/develop",
             "GITHUB_REF": "refs/heads/develop",
             "GITHUB_REF_PROTECTED": "true",
             "GITHUB_RUN_ID": "77",
@@ -344,6 +359,8 @@ class ContinuationTests(unittest.TestCase):
                 "GITHUB_ACTOR": "github-actions[bot]",
                 "GITHUB_TRIGGERING_ACTOR": "github-actions[bot]",
                 "GITHUB_RUN_ID": "88",
+                "GITHUB_WORKFLOW_REF": REPO + "/.github/workflows/review-request-continuation.yml@refs/heads/develop",
+                **getattr(self, "resume_changes", {}),
                 **changes,
             },
         )
@@ -797,7 +814,7 @@ class ContinuationTests(unittest.TestCase):
             "base": BASE,
             "base_ref": "develop",
             "run_id": 77,
-            "controller": SOURCE,
+            "controller": self.env["WORKFLOW_SHA"],
             "review_submitted_at": at(61),
             "timeline": [
                 [

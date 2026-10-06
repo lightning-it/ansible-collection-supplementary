@@ -30,7 +30,18 @@ class ProtectedReviewBranchTests(unittest.TestCase):
         }
         for run in ("88", "89"):
             fixture.route("/actions/runs/" + run + "/attempts/1")["head_branch"] = branch
-        fixture.env["GITHUB_REF"] = "refs/heads/" + branch
+        # PRT executes default develop D; dispatch resumes on PR base M.
+        original = "c" * 40 if branch == "main" else continuation.BASE
+        fixture.env.update(WORKFLOW_SHA=original, GITHUB_SHA=original)
+        fixture.route("/branches/develop")["commit"]["sha"] = original
+        fixture.resume_changes = {
+            "WORKFLOW_SHA": continuation.BASE,
+            "GITHUB_SHA": continuation.BASE,
+            "GITHUB_REF": "refs/heads/" + branch,
+            "GITHUB_WORKFLOW_REF": continuation.REPO
+            + "/.github/workflows/review-request-continuation.yml@refs/heads/"
+            + branch,
+        }
         return fixture
 
     def test_develop_and_main_locator_and_consumer_share_exact_protected_ref(self):
@@ -67,9 +78,26 @@ class ProtectedReviewBranchTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(["main"], [v["ref"] for v in f.state["dispatches"]])
 
-    def refresh(self, branch, consumer=False, execution_branch=None, controller=None):
+    def refresh(
+        self,
+        branch,
+        consumer=False,
+        execution_branch=None,
+        controller=None,
+        final_fence=False,
+        live_head=None,
+        head_repository=None,
+        actual_head_repository=None,
+        trigger_actor="github-actions[bot]",
+        author_type="User",
+    ):
         workflow = yaml.safe_load((ROOT / ".github/workflows/copilot-review-refresh.yml").read_text())
-        if consumer:
+        if final_fence:
+            body = workflow["jobs"]["refresh-canonical-gate"]["steps"][1]["run"]
+            start = body.index("validate_live_pr_tuple() {")
+            end = body.index("\n}\nvalidate_live_pr_tuple", start) + 2
+            text = 'oa() { gh api "$@"; }\n' + body[start:end] + "\nvalidate_live_pr_tuple"
+        elif consumer:
             text = workflow["jobs"]["refresh-canonical-gate"]["steps"][1]["run"]
             text = text[: text.index("\njq -e \\\n  --arg actor")]
         else:
@@ -78,8 +106,12 @@ class ProtectedReviewBranchTests(unittest.TestCase):
             "number": 23,
             "state": "open",
             "draft": False,
-            "user": {"login": "litroc"},
-            "head": {"sha": continuation.HEAD, "ref": "fix/new", "repo": {"full_name": continuation.REPO}},
+            "user": {"login": "litroc", "type": author_type},
+            "head": {
+                "sha": continuation.HEAD,
+                "ref": "fix/new",
+                "repo": {"full_name": actual_head_repository or head_repository or continuation.REPO},
+            },
             "base": {"sha": continuation.BASE, "ref": branch, "repo": {"full_name": continuation.REPO}},
         }
         review = {"id": 17, "commit_id": continuation.HEAD, "user": {"login": continuation.BOT}, "state": "COMMENTED"}
@@ -99,7 +131,9 @@ elif any('/reviews?per_page' in a for a in args):print('['+ '['+(r/'review').rea
 elif any('/reviews/' in a for a in args):print((r/'review').read_text())
 elif any('/pulls/' in a for a in args):print((r/'pr').read_text())
 elif any('/branches/' in a for a in args):
-    p=json.loads((r/'pr').read_text());print(json.dumps({'name':p['base']['ref'],'protected':True,'commit':{'sha':p['base']['sha']}}))
+    p=json.loads((r/'pr').read_text())
+    source=os.environ.get('LIVE_BRANCH_HEAD') or p['base']['sha']
+    print(json.dumps({'name':p['base']['ref'],'protected':True,'commit':{'sha':source}}))
 elif '--jq' in args:print('develop')
 else:raise SystemExit('unexpected fixture route '+repr(args))
 """
@@ -113,7 +147,14 @@ else:raise SystemExit('unexpected fixture route '+repr(args))
                     "FIXTURE": str(root),
                     "RUNNER_TEMP": str(root),
                     "REPOSITORY": continuation.REPO,
+                    "HEAD_REPOSITORY": head_repository or continuation.REPO,
                     "PR_NUMBER": "23",
+                    "PR_AUTHOR": "litroc",
+                    "BASE_REF": branch,
+                    "BASE_SHA": continuation.BASE,
+                    "HEAD_REF": "fix/new",
+                    "HEAD_SHA": continuation.HEAD,
+                    "LIVE_BRANCH_HEAD": live_head or continuation.BASE,
                     "EXPECTED_HEAD": continuation.HEAD,
                     "EXPECTED_BASE": continuation.BASE,
                     "LOCATOR_PR": "23",
@@ -121,7 +162,7 @@ else:raise SystemExit('unexpected fixture route '+repr(args))
                     "LOCATOR_BASE": continuation.BASE,
                     "LOCATOR_REVIEW": "17",
                     "EVENT_NAME": "workflow_dispatch",
-                    "TRIGGER_ACTOR": "github-actions[bot]",
+                    "TRIGGER_ACTOR": trigger_actor,
                     "GITHUB_REF": "refs/heads/" + (execution_branch or branch),
                     "GITHUB_REF_PROTECTED": "true",
                     "WORKFLOW_SHA": controller or continuation.BASE,
@@ -182,3 +223,41 @@ else:raise SystemExit('unexpected fixture route '+repr(args))
         self.assertNotEqual(0, result.returncode)
         self.assertEqual(before["versions"], fixture.state["versions"])
         self.assertEqual(before["requests"], fixture.state["requests"])
+
+    def test_protected_controller_drift_before_claim_preserves_budget(self):
+        f = self.fixture("main")
+        self.assertEqual(0, f.defer().returncode)
+        before = copy.deepcopy(f.state["versions"])
+        f.route("/branches/main")["commit"]["sha"] = "d" * 40
+        result = f.consumer()
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual(before, f.state["versions"])
+        self.assertEqual([], f.state["requests"])
+
+    def test_live_branch_race_at_final_claim_and_effect_fences(self):
+        for branch in ("develop", "main"):
+            for mode in ("controller_drift_before_claim", "controller_drift_after_cas"):
+                with self.subTest(branch=branch, mode=mode):
+                    f = self.fixture(branch)
+                    self.assertEqual(0, f.defer().returncode)
+                    before = copy.deepcopy(f.state["versions"])
+                    f.state[mode] = True
+                    result = f.consumer()
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertEqual([], f.state["requests"])
+                    if mode == "controller_drift_before_claim":
+                        self.assertEqual(before, f.state["versions"])
+                    else:
+                        self.assertIn(continuation.REQUEST, f.state["versions"][f.state["oid"]])
+                        self.assertNotEqual(0, f.consumer().returncode)
+                        self.assertEqual([], f.state["requests"])
+
+    def test_refresh_final_fence_rechecks_live_protected_controller(self):
+        for branch in ("develop", "main"):
+            with self.subTest(branch=branch):
+                result, effects = self.refresh(branch, final_fence=True)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual([], effects)
+                result, effects = self.refresh(branch, final_fence=True, live_head="d" * 40)
+                self.assertNotEqual(0, result.returncode)
+                self.assertEqual([], effects)
