@@ -41,7 +41,9 @@ its pinned network IP, exact managed PostgreSQL pod/container DNS name, or an
 explicit PostgreSQL-only network alias declared as
 `<network>.network:ip=<IPv4>,alias=<DNS-label>`. The alias is scoped to that
 Podman network and must not collide with any Keycloak pod name, container name,
-or alias on any attached network. Readiness uses the published host endpoint.
+or alias on any attached network. It must also not repeat the managed PostgreSQL
+pod/container name because Podman kube play already publishes the YAML container
+name and a duplicate alias is not a portable runtime contract. Readiness uses the published host endpoint.
 Arbitrary external DNS names, other Quadlet options, and Keycloak loopback are
 rejected. DNS mode requires network-local Podman name resolution,
 an explicit resolver firewall allowance, and positive/negative DNS evidence;
@@ -70,7 +72,8 @@ contract is verified against Podman 4.9.3, not a claim of live migration accepta
 Podman 4.9.3 kube play registers the YAML container name as a network alias.
 Thus a managed `postgres` container can retain a different pod/unit identity.
 The role additionally accepts only the exact bounded `,alias=<DNS-label>` form
-above; aliases are network-scoped and must be owned exclusively by PostgreSQL.
+above; aliases are network-scoped, must be owned exclusively by PostgreSQL, and
+must not duplicate its automatically published pod/container names.
 This does not authorize arbitrary names, additional network options, or shared
 database credentials.
 During native cutover, `getent ahostsv4` inside the actual Keycloak container
@@ -135,7 +138,7 @@ the collection.
         keycloak_deploy_networks:
           - keycloak-access.network:ip=10.89.40.2
         keycloak_deploy_postgres_networks:
-          - keycloak-access.network:ip=10.89.40.3,alias=postgres
+          - keycloak-access.network:ip=10.89.40.3
         # Requires verified network-local DNS without external forwarding.
         keycloak_deploy_db_host: postgres
         keycloak_deploy_admin_user: admin

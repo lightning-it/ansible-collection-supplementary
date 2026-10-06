@@ -56,6 +56,8 @@ def database_binding(components, database_host):
     managed_names = {pod_name, components["postgres"].get("container_name")}
     managed_names.discard(None)
     aliases = {binding["alias"] for binding in bindings["postgres"].values() if binding["alias"]}
+    if aliases & managed_names:
+        raise ValueError("explicit database alias must not duplicate a managed PostgreSQL name")
     keycloak_names = {
         components["keycloak"].get("pod_name"),
         components["keycloak"].get("container_name"),

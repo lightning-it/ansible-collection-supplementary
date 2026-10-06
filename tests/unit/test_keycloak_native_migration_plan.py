@@ -22,7 +22,7 @@ def fixtures():
         image = "example.invalid/" + name + "@sha256:" + ("1" if name == "keycloak" else "2") * 64
         host_data = f"/srv/fixture/{name}"
         container_data = "/data"
-        networks = ["database.network:ip=192.0.2." + ("2" if name == "keycloak" else "3,alias=postgres")]
+        networks = ["database.network:ip=192.0.2." + ("2" if name == "keycloak" else "3,alias=postgres-db")]
         manifest = {
             "apiVersion": "v1",
             "kind": "Pod",
@@ -68,7 +68,7 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
         components["postgres"]["manifest"]["metadata"]["name"] = "keycloak-postgres"
         self.assertTrue(
             NATIVE.private_database_endpoint_valid(
-                "postgres",
+                "postgres-db",
                 components["keycloak"]["networks"],
                 components["postgres"]["networks"],
                 "keycloak-postgres",
@@ -94,11 +94,11 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
         )
         prepared = NATIVE.prepare_transition(components, "postgres", 5432)
         self.assertIn(
-            "Network=database.network:ip=192.0.2.3,alias=postgres",
+            "Network=database.network:ip=192.0.2.3,alias=postgres-db",
             prepared["components"]["postgres"]["quadlet_content"],
         )
         self.assertEqual(NATIVE.expected_runtime_networks(components["postgres"]), {"database": "192.0.2.3"})
-        self.assertTrue(NATIVE.database_resolution_valid("192.0.2.3 STREAM postgres", components, "postgres"))
+        self.assertTrue(NATIVE.database_resolution_valid("192.0.2.3 STREAM postgres-db", components, "postgres-db"))
 
     def test_alias_grammar_rejects_malformed_names_and_unsupported_options(self):
         for invalid in (
@@ -141,6 +141,19 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
                 "postgres",
             )
         )
+
+    def test_explicit_alias_must_not_duplicate_managed_postgres_names(self):
+        components = fixtures()
+        for duplicate in ("postgres", "keycloak-postgres"):
+            components["postgres"]["networks"] = [f"database.network:ip=192.0.2.3,alias={duplicate}"]
+            with self.subTest(alias=duplicate), self.assertRaises(AnsibleFilterError):
+                NATIVE.private_database_endpoint_valid(
+                    duplicate,
+                    components["keycloak"]["networks"],
+                    components["postgres"]["networks"],
+                    "keycloak-postgres",
+                    "postgres",
+                )
 
     def test_explicit_alias_selects_only_the_network_that_publishes_it(self):
         keycloak = ["database.network:ip=192.0.2.2", "backup.network:ip=198.51.100.2"]
