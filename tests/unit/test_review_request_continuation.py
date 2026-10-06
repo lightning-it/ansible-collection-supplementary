@@ -45,8 +45,17 @@ if route == 'graphql' and payload:
     assert value['branch'] == {'repositoryNameWithOwner': s['repo'], 'branchName': 'lit-review-operations'}
     assert set(value['fileChanges']) == {'additions'} and len(value['fileChanges']['additions']) == 1
     old = value['expectedHeadOid']
-    if old != s['oid'] or s.get('lose_cas'):
-        result, code = {'errors': [{'message': 'CAS lost'}]}, 1
+    if s.get('intent_conflicts', 0) and value['fileChanges']['additions'][0]['path'].startswith('deferred/'):
+        s['intent_conflicts'] -= 1
+        oid = format(int(s['oid'], 16) + 1, '040x')
+        s['versions'][oid] = dict(s['versions'][s['oid']])
+        s['oid'] = oid
+    if s.get('unknown_intent'):
+        result, code = None, 42
+    elif old != s['oid'] or s.get('lose_cas'):
+        result, code = {'data': {'createCommitOnBranch': None}, 'errors': [{'type': 'STALE_DATA',
+            'path': ['createCommitOnBranch'],
+            'message': f'Expected branch to point to "{old}" but it did not. Pull and try again.'}]}, 1
     else:
         item = value['fileChanges']['additions'][0]
         assert item['path'] not in s['versions'][old]
@@ -57,6 +66,7 @@ if route == 'graphql' and payload:
             s['routes']['repos/' + s['repo'] + '/pulls/23']['head']['ref'] = 'fix/changed'
         result = {'data': {'createCommitOnBranch': {'commit': {'oid': oid, 'parents': {'nodes': [{'oid': old}]}}}}}
         if s.get('lost_cas_response'): result, code = None, 42
+        if s.get('failed_transport_with_commit'): code = 42
 elif route == 'graphql':
     oid = fields['oid']
     assert fields['manifest'] == oid + ':manifest.json'
@@ -610,7 +620,7 @@ class ContinuationTests(unittest.TestCase):
         self.assertEqual("read", self.workflow["jobs"]["locate"]["permissions"]["pull-requests"])
         self.assertNotIn("concurrency", self.workflow)  # CAS is global across all request writers.
 
-    def test_readonly_provenance_accepts_local_owner_and_binds_native_resume_steps(self):
+    def prepare_readonly_provenance(self):
         result = self.defer()
         self.assertEqual(0, result.returncode, result.stderr)
         result = self.consumer()
@@ -700,6 +710,10 @@ class ContinuationTests(unittest.TestCase):
             + "module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)\n"
             + "module.verify_receipt(json.loads(os.environ['CONTEXT']), json.loads(os.environ['RECEIPT']))\n"
         )
+        return receipt, context, check
+
+    def test_readonly_provenance_accepts_local_owner_and_binds_native_resume_steps(self):
+        receipt, context, check = self.prepare_readonly_provenance()
         before = (len(self.state["requests"]), len(self.state["dispatches"]), self.state["oid"])
         result = self.execute(
             "python3 " + str(check), {}, {"CONTEXT": json.dumps(context), "RECEIPT": json.dumps(receipt)}
@@ -715,7 +729,7 @@ class ContinuationTests(unittest.TestCase):
                 elif case == "source":
                     self.route("/actions/runs/88/attempts/1")["head_sha"] = HEAD
                 elif case == "timeline":
-                    invalid["timeline"][0][0]["created_at"] = at(7)
+                    invalid["timeline"][0][0]["created_at"] = self.route("/actions/runs/88/attempts/1")["updated_at"]
                 else:
                     self.route("/actions/runs/88/attempts/1/jobs")["jobs"][1]["runner_id"] = 9
                 result = self.execute(
@@ -725,3 +739,116 @@ class ContinuationTests(unittest.TestCase):
                 self.assertEqual(
                     before, (len(self.state["requests"]), len(self.state["dispatches"]), self.state["oid"])
                 )
+
+    def test_actual_defer_recovers_only_confirmed_intent_conflicts(self):
+        for count, succeeds in ((1, True), (2, True), (3, False)):
+            with self.subTest(count=count):
+                self.setUp()
+                self.state["intent_conflicts"] = count
+                result = self.defer()
+                self.assertEqual(succeeds, result.returncode == 0, result.stderr)
+                writes = [call for call in self.state["calls"] if call["route"] == "graphql" and call["payload"]]
+                self.assertEqual(min(count + 1, 3), len(writes))
+                self.assertEqual([], self.state["requests"])
+                self.assertNotIn(REQUEST, self.state["versions"][self.state["oid"]])
+                if succeeds:
+                    self.assertIn(INTENT, self.state["versions"][self.state["oid"]])
+                    self.state["intent_conflicts"] = 0
+                    self.assertEqual(0, self.locator(companion=True).returncode)
+                    self.assertEqual(0, self.consumer().returncode)
+                    self.assertEqual(1, len(self.state["requests"]))
+
+    def test_unknown_intent_delivery_is_readback_only(self):
+        for mode, succeeds in (
+            ("lost_cas_response", True),
+            ("failed_transport_with_commit", True),
+            ("unknown_intent", False),
+        ):
+            with self.subTest(mode=mode):
+                self.setUp()
+                self.state[mode] = True
+                result = self.defer()
+                self.assertEqual(succeeds, result.returncode == 0, result.stderr)
+                writes = [i for i, call in enumerate(self.state["calls"]) if call["payload"]]
+                self.assertEqual(1, len(writes))
+                self.assertTrue(self.state["calls"][writes[0] + 1 :])
+                self.assertTrue(all(call["payload"] is None for call in self.state["calls"][writes[0] + 1 :]))
+                self.assertEqual([], self.state["requests"])
+
+    def remove_native_pr_association(self):
+        self.route("/actions/runs/77")["pull_requests"] = []
+        self.route("/actions/runs/77/attempts/1")["pull_requests"] = []
+        policy = next(
+            job
+            for job in self.route("/actions/runs/77/attempts/1/jobs")["jobs"]
+            if job["name"] == "Verify current revision policy"
+        )
+        # Use the actual Supplementary sender layout. It has neither Source's
+        # Current revision tuple nor Central's Event binding step.
+        names = [step["name"] for step in self.original["jobs"]["verify-current-revision-policy"]["steps"]]
+        self.assertFalse(any(name.startswith(("Event binding #", "Current revision tuple #")) for name in names))
+        policy["runner_id"] = 4
+        policy["steps"] = [
+            {"name": name, "number": index + 2, "status": "completed", "conclusion": "success"}
+            for index, name in enumerate(names)
+        ]
+
+    def test_empty_supplementary_association_blocks_actual_original_without_sender(self):
+        self.remove_native_pr_association()
+        result = self.defer()
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("no native fallback sender", result.stderr)
+        self.assertNotIn(INTENT, self.state["versions"][self.state["oid"]])
+        self.assertFalse(any(call["payload"] for call in self.state["calls"]))
+        self.assertEqual([], self.state["requests"])
+
+    def test_empty_supplementary_association_blocks_both_locators_and_consumer(self):
+        result = self.defer()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.remove_native_pr_association()
+        before = len(self.state["calls"])
+        for companion in (False, True):
+            result = self.locator(companion)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("no native fallback sender", result.stderr)
+        result = self.consumer()
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("no native fallback sender", result.stderr)
+        self.assertFalse(any(call["payload"] for call in self.state["calls"][before:]))
+        self.assertNotIn(REQUEST, self.state["versions"][self.state["oid"]])
+        self.assertEqual([], self.state["requests"])
+        self.assertEqual([], self.state["dispatches"])
+
+    def test_readonly_provenance_rejects_empty_supplementary_association_without_sender(self):
+        receipt, context, check = self.prepare_readonly_provenance()
+        self.remove_native_pr_association()
+        before = len(self.state["calls"])
+        result = self.execute(
+            "python3 " + str(check), {}, {"CONTEXT": json.dumps(context), "RECEIPT": json.dumps(receipt)}
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("no native fallback sender", result.stderr)
+        self.assertFalse(any(call["payload"] for call in self.state["calls"][before:]))
+
+    def test_readonly_provenance_uses_historical_request_time_for_supersession(self):
+        receipt, context, check = self.prepare_readonly_provenance()
+        baseline = copy.deepcopy(self.state)
+        steps = self.route("/actions/runs/88/attempts/1/jobs")["jobs"][0]["steps"]
+        reference = dt.datetime.strptime(steps[2]["started_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.UTC)
+        for offset, succeeds in ((1, True), (-1, False)):
+            with self.subTest(offset=offset):
+                self.state = copy.deepcopy(baseline)
+                later = {
+                    **self.route("/pulls/23/reviews/17"),
+                    "id": 18,
+                    "submitted_at": (reference + dt.timedelta(seconds=offset)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                }
+                self.route("/pulls/23/reviews").append(later)
+                before = len(self.state["calls"])
+                result = self.execute(
+                    "python3 " + str(check), {}, {"CONTEXT": json.dumps(context), "RECEIPT": json.dumps(receipt)}
+                )
+                self.assertEqual(succeeds, result.returncode == 0, result.stderr)
+                if not succeeds:
+                    self.assertIn("superseded old review", result.stderr)
+                self.assertFalse(any(call["payload"] for call in self.state["calls"][before:]))

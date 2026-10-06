@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 import subprocess
+from urllib.parse import urlencode
 
 
 PILOTS = {"lightning-it/.github", "lightning-it/shared-assets-lit",
@@ -172,6 +173,19 @@ def repository(repo, repo_id, source):
     return branch["commit"]["sha"]
 
 
+def live_pr(repo, pr, head=None, base=None):
+    require(positive(pr), "PR ID")
+    value = api(f"repos/{repo}/pulls/{pr}")
+    require(value["number"] == pr and value["state"] == "open" and value["draft"] is False
+            and value["user"]["login"] == "litroc" and value["user"]["type"] == "User", "live human PR")
+    require(value["head"]["repo"]["full_name"] == repo and value["base"]["repo"]["full_name"] == repo
+            and value["base"]["ref"] in {"develop", "main"} and value["head"]["ref"]
+            and sha(value["head"]["sha"]) and sha(value["base"]["sha"]), "PR refs")
+    require(head is None or value["head"]["sha"] == head, "stale head")
+    require(base is None or value["base"]["sha"] == base, "stale base")
+    return value
+
+
 def original_run(repo, intent, completed=True):
     run = api(f"repos/{repo}/actions/runs/{intent['owner_run']}/attempts/1")
     require(run["id"] == intent["owner_run"] and type(run["id"]) is int and type(run["run_attempt"]) is int and run["run_attempt"] == 1
@@ -181,14 +195,63 @@ def original_run(repo, intent, completed=True):
             and run["triggering_actor"]["login"] == "litroc"
             and run["repository"]["full_name"] == repo and run["head_repository"]["full_name"] == repo, "original run")
     prs = run["pull_requests"]
-    require(isinstance(prs, list) and len(prs) == 1, "original PR inventory")
-    pr = prs[0]
-    require(pr["number"] == intent["pr"] and all(pr[side][field] == intent[side if field == "sha" else side + "_ref"]
-            for side in ("base", "head") for field in ("sha", "ref"))
-            and all(pr[side]["repo"]["url"] == f"https://api.github.com/repos/{repo}" for side in ("base", "head")), "original recorded PR")
+    require(isinstance(prs, list) and len(prs) <= 1, "original PR inventory")
+    if not prs:
+        pr = empty_owner(repo, run, intent["pr"], intent["base"], intent["head"], intent["base_ref"])
+        require(pr["head"]["ref"] == intent["head_ref"], "fallback head ref")
+    else:
+        recorded_pr(repo, intent, prs[0])
     if completed:
         require(run["status"] == "completed" and run["conclusion"] == "failure", "original not completed failure")
     return run
+
+
+def empty_owner(repo, run, owner, base, head, base_ref):
+    require(repo in PILOTS and positive(owner) and positive(run.get("id"))
+            and type(run.get("run_attempt")) is int and run["run_attempt"] in (1, 2)
+            and run["event"] == "pull_request_target" and run["path"] == PRODUCER
+            and run["name"] == "Current revision review gate" and run["head_sha"] == head
+            and run["actor"]["login"] == "litroc"
+            and run["triggering_actor"]["login"] == ("litroc" if run["run_attempt"] == 1 else "github-actions[bot]")
+            and run["repository"]["full_name"] == repo and run["head_repository"]["full_name"] == repo
+            and run["pull_requests"] == [] and sha(base) and sha(head), "fallback native owner")
+    pr = branch_pr(repo, run)
+    require(pr["number"] == owner and pr["base"]["sha"] == base and pr["base"]["ref"] == base_ref, "fallback PR binding")
+    jobs = pages(f"repos/{repo}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?filter=all", "jobs")
+    policy = [job for job in jobs if job.get("name") == "Verify current revision policy"]
+    require(len(policy) == 1, "fallback policy job")
+    job = policy[0]
+    require(type(job.get("run_id")) is int and job["run_id"] == run["id"]
+            and type(job.get("run_attempt")) is int and job["run_attempt"] == run["run_attempt"]
+            and job["head_sha"] == head and positive(job.get("runner_id"))
+            and job["status"] in {"in_progress", "completed"}
+            and (job["conclusion"] is None if job["status"] == "in_progress"
+                 else job["conclusion"] in {"success", "failure"}), "fallback native policy")
+    require(repo in {"lightning-it/.github", "lightning-it/shared-assets-lit"}, "no native fallback sender")
+    binding = (f"Event binding #{owner}:{base}:{head}:{run['id']}" if repo == "lightning-it/.github" else
+               f"Current revision tuple #{owner} {base_ref}@{base} -> {repo}:{run['head_branch']}@{head} run {run['id']}")
+    steps = job["steps"]
+    require(isinstance(steps, list) and all(isinstance(step, dict) and isinstance(step.get("name"), str) for step in steps)
+            and sum(step["name"] == binding for step in steps) == 1, "fallback event binding")
+    step = next(step for step in steps if step["name"] == binding)
+    require(type(step.get("number")) is int and step["number"] == 2
+            and step["status"] == "completed" and step["conclusion"] == "success", "fallback binding step")
+    return pr
+
+
+def branch_pr(repo, run):
+    query = urlencode({"state": "open", "head": repo.split('/')[0] + ':' + run["head_branch"]})
+    candidates = pages(f"repos/{repo}/pulls?{query}")
+    require(len(candidates) == 1, "ambiguous live branch")
+    pr = live_pr(repo, candidates[0]["number"], run["head_sha"])
+    require(pr["head"]["ref"] == run["head_branch"], "branch drift")
+    return pr
+
+
+def recorded_pr(repo, intent, pr):
+    require(pr["number"] == intent["pr"] and all(pr[side][field] == intent[side if field == "sha" else side + "_ref"]
+            for side in ("base", "head") for field in ("sha", "ref"))
+            and all(pr[side]["repo"]["url"] == f"https://api.github.com/repos/{repo}" for side in ("base", "head")), "original recorded PR")
 
 
 def native_job(repo, run, name, names):
@@ -254,7 +317,8 @@ def clean_old_review(repo, pr, review_id, head, after, reference_time=None):
     require_usable_review_content(value.get("body"), inline)
     candidates = [item for item in pages(f"repos/{repo}/pulls/{pr}/reviews")
                   if item.get("user", {}).get("login") == BOT and item.get("commit_id") != head
-                  and epoch(item["submitted_at"]) >= epoch(after) - 604800]
+                  and epoch(item["submitted_at"]) >= epoch(after) - 604800
+                  and (reference_time is None or epoch(item["submitted_at"]) <= reference)]
     require(candidates and max(candidates, key=lambda item: (epoch(item["submitted_at"]), item["id"]))["id"] == review_id,
             "superseded old review")
     return value

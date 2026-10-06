@@ -58,14 +58,25 @@ def api(route, payload=None):
 
 
 def pages(route, key=None):
-    items = []
+    items, total = [], None
     for page in range(1, 11):
         response = api(f"{route}{'&' if '?' in route else '?'}per_page=100&page={page}")
         batch = response if key is None else response[key]
         if not isinstance(batch, list) or len(batch) > 100:
             raise ValueError("invalid inventory")
+        if key is not None:
+            count = response.get("total_count")
+            if type(count) is not int or not 0 <= count < 1000:
+                raise ValueError("invalid inventory total")
+            if total is not None and total != count:
+                raise ValueError("changing inventory total")
+            total = count
+            if len(batch) != min(100, max(0, total - (page - 1) * 100)):
+                raise ValueError("incomplete inventory page")
         items += batch
         if len(batch) < 100:
+            if total is not None and len(items) != total:
+                raise ValueError("incomplete inventory total")
             if len({item["id"] for item in items}) != len(items):
                 raise ValueError("duplicate inventory")
             return items

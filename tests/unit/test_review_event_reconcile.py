@@ -53,6 +53,7 @@ class ReviewEventTests(unittest.TestCase):
         transform=None,
         neutral=False,
         required=None,
+        inventory_transform=None,
     ):
         prefix = "repos/lightning-it/.github"
         pr = {
@@ -113,6 +114,22 @@ class ReviewEventTests(unittest.TestCase):
             if "/actions/workflows/" in route:
                 response = self.inventory_response(history, route)
                 return transform(route, response) if transform else response
+            if inventory_transform and "per_page=100&page=" in route:
+                inventory_route = route.rsplit("&per_page=100&page=", 1)[0]
+                if inventory_route == route:
+                    inventory_route = route.rsplit("?per_page=100&page=", 1)[0]
+                rows = inventories[inventory_route]
+                key = (
+                    "workflow_runs"
+                    if "/actions/runs?" in inventory_route
+                    else "jobs"
+                    if "/jobs" in inventory_route
+                    else "check_runs"
+                    if "/check-runs" in inventory_route
+                    else None
+                )
+                response = {"total_count": len(rows), key: rows} if key else rows
+                return inventory_transform(route, response)
             if route == f"{prefix}/actions/runs/77":
                 return run
             if route == prefix:
@@ -127,7 +144,9 @@ class ReviewEventTests(unittest.TestCase):
             patch.object(
                 EVENT,
                 "pages",
-                side_effect=lambda route, key=None: inventories[
+                side_effect=EVENT.pages
+                if inventory_transform
+                else lambda route, key=None: inventories[
                     route.replace("/pulls/24/", "/pulls/23/").replace("/pulls/25/", "/pulls/23/")
                 ],
             ),
@@ -426,3 +445,40 @@ class ReviewEventTests(unittest.TestCase):
             helper,
         )
         self.assertIn("cancel-in-progress: false", helper)
+
+
+class KeyedInventoryTests(unittest.TestCase):
+    def test_short_native_inventories_stop_real_reconcile_before_dispatch(self):
+        caller = ReviewEventTests()
+        for fragment in ("actions/runs?event=", "/check-runs?", "actions/runs?head_sha=", "/attempts/1/jobs?"):
+
+            def corrupt(route, response, fragment=fragment):
+                if fragment in route:
+                    response["total_count"] += 1
+                return response
+
+            with self.subTest(fragment=fragment), self.assertRaisesRegex(ValueError, "incomplete inventory"):
+                caller.reconcile(neutral=True, inventory_transform=corrupt)
+        self.assertEqual(1, len(caller.reconcile(neutral=True, inventory_transform=lambda route, response: response)))
+
+    def test_keyed_inventory_counts_lengths_duplicates_and_bound(self):
+        for key in ("workflow_runs", "jobs", "check_runs"):
+            rows = [{"id": index + 1} for index in range(101)]
+            good = [{"total_count": 101, key: rows[:100]}, {"total_count": 101, key: rows[100:]}]
+            cases = [[{"total_count": value, key: []}] for value in (True, -1, "0", None, 1000)]
+            cases += [
+                [good[0], {"total_count": 102, key: rows[100:]}],
+                [{"total_count": 101, key: rows[:99]}],
+                [good[0], {"total_count": 101, key: []}],
+                [good[0], {"total_count": 101, key: rows[:1]}],
+            ]
+            for responses in cases:
+                with (
+                    self.subTest(key=key, responses=len(responses)),
+                    patch.object(EVENT, "api", side_effect=responses) as get,
+                ):
+                    with self.assertRaises(ValueError):
+                        EVENT.pages("repos/test/inventory", key)
+                    self.assertLessEqual(get.call_count, 10)
+            with patch.object(EVENT, "api", side_effect=good):
+                self.assertEqual(rows, EVENT.pages("repos/test/inventory", key))
