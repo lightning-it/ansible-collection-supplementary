@@ -7,6 +7,10 @@ name: Reconcile delayed review events
 on:
   workflow_run:
     workflows:
+      # Managed metadata name and observed dynamic-run display name. Locator only:
+      # never use this event's head, payload or artifacts as mutation authority.
+      - Copilot
+      - Running Copilot Code Review
       - Current revision review gate
       - Protected current-revision evidence verifier
       - Protected dot-github current-revision verifier
