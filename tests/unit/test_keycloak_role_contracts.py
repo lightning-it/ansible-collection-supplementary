@@ -750,6 +750,25 @@ exit 0
         rescue_names = [task["name"] for task in transaction["rescue"]]
         self.assertIn("Capture safe native Keycloak service failure properties", rescue_names)
 
+        deploy = yaml.safe_load(
+            (ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy.yml").read_text(encoding="utf-8")
+        )[2]["block"]
+        deploy_names = [task["name"] for task in deploy]
+        self.assertLess(
+            deploy_names.index("Require the desired database endpoint in the active Keycloak pod"),
+            deploy_names.index("Validate managed database DNS from the non-systemd Keycloak container"),
+        )
+        self.assertLess(
+            deploy_names.index("Validate managed database DNS from the non-systemd Keycloak container"),
+            deploy_names.index("Wait until Keycloak health endpoint is reachable (non-systemd)"),
+        )
+        non_systemd_validation = next(
+            task
+            for task in deploy
+            if task["name"] == "Validate managed database DNS from the non-systemd Keycloak container"
+        )
+        self.assertEqual(non_systemd_validation["ansible.builtin.include_tasks"], "validate_database_dns.yml")
+
     def test_managed_bridge_database_requires_a_shared_normalized_network(self) -> None:
         assertions = (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
         defaults = self._role_defaults("keycloak_deploy")

@@ -149,6 +149,21 @@ def prepare_transition(components, database_host, database_port):
             raise ValueError("invalid database port")
         if not isinstance(components, dict) or set(components) != {"keycloak", "postgres"}:
             raise ValueError("exactly two components required")
+        database_network = database_binding(components, database_host)
+        database_address = next(
+            entry.split(":ip=", 1)[1]
+            for entry in components["postgres"]["networks"]
+            if entry.split(":ip=", 1)[0] == database_network
+        )
+        managed_database_names = (
+            components["postgres"]["pod_name"],
+            components["postgres"].get("container_name"),
+        )
+        managed_host_aliases = (
+            [{"ip": database_address, "hostnames": [database_host]}]
+            if database_host in managed_database_names
+            else []
+        )
         prepared = {}
         states = []
         for name in ("keycloak", "postgres"):
@@ -168,7 +183,9 @@ def prepare_transition(components, database_host, database_port):
             if manifest.get("kind") != "Pod" or manifest.get("metadata", {}).get("name") != component["pod_name"]:
                 raise ValueError("unproven pod identity")
             spec = manifest["spec"]
-            if spec.get("hostNetwork", False) is not False or spec.get("hostAliases", []):
+            host_aliases = spec.get("hostAliases", [])
+            permitted_host_aliases = managed_host_aliases if name == "keycloak" else []
+            if spec.get("hostNetwork", False) is not False or host_aliases not in ([], permitted_host_aliases):
                 raise ValueError("nonportable manifest networking")
             annotations = manifest.get("metadata", {}).get("annotations", {})
             if any("network" in key.lower() or key.lower().endswith(".ip") for key in annotations):
@@ -198,7 +215,8 @@ def prepare_transition(components, database_host, database_port):
             prepared[name] = {"quadlet_content": new, "manifest": deepcopy(manifest)}
         if len(set(states)) != 1:
             raise ValueError("mixed prior/desired controller state")
-        database_binding(components, database_host)
+        if managed_host_aliases:
+            prepared["keycloak"]["manifest"]["spec"]["hostAliases"] = deepcopy(managed_host_aliases)
         environment = prepared["keycloak"]["manifest"]["spec"]["containers"][0]["env"]
         for key, value in (("KC_DB_URL_HOST", database_host), ("KC_DB_URL_PORT", str(database_port))):
             matches = [entry for entry in environment if entry.get("name") == key]
