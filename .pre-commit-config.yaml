@@ -153,6 +153,9 @@ repos:
         language: system
         entry: bash scripts/devtools-local-quality.sh ruff format --check
         types: [python]
+        # Preserve canonical Source layout and SHA256 binding; Ruff lint still applies.
+        # Authority: .lit/li219-gateway-source.json, exact materializer asset only.
+        exclude: ^scripts/materialize-exact-revision-review\.py$
         files: >-
           (?x)^(scripts/(enrich-cyclonedx-sbom|keycloak-evidence|lit-push-ready|lit-repository-quality|lit-trust-root-base-verifier|materialize-exact-revision-review|quality_cell_identity|quality_evidence|source_dependencies|validate-embedded-code|validate-role-coverage)\.py|
           molecule/shared/(incus/helpers|keycloak/acceptance)/.*\.py|tests/.*\.py)$

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import os
 import subprocess
@@ -111,14 +112,35 @@ class ExactRevisionMaterializerTests(unittest.TestCase):
             self.module.run(["gh", "api"], environment={})
 
     def test_diff_reverification_uses_protected_reads(self) -> None:
-        source = MATERIALIZER.read_text(encoding="utf-8")
-        self.assertNotIn("patch.read_bytes()", source)
-        self.assertNotIn('(regenerated / "change.patch").read_bytes()', source)
-        self.assertIn('patch, "review diff"', source)
-        self.assertIn(
-            'regenerated / "change.patch", "regenerated diff"',
-            source,
-        )
+        tree = ast.parse(MATERIALIZER.read_text(encoding="utf-8"))
+        verifier = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "verify")
+        nodes = list(ast.walk(verifier))
+        self.assertFalse(any(isinstance(node, ast.Attribute) and node.attr == "read_bytes" for node in nodes))
+        reads = [
+            node
+            for node in nodes
+            if isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id in {"original_diff", "fresh_diff"}
+        ]
+        self.assertEqual(2, len(reads))
+        self.assertEqual({"original_diff", "fresh_diff"}, {node.targets[0].id for node in reads})
+        for node in reads:
+            call = node.value
+            self.assertIsInstance(call, ast.Call)
+            self.assertEqual("protected_asset_bytes", ast.unparse(call.func))
+            expected = (
+                ("patch", "review diff")
+                if node.targets[0].id == "original_diff"
+                else ("regenerated / 'change.patch'", "regenerated diff")
+            )
+            self.assertEqual(2, len(call.args))
+            self.assertEqual(expected, (ast.unparse(call.args[0]), ast.literal_eval(call.args[1])))
+            self.assertEqual(
+                [("maximum", "maximum"), ("single_runtime", "single_mode(arguments)")],
+                [(value.arg, ast.unparse(value.value)) for value in call.keywords],
+            )
 
     def test_unfinished_reservation_is_always_failed_closed(self) -> None:
         workflow = REVIEW_WORKFLOW.read_text(encoding="utf-8")

@@ -29,12 +29,11 @@
       "id": "release-app-exact-revision-codex",
       "workflow": ".github/workflows/release-bot-exact-head-review.yml",
       "job": "exact-revision-codex-review",
-      "reason": "For the Release App, only the protected MLX-90 §7.2 Exact-Revision Codex check is allowed.",
+      "reason": "For the Release App, only the protected MLX-90 \u00a77.2 Exact-Revision Codex check is allowed.",
       "owner": "Lightning IT Application Platform Maintainers"
     }
   ],
   "review": {
-    "max_diff_bytes": 200000,
     "profiles": {
       "standard": {
         "agents": []
@@ -94,7 +93,8 @@
         "vault",
         "workflow_dispatch"
       ]
-    }
+    },
+    "warn_diff_bytes": 500000
   },
   "evidence": {
     "max_age_seconds": 86400

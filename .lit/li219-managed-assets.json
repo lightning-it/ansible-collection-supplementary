@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "assets": [
+    {
+      "path": ".github/workflows/copilot-review-refresh.yml",
+      "category": "central-managed",
+      "sha256": "31e34a9ccd7f5dbfaac62bcb308ebeafb69c00d41b0a80b579f557f66980583b",
+      "source": "shared-assets-lit/default/.github/workflows/copilot-review-refresh.yml"
+    },
+    {
+      "path": ".github/workflows/current-revision-rerun.yml",
+      "category": "central-managed",
+      "sha256": "2febd480773ecbe19840c4c22bf147cd1fbe77abfe0c23b66b2f07a727e58c8f",
+      "source": "shared-assets-lit/default/.github/workflows/current-revision-rerun.yml"
+    },
+    {
+      "path": ".github/workflows/review-event-reconcile.yml",
+      "category": "central-managed",
+      "sha256": "bbee309bac5c9831cd4689cb32651c94ade87d832248e21a799e2a706185af5a",
+      "source": "shared-assets-lit/default/.github/workflows/review-event-reconcile.yml"
+    },
+    {
+      "path": "scripts/review-event-reconcile.py",
+      "category": "central-managed",
+      "sha256": "74bf8eb90116afa0a58ebf57be3e141c95e0127d08d008b33cc28d3b3569602c",
+      "source": "shared-assets-lit/default/scripts/review-event-reconcile.py"
+    },
+    {
+      "path": ".github/workflows/dot-github-current-revision-required.yml",
+      "category": "central-managed",
+      "sha256": "734f922840311920ea0c78a3f2e4ded3a0a74c53381bec4671f89d5c5d8fa2a6",
+      "source": "shared-assets-lit/.github/workflows/dot-github-current-revision-required.yml"
+    },
+    {
+      "path": "tests/unit/test_dot_github_current_revision.py",
+      "category": "local-required",
+      "sha256": "4bc64c849028106ece888291920429518e622ce083d65832a965c71eccc20241",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Canonical verifier tests adapted to repository formatting."
+    },
+    {
+      "path": "scripts/review_content_markers.py",
+      "category": "central-managed",
+      "sha256": "00e73bad77fc2b7eaf3182f302f375a981deb6578a21f219ff410d52d62daf09",
+      "source": "shared-assets-lit/scripts/review_content_markers.py"
+    },
+    {
+      "path": "scripts/verify-dot-github-current-revision.py",
+      "category": "local-required",
+      "sha256": "7cdb3f5ee93ccd15055486807ed393c91cdeefddbbf561ef3d31bb9681ccd32d",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Locally adapted LI-219 contract; preserve Supplementary semantics."
+    },
+    {
+      "path": ".github/workflows/copilot-review.yml",
+      "category": "local-required",
+      "sha256": "6b6fed60247718a565cce268161527daab6c70648b1f42dcac7b8112d2a3045b",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Locally adapted LI-219 contract; preserve Supplementary semantics."
+    },
+    {
+      "path": "scripts/lit-push-ready.py",
+      "category": "local-required",
+      "sha256": "3771838cc8638c933548c54691ed9c5e410179f5c4330f4602afee0f6dfd35b7",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Locally adapted LI-219 contract; preserve Supplementary semantics."
+    },
+    {
+      "path": ".github/workflows/review-request-continuation.yml",
+      "category": "central-managed",
+      "source": "shared-assets-lit/default/.github/workflows/review-request-continuation.yml",
+      "sha256": "5d5de0d48ab51f2fb742aaed82fef9eb06f5d05aa5c5cbbbf4ee21fd27c29584"
+    },
+    {
+      "path": "scripts/review_request_continuation.py",
+      "category": "central-managed",
+      "source": "shared-assets-lit/default/scripts/review_request_continuation.py",
+      "sha256": "29014fe17a418763f294e9724354809abf56d051333e690768b5d17cce24452f"
+    },
+    {
+      "path": "scripts/review_request_provenance.py",
+      "category": "central-managed",
+      "source": "shared-assets-lit/default/scripts/review_request_provenance.py",
+      "sha256": "742d38d26c580c7220acb03462c27146327608ea964915efad9d0be2b0f6d8f3"
+    }
+  ],
+  "scope": "li219-three-pilot",
+  "repository": "lightning-it/ansible-collection-supplementary"
+}
