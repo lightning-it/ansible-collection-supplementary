@@ -2328,7 +2328,10 @@ def classify_review_profile(change: PlannedChange) -> ReviewClassification:
         text = tail + chunk.lower()
         for term in terms:
             pattern = rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])"
-            if any(match.end() < len(text) for match in re.finditer(pattern, text)):
+            # Earlier matches were already checked with their real left context.
+            # Recheck a term ending at the old boundary once its right context
+            # arrives, but ignore false word starts at the truncated tail edge.
+            if any(len(tail) <= match.end() < len(text) for match in re.finditer(pattern, text)):
                 matched.add(term)
         tail = text[-overlap:]
     matched_term = next((term for term in terms if term in matched), None)

@@ -61,7 +61,7 @@
     {
       "path": "scripts/lit-push-ready.py",
       "category": "local-required",
-      "sha256": "db193b223525796bc22e8d17deaf60890520e3779f10d4136485ebb0b95a7567",
+      "sha256": "53038b266a83ad3c4194adc2e9c495f7d3948c6c562ef999a5c6caa58f8978bb",
       "owner": "ansible-collection-supplementary",
       "purpose": "Locally adapted LI-219 contract; preserve Supplementary semantics."
     },

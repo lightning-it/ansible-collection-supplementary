@@ -3,10 +3,12 @@
 import hashlib
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from .test_push_ready_engine import ENGINE, ROOT, run_git
@@ -82,3 +84,40 @@ class PortStreamingTests(unittest.TestCase):
                     ).hexdigest(),
                     change.tree_fingerprint,
                 )
+
+    def test_independent_word_boundary_counterexample_and_true_terms_match_full_text(self):
+        config = json.loads((ROOT / ".lit/push-ready.json").read_text())
+        terms = config["review"]["classification"]["trust_root_terms"]
+        overlap = max(map(len, terms)) + 2
+        width = ENGINE["CHUNK_BYTES"]
+        # Exact independent counterexample: the discarded character before the
+        # retained tail is x, so permission is part of a word, not a risk term.
+        suffix = "permission!" + "z" * (overlap - len("permission!"))
+        counterexample = "a" * (width - len(suffix) - 1) + "x" + suffix + "\n"
+        payloads = [counterexample]
+        for offset in (width - overlap - 1, width - overlap, width - len(" permission"), width - 1, width, width + 1):
+            for term_context in ("xpermission!", " permission!", " permissionx!", " permission"):
+                payloads.append("a" * offset + term_context)
+        namespace = ENGINE["classify_review_profile"].__globals__
+        for payload in payloads:
+            whole = "docs/change.txt\n" + payload
+            expected = next(
+                (term for term in terms if re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", whole.lower())),
+                None,
+            )
+            spool = ENGINE["PatchSpool"]()
+            try:
+                spool.write(payload.encode())
+                change = SimpleNamespace(base_tip="a" * 40, paths=("docs/change.txt",), patch=spool)
+                with (
+                    self.subTest(bytes=len(payload)),
+                    mock.patch.dict(namespace, config_at_commit=lambda _ref: config),
+                    mock.patch.object(ENGINE["PatchSpool"], "as_text", side_effect=AssertionError("whole patch read")),
+                ):
+                    actual = ENGINE["classify_review_profile"](change)
+                    self.assertEqual("standard" if expected is None else "trust-root", actual.profile)
+                    self.assertEqual(
+                        "all-paths-standard" if expected is None else f"trust-root-term:{expected}", actual.reason
+                    )
+            finally:
+                spool.close()
