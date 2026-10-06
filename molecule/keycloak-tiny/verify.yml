@@ -256,7 +256,7 @@
             in (keycloak_tiny_environment.stdout | from_json)
       no_log: true
 
-    - name: Resolve the native PostgreSQL container DNS name inside Keycloak
+    - name: Resolve the explicit PostgreSQL service alias inside Keycloak
       ansible.builtin.command:
         argv:
           - podman
@@ -268,7 +268,7 @@
       register: keycloak_tiny_database_alias
       changed_when: false
 
-    - name: Assert exclusive network-local PostgreSQL container-name resolution
+    - name: Assert exclusive network-local PostgreSQL service-alias resolution
       ansible.builtin.assert:
         that:
           - >-
@@ -292,7 +292,7 @@
         argv:
           - podman
           - inspect
-          - keycloak-tiny-postgres-postgres
+          - keycloak-tiny-postgres-postgres-db
           - --format
           - "{{ '{{json .NetworkSettings.Networks}}' }}"
       register: keycloak_tiny_postgres_networks

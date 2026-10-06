@@ -64,6 +64,8 @@ def database_binding(components, database_host):
     }
     keycloak_names.discard(None)
     keycloak_names.update(binding["alias"] for binding in bindings["keycloak"].values() if binding["alias"])
+    if aliases & keycloak_names:
+        raise ValueError("database aliases must be owned exclusively by PostgreSQL")
     if database_host in keycloak_names:
         raise ValueError("database endpoint must be owned exclusively by PostgreSQL")
     if database_host in managed_names or database_host in aliases:

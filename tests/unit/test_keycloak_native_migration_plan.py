@@ -187,6 +187,14 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
                 "keycloak", keycloak, postgres, "keycloak-postgres", "postgres", "keycloak", "keycloak"
             )
 
+    def test_unselected_postgres_alias_must_not_collide_with_any_keycloak_name(self):
+        keycloak = ["database.network:ip=192.0.2.2"]
+        postgres = ["database.network:ip=192.0.2.3,alias=keycloak"]
+        with self.assertRaises(AnsibleFilterError):
+            NATIVE.private_database_endpoint_valid(
+                "postgres", keycloak, postgres, "keycloak-postgres", "postgres", "keycloak", "keycloak"
+            )
+
     def test_dns_runtime_requires_exclusively_the_bound_private_peer(self):
         components = fixtures()
         output = "192.0.2.3 STREAM postgres\n192.0.2.3 DGRAM\n192.0.2.3 RAW\n"
