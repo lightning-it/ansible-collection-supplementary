@@ -11,6 +11,7 @@ FAILURE_MARKERS = (
     "wasnotabletoreviewthispullrequest",
     "nofilestoreview",
     "unabletoreviewanyfiles",
+    "abletoreviewanyfiles",
     "notabletoreviewanyfiles",
     "wasnotabletoreviewanyfiles",
     "quotaexhausted",

@@ -16,6 +16,37 @@ class ReviewEventTests(unittest.TestCase):
     head, base = "b" * 40, "a" * 40
     now = dt.datetime(2026, 10, 5, 18, tzinfo=dt.UTC)
 
+    def test_copilot_completion_wakes_only_the_protected_inventory_locator(self):
+        import yaml
+
+        path = ROOT / ".github/workflows/review-event-reconcile.yml"
+        workflow = yaml.safe_load(path.read_text())
+        events = workflow.get("on", workflow.get(True))
+        self.assertEqual(["completed"], events["workflow_run"]["types"])
+        self.assertEqual(
+            {
+                "Copilot",
+                "Running Copilot Code Review",
+                "Current revision review gate",
+                "Protected current-revision evidence verifier",
+                "Protected dot-github current-revision verifier",
+            },
+            set(events["workflow_run"]["workflows"]),
+        )
+        self.assertEqual([{"cron": "*/10 * * * *"}], events["schedule"])
+        job = workflow["jobs"]["reconcile"]
+        self.assertIn("vars.LI219_EVENT_MODE == 'enabled'", job["if"])
+        self.assertEqual("${{ github.workflow_sha }}", job["steps"][0]["with"]["ref"])
+        self.assertIs(False, job["steps"][0]["with"]["persist-credentials"])
+        executable = job["steps"][1]["run"]
+        self.assertIn("python3 scripts/review-event-reconcile.py", executable)
+        self.assertNotIn("github.event.", executable)
+        self.assertNotIn("GITHUB_EVENT_PATH", executable)
+        self.assertNotIn("GITHUB_EVENT_PATH", (ROOT / "scripts/review-event-reconcile.py").read_text())
+        mirror = ROOT / "default/.github/workflows/review-event-reconcile.yml"
+        if mirror.exists():
+            self.assertEqual(path.read_bytes(), mirror.read_bytes())
+
     def review(self, **changes):
         return {
             "id": 17,

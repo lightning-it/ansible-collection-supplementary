@@ -116,6 +116,17 @@ class ContinuationTests(unittest.TestCase):
         (self.root / "gh").write_text(MOCK)
         (self.root / "gh").chmod(0o755)
         self.now = dt.datetime.now(dt.UTC).replace(microsecond=0)
+        # Keep transport time deterministic: container scheduling must not move
+        # a deferred intent beyond the fixture's one-second native effect end.
+        (self.root / "sitecustomize.py").write_text(
+            "import datetime, os\n"
+            "_native = datetime.datetime\n"
+            "class Clock(_native):\n"
+            "    @classmethod\n"
+            "    def now(cls, tz=None):\n"
+            "        return _native.fromtimestamp(float(os.environ['FIXTURE_NOW']), tz)\n"
+            "datetime.datetime = Clock\n"
+        )
 
         def at(seconds):
             return (self.now + dt.timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -234,6 +245,8 @@ class ContinuationTests(unittest.TestCase):
         self.state["routes"][prefix + "/actions/runs/89/attempts/1"] = {**resume, "id": 89}
         self.env = {
             **os.environ,
+            "FIXTURE_NOW": str(self.now.timestamp()),
+            "PYTHONPATH": str(self.root),
             "PATH": str(self.root) + ":" + os.environ["PATH"],
             "STATE": str(self.file),
             "RUNNER_TEMP": str(self.root),
@@ -263,7 +276,11 @@ class ContinuationTests(unittest.TestCase):
                 "run_id": 77,
                 "run_attempt": 1,
                 "head_sha": HEAD,
-                "name": definition["name"],
+                "name": (
+                    definition["name"].split("&& '", 1)[1].split("'", 1)[0]
+                    if definition["name"].startswith("${{")
+                    else definition["name"]
+                ),
                 "status": "completed",
                 "conclusion": "failure" if name == "verify-current-revision-policy" else "skipped",
                 "runner_id": None,
@@ -272,6 +289,22 @@ class ContinuationTests(unittest.TestCase):
             for index, (name, definition) in enumerate(self.original["jobs"].items())
             if name != "request-current-revision-review"
         ]
+        policy = next(item for item in others if item["name"] == "Verify current revision policy")
+        policy.update(
+            runner_id=4,
+            started_at=at(-110),
+            completed_at=at(1),
+            steps=[
+                {
+                    "name": "Invalidate prior result after pull-request metadata change",
+                    "number": 2,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "started_at": at(-109),
+                    "completed_at": at(0),
+                }
+            ],
+        )
         self.route("/actions/runs/77/attempts/1/jobs").update(total_count=6, jobs=[job, *others])
 
     def route(self, suffix):
@@ -439,6 +472,10 @@ class ContinuationTests(unittest.TestCase):
             "Copilot wasn't able to review this pull request.",
             "Copilot wasn’t able to review this pull request.",
             "suppressed comment",
+            "Copilot wasn't able to review any files.",
+            "Copilot wasn’t able to review any files.",
+            "COPILOT\u00a0WASN’T\u2003ABLE\tTO REVIEW ANY FILES",
+            "able to review any files",
             "COPILOT\u00a0WASN’T\u2003ABLE\tTO REVIEW THIS PULL REQUEST",
         )
         for marker in markers:
@@ -664,6 +701,10 @@ class ContinuationTests(unittest.TestCase):
             "completed_at": at(6),
             "steps": steps,
         }
+        steps[2].update(started_at=at(34), completed_at=at(58))
+        steps[3].update(started_at=at(58), completed_at=at(59))
+        job["completed_at"] = at(59)
+        run["updated_at"] = at(60)
         locator = {
             "id": 181,
             "run_id": 88,
@@ -688,7 +729,7 @@ class ContinuationTests(unittest.TestCase):
             "base_ref": "develop",
             "run_id": 77,
             "controller": SOURCE,
-            "review_submitted_at": at(9),
+            "review_submitted_at": at(61),
             "timeline": [
                 [
                     {
@@ -696,7 +737,7 @@ class ContinuationTests(unittest.TestCase):
                         "event": "review_requested",
                         "requested_reviewer": {"login": "Copilot"},
                         "actor": {"login": "github-actions[bot]", "type": "Bot"},
-                        "created_at": at(3),
+                        "created_at": at(40),
                     }
                 ]
             ],
@@ -833,14 +874,16 @@ class ContinuationTests(unittest.TestCase):
     def test_readonly_provenance_uses_historical_request_time_for_supersession(self):
         receipt, context, check = self.prepare_readonly_provenance()
         baseline = copy.deepcopy(self.state)
-        steps = self.route("/actions/runs/88/attempts/1/jobs")["jobs"][0]["steps"]
-        reference = dt.datetime.strptime(steps[2]["started_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.UTC)
-        for offset, succeeds in ((1, True), (-1, False)):
+        reference = dt.datetime.strptime(context["timeline"][0][0]["created_at"], "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=dt.UTC
+        )
+        for offset, succeeds in ((1, True), (-5, False), (-7, False)):
             with self.subTest(offset=offset):
                 self.state = copy.deepcopy(baseline)
                 later = {
                     **self.route("/pulls/23/reviews/17"),
                     "id": 18,
+                    "body": "Copilot wasn’t able to review any files.",
                     "submitted_at": (reference + dt.timedelta(seconds=offset)).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 }
                 self.route("/pulls/23/reviews").append(later)

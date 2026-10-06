@@ -119,10 +119,11 @@ the request job is attempt-one-only. The helper validates the completed producer
 attempt and full Required inventory before the sole verifier rerun. CAS receipts
 never replace native review evidence. Terminal review content consumes no retry.
 
-The immutable preparation donor is Source `3eff591b19da313ea501c4962f1452d3f35545e6`
-(tree `23997920b8f94f6da46608c02233d0f80ceed1b2`). This is a local preparation
-binding; `protected_source_commit` remains null until actual protected Source main
-adoption. The original Supplementary request job keeps its six-job producer
+The preparation donor content is Source bundle `3fa97f0b3afb5386cf8a2bb77b34bfd6a88fbc6d443663700a96cd70c0f85b4d`.
+This is a local preparation binding; `protected_source_commit` remains null until actual protected Source main
+adoption. Local immutable Source snapshot: `d5a52bf322abdfcb5268b56b278c0c7da720103e`
+(tree `4465341bd7afbaee592f114fbdd26d55b1ebeabb`), preparation only.
+The original Supplementary request job keeps its six-job producer
 context and exact source/author/actor predicate. Only the enabled three pilots
 admit `synchronize`. PR-wide Pending writes a separate immutable deferred intent,
 never an accepted-head marker or a consumed request claim. An unconfirmed original
@@ -132,7 +133,8 @@ The protected first-request continuation validates that original intent and nati
 request steps, the completed old-head review, current PR/source identity and all
 existing budgets. Its schema-2 receipt consumes the SAME repository-ID/PR/head
 request key; either schema-1 or schema-2 presence blocks another request. Review
-and owner-completion events only locate work; the existing ten-minute reconciler
+and owner-completion events only locate work; completed `Copilot` and
+`Running Copilot Code Review` events also only wake the protected inventory locator; the existing ten-minute reconciler
 is the bounded delayed-visibility fallback. All three dispatch workflow families
 share the existing 256-GET inventory budget and native cooldown. The original
 producer remains the owner; no third verifier attempt or LI-259 route is added.
@@ -144,7 +146,7 @@ Only an exact confirmed native STALE_DATA journal conflict permits retrying the
 eligibility-only intent write, with at most three attempts. Unknown delivery is
 readback-only; request CAS and AI POST remain single-attempt. Keyed inventories
 require stable exact totals. Historical review provenance uses its bound request
-step reference time. Supplementary has no protected empty-association sender:
+event time, authenticated inside the native request step. Supplementary has no protected empty-association sender:
 an empty native PR association fails closed in original/continuation/provenance
 callers. Existing fully bound nonempty associations retain their original route.
 

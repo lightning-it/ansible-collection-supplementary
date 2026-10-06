@@ -24,6 +24,7 @@ FAILURE_MARKERS = (
     "wasnotabletoreviewthispullrequest",
     "nofilestoreview",
     "unabletoreviewanyfiles",
+    "abletoreviewanyfiles",
     "notabletoreviewanyfiles",
     "wasnotabletoreviewanyfiles",
     "quotaexhausted",
@@ -557,11 +558,8 @@ def verify_receipt(context, record):
     repository(repo, repo_id, record["source_sha"])
     run = native_resume_run(repo, record["claim_run"], record["source_sha"], intent, record["old_review"])
     job = native_job(repo, run, "Resume deferred first review request", RESUME_STEPS)
-    old = clean_old_review(repo, intent["pr"], record["old_review"], intent["head"], original["created_at"],
-                           reference_time=job["steps"][2]["started_at"])
-    require(old["commit_id"] == record["old_head"], "old head proof")
     start, end = epoch(job["steps"][2]["started_at"]), epoch(job["steps"][2]["completed_at"])
-    require(epoch(original["updated_at"]) <= start and epoch(old["submitted_at"]) <= start, "resume ordering")
+    require(epoch(original["updated_at"]) <= start, "resume ordering")
     timeline = context["timeline"]
     require(isinstance(timeline, list) and 0 < len(timeline) <= 10
             and all(isinstance(page, list) and len(page) <= 100 and all(isinstance(item, dict) for item in page)
@@ -571,6 +569,11 @@ def verify_receipt(context, record):
               and epoch(original["created_at"]) <= epoch(item["created_at"]) <= epoch(context["review_submitted_at"])]
     require(len(events) == 1 and positive(events[0].get("id")) and events[0]["actor"]["login"] == "github-actions[bot]"
             and events[0]["actor"]["type"] == "Bot" and start <= epoch(events[0]["created_at"]) <= end, "resume timeline")
+    # The authenticated request event, not entry into the effect step, is the
+    # historical cutoff. Reviews arriving before the actual POST still supersede.
+    old = clean_old_review(repo, intent["pr"], record["old_review"], intent["head"], original["created_at"],
+                           reference_time=events[0]["created_at"])
+    require(old["commit_id"] == record["old_head"], "old head proof")
 
 
 if __name__ == "__main__":
