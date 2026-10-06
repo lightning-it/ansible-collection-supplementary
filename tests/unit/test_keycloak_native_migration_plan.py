@@ -120,10 +120,10 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
                     "postgres",
                 )
 
-    def test_explicit_database_alias_must_match_the_selected_endpoint(self):
+    def test_pod_and_container_names_remain_valid_beside_an_explicit_alias(self):
         components = fixtures()
         components["postgres"]["networks"] = ["database.network:ip=192.0.2.3,alias=other"]
-        with self.assertRaises(AnsibleFilterError):
+        self.assertTrue(
             NATIVE.private_database_endpoint_valid(
                 "postgres",
                 components["keycloak"]["networks"],
@@ -131,6 +131,28 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
                 "keycloak-postgres",
                 "postgres",
             )
+        )
+        self.assertTrue(
+            NATIVE.private_database_endpoint_valid(
+                "other",
+                components["keycloak"]["networks"],
+                components["postgres"]["networks"],
+                "keycloak-postgres",
+                "postgres",
+            )
+        )
+
+    def test_explicit_alias_selects_only_the_network_that_publishes_it(self):
+        keycloak = ["database.network:ip=192.0.2.2", "backup.network:ip=198.51.100.2"]
+        postgres = [
+            "database.network:ip=192.0.2.3,alias=postgres-alias",
+            "backup.network:ip=198.51.100.3",
+        ]
+        self.assertTrue(
+            NATIVE.private_database_endpoint_valid(
+                "postgres-alias", keycloak, postgres, "keycloak-postgres", "postgres"
+            )
+        )
 
     def test_dns_runtime_requires_exclusively_the_bound_private_peer(self):
         components = fixtures()

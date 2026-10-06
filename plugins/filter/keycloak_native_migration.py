@@ -55,16 +55,17 @@ def database_binding(components, database_host):
     pod_name = components["postgres"]["pod_name"]
     managed_names = {pod_name, components["postgres"].get("container_name")}
     managed_names.discard(None)
-    managed_names.update(binding["alias"] for binding in bindings["postgres"].values() if binding["alias"])
-    if database_host in managed_names:
+    aliases = {binding["alias"] for binding in bindings["postgres"].values() if binding["alias"]}
+    if database_host in managed_names or database_host in aliases:
         if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", database_host):
             raise ValueError("invalid managed database DNS name")
+        explicit_alias = database_host in aliases and database_host not in managed_names
         candidates = [
             network
             for network, binding in bindings["postgres"].items()
             if binding["address"] is not None
             and network in bindings["keycloak"]
-            and (binding["alias"] is None or binding["alias"] == database_host)
+            and (not explicit_alias or binding["alias"] == database_host)
         ]
     else:
         ipaddress.IPv4Address(database_host)
