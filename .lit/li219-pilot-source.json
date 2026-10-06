@@ -10,8 +10,8 @@
       "target_path": ".github/workflows/copilot-review-refresh.yml",
       "source_sha256": "31e34a9ccd7f5dbfaac62bcb308ebeafb69c00d41b0a80b579f557f66980583b",
       "source_blob": "a42cd8725cbd4fafc170bc3158631f7f09973fac",
-      "target_blob": "1570453ee482fdb8d3424b330409e475b7d5e494",
-      "target_sha256": "d720b3f895cc315f6a20f8f2295fa3708e639f35de12d288c08123a3af5f04f2",
+      "target_blob": "317f37a84ab32e1dc428201aef827e35675c8bfa",
+      "target_sha256": "64a715d029d6ed43040e36cf836d8ec8716d36471d0904cff641e516b0ef347d",
       "mode": "adapted-local",
       "target_mode": "0644"
     },

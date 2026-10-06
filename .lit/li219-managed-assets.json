@@ -4,7 +4,7 @@
     {
       "path": ".github/workflows/copilot-review-refresh.yml",
       "category": "local-required",
-      "sha256": "d720b3f895cc315f6a20f8f2295fa3708e639f35de12d288c08123a3af5f04f2",
+      "sha256": "64a715d029d6ed43040e36cf836d8ec8716d36471d0904cff641e516b0ef347d",
       "source": "shared-assets-lit/default/.github/workflows/copilot-review-refresh.yml",
       "owner": "ansible-collection-supplementary",
       "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."

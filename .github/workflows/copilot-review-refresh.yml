@@ -600,7 +600,7 @@ jobs:
                   and .base.repo.full_name == $repo
                   and .head.sha == $h
                   and .head.repo.full_name == $head_repository
-                and ($head_repository == $repository or .user.type == "User")
+                and ($head_repository == $repo or .user.type == "User")
                 ' <<<"${flive}" >/dev/null || return 1
             done <<<"${frows}"
             if jq -e --arg h "${EVENT_HEAD}" \

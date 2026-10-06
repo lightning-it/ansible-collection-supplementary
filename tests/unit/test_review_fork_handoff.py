@@ -165,6 +165,7 @@ else:raise SystemExit('unexpected route '+route)
 
     def test_refresh_owner_election_binds_actual_fork_and_empty_association(self):
         function = shell_function(ROOT / ".github/workflows/copilot-review-refresh.yml", "elect_once")
+        self.assertIn('and ($head_repository == $repo or .user.type == "User")', function)
         for branch in ("develop", "main"):
             for empty in (False, True):
                 pr = self.pr(branch)
