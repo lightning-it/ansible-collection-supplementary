@@ -46,17 +46,6 @@ Key variables:
 - `postgres_deploy_readiness_delay`
 - `postgres_deploy_skip_runtime`
 
-Each network entry is either `<network>.network` or the bounded static form
-`<network>.network:ip=<IPv4>[,alias=<DNS-label>]`. An explicit alias is scoped
-to that Podman network. The role rejects unsupported options, malformed aliases,
-and aliases that repeat its managed pod or container name. Callers must ensure
-the alias is not also published by another peer. Podman kube play already
-publishes the YAML container name as a network-local DNS alias.
-For Podman versions whose Kube Quadlet path does not reliably publish the
-network option alias, `postgres_deploy_hostname` provides the same stable DNS
-name through the Pod manifest. It is accepted only with one dedicated network
-to prevent the service name from leaking into unrelated networks.
-
 ## Dependencies
 
 None.

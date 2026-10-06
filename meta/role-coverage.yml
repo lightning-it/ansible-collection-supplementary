@@ -1025,10 +1025,11 @@ roles:
         exact candidate. Fault-injected unit control-flow tests do not establish
         Podman readiness or whole-role migration idempotence.
       - >-
-        Managed pod/container DNS names and exclusive network aliases have
-        strict offline binding and cutover-resolution rollback coverage. Tiny
-        proves network-local alias resolution to the exact private PostgreSQL
-        address; target-specific resolver isolation remains required.
+        Managed pod/container DNS names have strict offline binding and
+        cutover-resolution rollback coverage. Tiny proves that the managed
+        PostgreSQL container name resolves exclusively to its exact private
+        address from the running Keycloak container; target-specific resolver
+        isolation remains required.
       - >-
         Native manifest semantic reconciliation has offline actual-Ansible
         regression coverage; live no-second-restart acceptance remains pending

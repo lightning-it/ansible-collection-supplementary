@@ -53,8 +53,7 @@
         | select(
             'match',
             '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}'
-            ~ '(?::ip=[0-9]{1,3}(?:[.][0-9]{1,3}){3}'
-            ~ '(?:,alias=[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)?)?$'
+            ~ '(?::ip=[0-9]{1,3}(?:[.][0-9]{1,3}){3})?$'
           )
         | list | length == keycloak_deploy_networks | length
       - keycloak_deploy_postgres_networks is sequence
@@ -70,8 +69,7 @@
         | select(
             'match',
             '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}'
-            ~ '(?::ip=[0-9]{1,3}(?:[.][0-9]{1,3}){3}'
-            ~ '(?:,alias=[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)?)?$'
+            ~ '(?::ip=[0-9]{1,3}(?:[.][0-9]{1,3}){3})?$'
           )
         | list | length == keycloak_deploy_postgres_networks | length
       - >-
@@ -239,7 +237,7 @@
       - >-
         import ipaddress,sys; address=ipaddress.ip_address(sys.argv[1]);
         sys.exit(0 if address.version == 4 else 1)
-      - "{{ item.split(':ip=', 1)[1].split(',', 1)[0] }}"
+      - "{{ item.split(':ip=', 1)[1] }}"
   loop: "{{ keycloak_deploy_networks + keycloak_deploy_postgres_networks }}"
   loop_control:
     label: "{{ item.split(':ip=', 1)[0] }}"
@@ -254,12 +252,9 @@
       - >-
         keycloak_deploy_db_host | lit.supplementary.keycloak_private_database_endpoint_valid(
           keycloak_deploy_networks, keycloak_deploy_postgres_networks,
-          keycloak_deploy_postgres_pod_name, keycloak_deploy_postgres_container_name,
-          keycloak_deploy_pod_name, keycloak_deploy_container_name)
+          keycloak_deploy_postgres_pod_name, keycloak_deploy_postgres_container_name)
     quiet: true
-    fail_msg: >-
-      Managed PostgreSQL requires an exclusively owned pod/container DNS name,
-      network alias, or bound private shared-network address.
+    fail_msg: Managed PostgreSQL requires its exact pod/container DNS name or a bound private shared-network address.
   when:
     - keycloak_deploy_manage_postgres | bool
     - not keycloak_deploy_host_network | bool

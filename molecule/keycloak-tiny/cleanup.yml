@@ -45,4 +45,4 @@
           - logs
           - --tail
           - "500"
-          - keycloak-tiny-postgres-postgres-db
+          - keycloak-tiny-postgres-postgres

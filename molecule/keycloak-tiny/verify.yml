@@ -256,7 +256,7 @@
             in (keycloak_tiny_environment.stdout | from_json)
       no_log: true
 
-    - name: Resolve the explicit PostgreSQL service alias inside Keycloak
+    - name: Resolve the managed PostgreSQL container name inside Keycloak
       ansible.builtin.command:
         argv:
           - podman
@@ -265,14 +265,14 @@
           - getent
           - ahostsv4
           - postgres
-      register: keycloak_tiny_database_alias
+      register: keycloak_tiny_database_name
       changed_when: false
 
-    - name: Assert exclusive network-local PostgreSQL service-alias resolution
+    - name: Assert exclusive network-local PostgreSQL container-name resolution
       ansible.builtin.assert:
         that:
           - >-
-            keycloak_tiny_database_alias.stdout_lines
+            keycloak_tiny_database_name.stdout_lines
             | map('split') | map('first') | unique | list
             == ['10.89.40.3']
 
@@ -292,7 +292,7 @@
         argv:
           - podman
           - inspect
-          - keycloak-tiny-postgres-postgres-db
+          - keycloak-tiny-postgres-postgres
           - --format
           - "{{ '{{json .NetworkSettings.Networks}}' }}"
       register: keycloak_tiny_postgres_networks
@@ -330,7 +330,7 @@
             <testcase classname="keycloak.runtime" name="version" role="keycloak_deploy"/>
             <testcase classname="keycloak.security" name="keycloak-manifest-permissions" role="keycloak_deploy"/>
             <testcase classname="keycloak.network" name="bridge-database-service-discovery" role="keycloak_deploy"/>
-            <testcase classname="keycloak.network" name="service-alias-dns-resolution" role="keycloak_deploy"/>
+            <testcase classname="keycloak.network" name="container-name-dns-resolution" role="keycloak_deploy"/>
             <testcase classname="keycloak.network" name="quadlet-network-handoff" role="keycloak_deploy"/>
             <testcase classname="keycloak.network" name="static-service-identities" role="keycloak_deploy"/>
             <testcase classname="keycloak.proxy" name="trusted-edge-and-untrusted-direct" role="keycloak_deploy"/>

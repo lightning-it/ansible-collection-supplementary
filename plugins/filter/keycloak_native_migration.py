@@ -7,25 +7,6 @@ from copy import deepcopy
 
 from ansible.errors import AnsibleFilterError
 
-NETWORK_ENTRY = re.compile(
-    r"(?P<unit>[A-Za-z0-9][A-Za-z0-9_.-]{0,127})"
-    r"(?::ip=(?P<address>[0-9]{1,3}(?:[.][0-9]{1,3}){3})"
-    r"(?:,alias=(?P<alias>[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))?)?"
-)
-
-
-def parse_network_entry(entry):
-    """Return one exact Quadlet network binding without retaining option suffixes."""
-    if not isinstance(entry, str):
-        raise ValueError("network entry must be a string")
-    match = NETWORK_ENTRY.fullmatch(entry)
-    if match is None:
-        raise ValueError("invalid exact native network binding")
-    address = match.group("address")
-    if address is not None:
-        address = str(ipaddress.IPv4Address(address))
-    return match.group("unit"), address, match.group("alias")
-
 
 def canonical_path(value):
     """Reject relative, aliased and control-bearing managed path inputs."""
@@ -50,48 +31,28 @@ def database_binding(components, database_host):
         quadlet_text("Binding validation", "/etc/fixture.yml", networks)
         bindings[name] = {}
         for entry in networks:
-            network, address, alias = parse_network_entry(entry)
-            bindings[name][network] = {"address": address, "alias": alias}
+            network, separator, address = entry.partition(":ip=")
+            bindings[name][network] = address if separator else None
     pod_name = components["postgres"]["pod_name"]
-    managed_names = {pod_name, components["postgres"].get("container_name")}
-    managed_names.discard(None)
-    aliases = {binding["alias"] for binding in bindings["postgres"].values() if binding["alias"]}
-    if aliases & managed_names:
-        raise ValueError("explicit database alias must not duplicate a managed PostgreSQL name")
-    keycloak_names = {
-        components["keycloak"].get("pod_name"),
-        components["keycloak"].get("container_name"),
-    }
-    keycloak_names.discard(None)
-    keycloak_names.update(binding["alias"] for binding in bindings["keycloak"].values() if binding["alias"])
-    if aliases & keycloak_names:
-        raise ValueError("database aliases must be owned exclusively by PostgreSQL")
-    if database_host in keycloak_names:
-        raise ValueError("database endpoint must be owned exclusively by PostgreSQL")
-    if database_host in managed_names or database_host in aliases:
+    managed_names = (pod_name, components["postgres"].get("container_name"))
+    if database_host in managed_names:
         if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", database_host):
             raise ValueError("invalid managed database DNS name")
-        explicit_alias = database_host in aliases and database_host not in managed_names
         candidates = [
             network
-            for network, binding in bindings["postgres"].items()
-            if binding["address"] is not None
-            and network in bindings["keycloak"]
-            and (not explicit_alias or binding["alias"] == database_host)
+            for network, address in bindings["postgres"].items()
+            if address is not None and network in bindings["keycloak"]
         ]
     else:
         ipaddress.IPv4Address(database_host)
-        candidates = [
-            network for network, binding in bindings["postgres"].items() if binding["address"] == database_host
-        ]
+        candidates = [network for network, address in bindings["postgres"].items() if address == database_host]
     if len(candidates) != 1:
         raise ValueError("database endpoint requires exactly one declared database network")
     network = candidates[0]
-    address = bindings["postgres"][network]["address"]
+    address = bindings["postgres"][network]
     if (
         network not in bindings["keycloak"]
-        or bindings["keycloak"][network]["address"] == address
-        or bindings["keycloak"][network]["alias"] == database_host
+        or bindings["keycloak"][network] == address
         or not ipaddress.IPv4Address(address).is_private
     ):
         raise ValueError("database requires distinct private peer addresses on its declared network")
@@ -99,23 +60,13 @@ def database_binding(components, database_host):
 
 
 def private_database_endpoint_valid(
-    database_host,
-    keycloak_networks,
-    postgres_networks,
-    postgres_pod_name,
-    postgres_container_name=None,
-    keycloak_pod_name=None,
-    keycloak_container_name=None,
+    database_host, keycloak_networks, postgres_networks, postgres_pod_name, postgres_container_name=None
 ):
     """Pure role precheck; DNS runtime proof remains mandatory before acceptance."""
     try:
         database_binding(
             {
-                "keycloak": {
-                    "networks": keycloak_networks,
-                    "pod_name": keycloak_pod_name,
-                    "container_name": keycloak_container_name,
-                },
+                "keycloak": {"networks": keycloak_networks},
                 "postgres": {
                     "networks": postgres_networks,
                     "pod_name": postgres_pod_name,
@@ -134,7 +85,7 @@ def database_resolution_valid(output, components, database_host):
     try:
         network = database_binding(components, database_host)
         expected = components["postgres"]["networks"]
-        address = next(parse_network_entry(entry)[1] for entry in expected if parse_network_entry(entry)[0] == network)
+        address = next(entry.split(":ip=", 1)[1] for entry in expected if entry.split(":ip=", 1)[0] == network)
         if not isinstance(output, str) or not output.strip():
             raise ValueError("missing database resolution")
         addresses = set()
@@ -159,13 +110,16 @@ def quadlet_text(description, manifest_path, networks):
         raise AnsibleFilterError("Invalid native unit identity")
     if not canonical_path(manifest_path):
         raise AnsibleFilterError("Invalid native manifest path")
-    if not isinstance(networks, list):
+    if not isinstance(networks, list) or any(
+        not isinstance(network, str)
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}(?::ip=[0-9]{1,3}(?:[.][0-9]{1,3}){3})?", network)
+        for network in networks
+    ):
         raise AnsibleFilterError("Invalid exact native network bindings")
-    try:
-        parsed_networks = [parse_network_entry(network) for network in networks]
-    except (TypeError, ValueError, AttributeError):
-        raise AnsibleFilterError("Invalid exact native network bindings") from None
-    if len({network[0] for network in parsed_networks}) != len(networks):
+    for network in networks:
+        if ":ip=" in network:
+            ipaddress.IPv4Address(network.split(":ip=", 1)[1])
+    if len({network.split(":", 1)[0] for network in networks}) != len(networks):
         raise AnsibleFilterError("Duplicate native network binding")
     return "\n".join(
         [
@@ -279,11 +233,11 @@ def expected_runtime_networks(component, field="networks"):
     quadlet_text("Runtime binding validation", "/etc/fixture.yml", component[field])
     expected = {}
     for entry in component[field]:
-        unit, address, _alias = parse_network_entry(entry)
+        unit, static, address = entry.partition(":ip=")
         name = component["network_runtime_names"][unit]
         if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", name) or name in expected:
             raise ValueError("unproven network runtime identity")
-        expected[name] = address
+        expected[name] = str(ipaddress.IPv4Address(address)) if static else None
     return expected
 
 

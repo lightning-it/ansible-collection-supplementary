@@ -683,33 +683,8 @@ exit 0
             with self.subTest(role=role):
                 self.assertIn(variable, core)
                 self.assertIn("(?::ip=[0-9]{1,3}", core)
-                self.assertIn(",alias=[a-z0-9]", core)
                 self.assertIn("ipaddress.ip_address", validator["ansible.builtin.command"]["argv"][2])
-                self.assertEqual(
-                    validator["ansible.builtin.command"]["argv"][3],
-                    "{{ item.split(':ip=', 1)[1].split(',', 1)[0] }}",
-                )
                 self.assertEqual(validator["when"], "':ip=' in item")
-
-        migration_filter = (ROOT / "plugins" / "filter" / "keycloak_native_migration.py").read_text(encoding="utf-8")
-        self.assertIn("def parse_network_entry(entry):", migration_filter)
-        self.assertIn("parse_network_entry(entry)[1]", migration_filter)
-
-    def test_postgres_aliases_cannot_repeat_managed_names(self) -> None:
-        tasks = yaml.safe_load(
-            (ROOT / "roles" / "postgres_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")
-        )
-        contract = "\n".join(tasks[0]["ansible.builtin.assert"]["that"])
-        self.assertIn("select('search', ',alias=')", contract)
-        self.assertIn("intersect([postgres_deploy_pod_name, postgres_deploy_container_name])", contract)
-        self.assertIn("postgres_deploy_hostname", contract)
-        self.assertIn("postgres_deploy_networks | length == 1", contract)
-        defaults = self._role_defaults("postgres_deploy")
-        self.assertEqual(defaults["postgres_deploy_hostname"], "")
-        template = (ROOT / "roles" / "postgres_deploy" / "templates" / "postgres-pod.yml.j2").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("hostname: {{ postgres_deploy_hostname | trim }}", template)
 
     def test_ordinary_keycloak_deploy_proves_database_dns_at_runtime(self) -> None:
         validation_path = ROOT / "roles" / "keycloak_deploy" / "tasks" / "validate_database_dns.yml"
@@ -734,23 +709,6 @@ exit 0
             "keycloak_deploy_postgres_container_name",
         ):
             self.assertIn(binding, resolution_contract)
-
-        pod_tasks = yaml.safe_load(
-            (ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy_pod.yml").read_text(encoding="utf-8")
-        )
-        pod_names = [task["name"] for task in pod_tasks]
-        self.assertLess(
-            pod_names.index("Wait until dedicated Keycloak PostgreSQL is reachable"),
-            pod_names.index("Validate managed database DNS before starting Keycloak"),
-        )
-        prestart = next(
-            task for task in pod_tasks if task["name"] == "Validate managed database DNS before starting Keycloak"
-        )
-        self.assertIn("keycloak_deploy_postgres_pod_name", str(prestart["vars"]))
-        postgres_role = next(
-            task for task in pod_tasks if task["name"] == "Deploy dedicated PostgreSQL service for Keycloak"
-        )
-        self.assertIn("keycloak_deploy_db_host", str(postgres_role["vars"]["postgres_deploy_hostname"]))
 
         systemd = yaml.safe_load(
             (ROOT / "roles" / "keycloak_deploy" / "tasks" / "systemd.yml").read_text(encoding="utf-8")

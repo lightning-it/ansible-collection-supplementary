@@ -23,8 +23,7 @@
     keycloak_deploy_networks:
       - keycloak-tiny-access.network:ip=10.89.40.2
     keycloak_deploy_postgres_networks:
-      - keycloak-tiny-access.network:ip=10.89.40.3,alias=postgres
-    keycloak_deploy_postgres_container_name: postgres-db
+      - keycloak-tiny-access.network:ip=10.89.40.3
     keycloak_deploy_db_host: postgres
     keycloak_deploy_db_port: 5432
     keycloak_deploy_db_wait_host: 127.0.0.1
