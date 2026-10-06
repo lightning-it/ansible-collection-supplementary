@@ -72,20 +72,6 @@
       tags:
         - deployment
 
-    - name: Validate managed database DNS from the non-systemd Keycloak container
-      ansible.builtin.include_tasks: validate_database_dns.yml
-      vars:
-        keycloak_deploy_database_dns_probe_container: >-
-          {{ keycloak_deploy_pod_name }}-{{ keycloak_deploy_container_name }}
-      when:
-        - not keycloak_deploy_manage_systemd | bool
-        - keycloak_deploy_manage_postgres | bool
-        - not keycloak_deploy_host_network | bool
-        - not keycloak_deploy_postgres_host_network | bool
-        - not keycloak_deploy_db_host is match('^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$')
-      tags:
-        - deployment
-
     - name: Wait until Keycloak health endpoint is reachable (non-systemd)
       ansible.builtin.uri:
         url: "{{ keycloak_deploy_health_url_effective }}"
