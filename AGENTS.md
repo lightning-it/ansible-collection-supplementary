@@ -152,7 +152,8 @@ and owner-completion events only locate work; completed `Copilot` and
 `Running Copilot Code Review` events also only wake the protected inventory locator; the existing ten-minute reconciler
 is the bounded delayed-visibility fallback. All three dispatch workflow families
 share the existing 256-GET inventory budget and native cooldown. The original
-producer remains the owner; no third verifier attempt or LI-259 route is added.
+producer remains the owner; LI-219 alone adds no third verifier attempt. The
+separately enabled, sealed LI-259 exception below is its only bounded extension.
 The exact-review SINGLE gateway is distributed with its workflow, materializer,
 and all six runtime modules, including single_review_resources.py. The protected-source and final local instruction digests are content-bound; native
 acceptance remains pending.
@@ -199,6 +200,21 @@ local hashes; a local feature-source hash is not protected rollout authority. Th
 `.lit/li219-managed-assets.json`, validated by the pilot contract tests,
 distinguishes byte-identical source assets from locally adapted contracts. It
 does not opt the collection into a repository-wide managed inventory or fleet sync.
+
+## 1.4 LI-259 Bounded Native Verifier Recovery
+
+The owner-authorized exception applies only with `LI219_EVENT_MODE=enabled` and
+`LI259_INFRA_RETRY=enabled`, after coupled protected Source/Core adoption. Only
+prospectively sealed supplementary verifier attempts 3 and 4 may recover the
+classified native hosted-runner acquisition failure. Keep the identical review,
+repository, PR, base, head, controller, policy and input bindings; separate durable
+technical claims from event deduplication. Cooldowns remain 20/40 minutes, the
+sealed total budget 180 minutes, and the start reserve 60 minutes. Claim-to-POST
+visibility gaps are bounded GET-only pending; unknown writes never repeat.
+Observed drift, deterministic failures and exhausted feasible budgets are terminal.
+No recovery creates AI requests, pushes, PRs or reviewed revisions. The separate
+cross-controller receiver remains limited to attempts 1/2. Existing unsealed runs
+gain no authority, and activation still requires genuine native acceptance.
 
 ## 2. Repository Baseline (This Repo)
 

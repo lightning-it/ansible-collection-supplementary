@@ -28,6 +28,11 @@ if method in ('POST','PATCH'):
     previous = copy.deepcopy(d['check'])
     if method == 'POST' and d.get('unknown_post') == 'absent':
         p.write_text(json.dumps(d)); sys.exit(1)
+    patch_kind = ('pending' if f.get('conclusion') == 'failure' and f.get('external_id') == 'bound-id'
+                  else 'details' if method == 'PATCH' and list(f) == ['details_url'] else None)
+    unknown_patch = d.get('unknown_' + patch_kind) if patch_kind else None
+    if unknown_patch == 'absent':
+        p.write_text(json.dumps(d)); sys.exit(1)
     if method == 'POST':
         d['check'] = {'id':79,'app':{'id':15368,'slug':'github-actions'},'output':{},'details_url':None}
     for key, value in f.items():
@@ -38,12 +43,14 @@ if method in ('POST','PATCH'):
         d['valid'] = False
     if f.get('conclusion') == 'success' and d.get('head_drift_after_promotion'):
         d['pr']['head']['sha'] = 'd' * 40
-    if method == 'PATCH' and f.get('conclusion'):
+    if f.get('conclusion') == 'success' and d.get('drift_field'):
+        d[d['drift_field']] = False
+    if method == 'PATCH' and (f.get('conclusion') or patch_kind == 'details' and d.get('details_stale')):
         d['stale_check'] = previous
-        d['remaining_stale'] = d.get('stale_reads', 0)
+        d['remaining_stale'] = d.get('details_stale', 0) if patch_kind == 'details' else d.get('stale_reads', 0)
         d['read_counts'] = d.get('read_counts', []) + [0]
     result = d['check']
-    if ((method == 'POST' and d.get('unknown_post'))
+    if (unknown_patch or (method == 'POST' and d.get('unknown_post'))
             or (f.get('conclusion') == 'success' and d.get('unknown_promotion'))):
         p.write_text(json.dumps(d)); sys.exit(1)
 elif route.endswith('/pulls/23'):
@@ -69,7 +76,8 @@ elif '/check-runs/' in route:
         if d['corrupt_read'] == 'evidence': result['output']['summary'] = 'wrong'
         else: result[d['corrupt_read']] = 'wrong'
 else:
-    result = {'valid':d['valid']}
+    result = {'valid':d['valid'], 'labels_valid':d.get('labels_valid', True),
+              'review_valid':d.get('review_valid', True)}
 p.write_text(json.dumps(d))
 print(json.dumps(result))
 """
@@ -146,8 +154,11 @@ api_patch() { gh api --method PATCH "$@"; }
 read_metadata_revision() {
   gh api "repos/${REPOSITORY}/live" | jq -r 'if .valid then "null" else "changed" end'
 }
-read_labels_sha256() { printf labels; }
-validate_bound_review() { :; }
+read_labels_sha256() {
+  gh api "repos/${REPOSITORY}/live" | jq -r 'if .labels_valid then "labels" else "changed" end'
+}
+validate_bound_review() { gh api "repos/${REPOSITORY}/live" | jq -e .review_valid >/dev/null; }
+run_url='https://github.com/lightning-it/ansible-collection-supplementary/actions/runs/77'
 validate_bound_threads() { :; }
 external_kind=copilot
 result_title='Review verified'
@@ -196,16 +207,18 @@ promote_publication "${id}" bound-id
                 self.publish(outcome == "materialized")
                 self.assertEqual(1, sum(m == "POST" for m, _ in self.data["writes"]))
 
-    def test_pending_result_resumes_without_another_create(self):
+    def test_previously_attempted_pending_result_remains_get_only(self):
         self.data["drift_after_post"] = True
         self.save()
         self.publish(False)
         self.data.update(drift_after_post=False, valid=True)
         self.save()
         self.env["GITHUB_RUN_ATTEMPT"] = "2"
-        self.publish()
+        writes = len(self.data["writes"])
+        self.publish(False)
         self.assertEqual(1, sum(m == "POST" for m, _ in self.data["writes"]))
-        self.assertEqual("success", self.data["check"]["conclusion"])
+        self.assertEqual("failure", self.data["check"]["conclusion"])
+        self.assertEqual(writes, len(self.data["writes"]))
 
     def test_unknown_promotion_is_read_back_without_another_success_patch(self):
         self.data["unknown_promotion"] = True
@@ -286,6 +299,64 @@ promote_publication "${id}" bound-id
         self.assertEqual(
             [["POST", "failure"], ["PATCH", None], ["PATCH", "success"], ["PATCH", "failure"]], self.data["writes"]
         )
+
+    def test_unknown_pending_patch_materialized_absent_and_later_attempt_never_repeats(self):
+        for outcome in ("materialized", "absent"):
+            with self.subTest(outcome=outcome):
+                self.setUp()
+                self.data["check"] = {
+                    "id": 79,
+                    "name": "Current revision review",
+                    "app": {"id": 15368, "slug": "github-actions"},
+                    "head_sha": "b" * 40,
+                    "status": "completed",
+                    "conclusion": "failure",
+                    "external_id": "old-bound-id",
+                    "output": {"title": "Older binding", "summary": "older"},
+                    "details_url": None,
+                }
+                self.data.update(unknown_pending=outcome, stale_reads=4)
+                self.save()
+                self.publish(outcome == "materialized")
+                writes = len(self.data["writes"])
+                self.env["GITHUB_RUN_ATTEMPT"] = "2"
+                self.publish(outcome == "materialized")
+                self.assertEqual(writes, len(self.data["writes"]))
+                self.assertEqual(1, self.data["writes"].count(["PATCH", "failure"]))
+                self.assertFalse(any(method == "POST" for method, _ in self.data["writes"]))
+
+    def test_unknown_details_patch_materialized_absent_and_later_attempt_never_repeats(self):
+        for outcome in ("materialized", "absent"):
+            with self.subTest(outcome=outcome):
+                self.setUp()
+                self.data.update(unknown_details=outcome, details_stale=4)
+                self.save()
+                self.publish(outcome == "materialized")
+                writes = len(self.data["writes"])
+                self.env["GITHUB_RUN_ATTEMPT"] = "2"
+                self.publish(outcome == "materialized")
+                self.assertEqual(writes, len(self.data["writes"]))
+                self.assertEqual(1, self.data["writes"].count(["PATCH", None]))
+                self.assertEqual(1, self.data["writes"].count(["POST", "failure"]))
+
+    def test_only_natively_skipped_previous_publisher_can_start_attempt_two_writes(self):
+        self.data["previous_publish"] = "skipped"
+        self.env["GITHUB_RUN_ATTEMPT"] = "2"
+        self.save()
+        self.publish()
+        self.assertEqual([["POST", "failure"], ["PATCH", None], ["PATCH", "success"]], self.data["writes"])
+
+    def test_revocation_preserves_separate_diagnostic_flags(self):
+        for field in ("valid", "labels_valid", "review_valid"):
+            with self.subTest(field=field):
+                self.setUp()
+                self.data["drift_field"] = field
+                self.save()
+                self.publish(False)
+                diagnostic = json.loads(self.data["check"]["output"]["summary"])
+                for key in ("metadata_valid", "labels_valid", "review_valid"):
+                    self.assertEqual(key != ("metadata_valid" if field == "valid" else field), diagnostic[key])
+                self.assertIn(":binding-change:v1:", self.data["check"]["external_id"])
 
 
 if __name__ == "__main__":

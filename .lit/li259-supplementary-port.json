@@ -3,15 +3,15 @@
   "repository": "lightning-it/ansible-collection-supplementary",
   "target_base": "63baa487088c676bfc2ac40f78318deca1eeaa97",
   "core_candidate": "aa45941e2d24194f29f480306bff39d27d7b4824",
-  "source_candidate": "a4b7c4a043c6631aeec3a8c61df2b0856c57fad6",
+  "source_candidate": "5128b10bef931478541985d314293d879ea317be",
   "protected_source_commit": null,
   "activation": "disabled-until-coupled-protected-adoption",
   "native_acceptance": false,
   "assets": [
     {
       "path": "scripts/native_verifier_retry.py",
-      "source_blob": "22cc3e363c2a70325b58636dea89d5afbeabdb30",
-      "sha256": "064e1123a0a167330598ea447f36c4bfa871f75d53ec78171457f6e042170a69",
+      "source_blob": "0d5483278f9cc25a2a637ccd4f1bd57caf24e84b",
+      "sha256": "5e1908c75b99ab195f523599d751c8f5c2384216172f3523732389871fc98573",
       "mode": "byte-identical"
     },
     {
@@ -34,8 +34,8 @@
     },
     {
       "path": ".github/workflows/copilot-review.yml",
-      "source_blob": "7279e09c6bf12b54afffbb90545f9fde2a06c4e0",
-      "sha256": "b9ba482a6cc4a3d27b7ff0584a7d947e6912cc401f7b8cfad1a306dd85b1184e",
+      "source_blob": "625d308db62a084f4eefee01c6a191e0ef57e577",
+      "sha256": "2bce344229639df839e0558ecca129e4e47ef030bd2be37b8c9c673e9ad0fad8",
       "mode": "adapted-local"
     },
     {
@@ -89,6 +89,16 @@
     {
       "path": ".github/workflows/review-event-reconcile.yml",
       "sha256": "84da713ab5a5b895cd02defe18faa1e7517229264d24708e51eb8da2584e47d4"
+    }
+  ],
+  "local_policy_assets": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "165e1d43f067ea158ea6212f583c6e21b5ae1acbe233dfb471988d19e40737bb"
+    },
+    {
+      "path": ".github/copilot-instructions.md",
+      "sha256": "48fba7e3acd3124ecd88ed57ae71c44482c61ee1ecceeba0090fb123703b8284"
     }
   ]
 }

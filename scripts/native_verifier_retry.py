@@ -372,12 +372,15 @@ def elected_claimant(repo, seed, cause, attempt):
     successor. Cancelled or rerun owners do not restore the slot either.
     """
     frontier = seed["scheduler_frontier"]
-    runs = pages(f"repos/{repo}/actions/workflows/{frontier['workflow_id']}/runs?created=>={seed['created_at']}", "workflow_runs")
+    end = stamp(dt.datetime.fromtimestamp(proof.epoch(seed["created_at"]) + POLICY["total_seconds"], dt.timezone.utc))
+    runs = pages(f"repos/{repo}/actions/workflows/{frontier['workflow_id']}/runs?created={seed['created_at']}..{end}", "workflow_runs")
     for run in runs:
         proof.require(run["workflow_id"] == frontier["workflow_id"] and run["path"] == WORKFLOW
                       and run["event"] == "schedule" and proof.positive(run["run_number"])
                       and run["repository"]["full_name"] == repo
-                      and run["head_repository"]["full_name"] == repo, "scheduler inventory binding")
+                      and run["head_repository"]["full_name"] == repo
+                      and proof.epoch(seed["created_at"]) <= proof.epoch(run["created_at"]) <= proof.epoch(end),
+                      "scheduler inventory binding")
     runs = [run for run in runs if run["run_number"] > frontier["run_number"]]
     numbers = sorted(run["run_number"] for run in runs)
     proof.require(numbers and all(number == frontier["run_number"] + index
@@ -466,14 +469,14 @@ def seal(repo, repo_id, pr, run_id, source, now):
     return True
 
 
-def original_consumption(journal, seed):
+def original_consumption(journal, seed, *, allow_pending=False):
     c = seed["contract"]
     key = f"li219-verifier-operation:v1:{c['pr']}:{c['base']}:{c['head']}:{c['run_id']}"
     record = journal.read(proof.record_path(key))
-    require(record is not None and record["schema"] == 1 and record["action"] == "rerun"
+    require((record is None and allow_pending) or (record is not None and record["schema"] == 1 and record["action"] == "rerun"
             and record["operation"] == key and record["repository"] == c["repository"]
             and record["repository_id"] == c["repository_id"] and record["claim_run"] == str(seed["claim_run"])
-            and record["claim_attempt"] == "1" and record["source_sha"] == c["writer_source"], "original event consumption")
+            and record["claim_attempt"] == "1" and record["source_sha"] == c["writer_source"]), "original event consumption")
     caller = api(f"repos/{c['repository']}/actions/runs/{seed['claim_run']}")
     require(caller["id"] == seed["claim_run"] and caller["run_attempt"] == 1
             and caller["path"] == HELPER and caller["event"] == "workflow_dispatch"
@@ -482,6 +485,7 @@ def original_consumption(journal, seed):
             and caller["head_repository"]["full_name"] == c["repository"]
             and caller["actor"]["login"] == "github-actions[bot]"
             and caller["triggering_actor"]["login"] == "github-actions[bot]", "original event caller")
+    return record is not None
 
 
 def validate_claim(claim, seed, attempt):
@@ -542,12 +546,27 @@ def recover_bound(repo, repo_id, run_id, source, now, claimant, path, journal, s
         except CandidateClosed:
             observed_cause = None
         if (observed_cause is not None
+                and proof.epoch(observed_cause["completed_at"])
+                + POLICY["cooldown_seconds"][str(observed_attempt + 1)]
+                + POLICY["runtime_reserve_seconds"] > deadline):
+            # A missing original claim remains an uncertain handoff, even when
+            # no technical slot can fit. Only a confirmed claim may close here.
+            if not original_consumption(journal, seed, allow_pending=True):
+                return ("handoff-pending-readback-only" if now.timestamp() <= deadline
+                        else "handoff-expired-readback-only")
+            # Do not require an impossible election or block later candidates.
+            terminal(journal, path + "/terminal.json", seed, "budget-exhausted", now, observed_attempt)
+            return "terminal"
+        if (observed_cause is not None
                 and now.timestamp() >= proof.epoch(observed_cause["completed_at"])
                 + POLICY["cooldown_seconds"][str(observed_attempt + 1)]
                 and elected_claimant(repo, seed, observed_cause, observed_attempt + 1) != claimant):
             readback_only(repo, repo_id, path + f"/attempt-{observed_attempt + 1}.json")
             return "native-owner-readback-only"
-    original_consumption(journal, seed)
+    original_claimed = original_consumption(journal, seed, allow_pending=True)
+    if not original_claimed:
+        return ("handoff-pending-readback-only" if now.timestamp() <= deadline
+                else "handoff-expired-readback-only")
     try:
         require(source == c["scheduler_source"]
                 and snapshot(repo, repo_id, c["pr"], run_id, c["writer_source"]) == c, "contract drift")
@@ -556,7 +575,12 @@ def recover_bound(repo, repo_id, run_id, source, now, claimant, path, journal, s
         return "terminal"
     run = api(f"repos/{repo}/actions/runs/{run_id}")
     attempt = run["run_attempt"]
-    require(type(attempt) is int and 2 <= attempt <= POLICY["max_attempt"], "native attempt limit")
+    require(type(attempt) is int and 1 <= attempt <= POLICY["max_attempt"], "native attempt limit")
+    if attempt == 1:
+        # The helper seals before its original claim/POST. Observe that handoff
+        # without consuming it, terminalizing a transient gap, or resending it.
+        return ("handoff-pending-readback-only" if now.timestamp() <= deadline
+                else "handoff-expired-readback-only")
     for number in range(3, attempt + 1):
         claim = journal.read(path + f"/attempt-{number}.json")
         validate_claim(claim, seed, number)

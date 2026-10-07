@@ -92,11 +92,11 @@
       "target_path": ".github/workflows/copilot-review.yml",
       "source_sha256": "1bdbb4bd62ebda00ef689ce063e6b74299d9b1ee067c1c972730cd1212114b98",
       "source_blob": "9f8d54e95bccffd7de815826ea8bba1bdab66f81",
-      "target_blob": "17d7111ba39d9a3199e455da51230db7dfbf88ad",
-      "target_sha256": "b9ba482a6cc4a3d27b7ff0584a7d947e6912cc401f7b8cfad1a306dd85b1184e",
+      "target_blob": "3822d4d2fb85023ba7534ae86fd72046c0d5b24a",
+      "target_sha256": "2bce344229639df839e0558ecca129e4e47ef030bd2be37b8c9c673e9ad0fad8",
       "mode": "adapted-local",
       "target_mode": "0644",
-      "adaptation": "Local LI-259 native-review corrections from Source a4b7c4a043c6631aeec3a8c61df2b0856c57fad6; protected coupled adoption pending."
+      "adaptation": "Local LI-259 final native-review corrections from Source 5128b10bef931478541985d314293d879ea317be; protected coupled adoption pending."
     },
     {
       "source_path": "default/scripts/lit-push-ready.py",
@@ -144,12 +144,12 @@
     {
       "source_path": "default/scripts/native_verifier_retry.py",
       "target_path": "scripts/native_verifier_retry.py",
-      "source_sha256": "064e1123a0a167330598ea447f36c4bfa871f75d53ec78171457f6e042170a69",
-      "source_blob": "22cc3e363c2a70325b58636dea89d5afbeabdb30",
-      "target_blob": "22cc3e363c2a70325b58636dea89d5afbeabdb30",
-      "target_sha256": "064e1123a0a167330598ea447f36c4bfa871f75d53ec78171457f6e042170a69",
+      "source_sha256": "5e1908c75b99ab195f523599d751c8f5c2384216172f3523732389871fc98573",
+      "source_blob": "0d5483278f9cc25a2a637ccd4f1bd57caf24e84b",
+      "target_blob": "0d5483278f9cc25a2a637ccd4f1bd57caf24e84b",
+      "target_sha256": "5e1908c75b99ab195f523599d751c8f5c2384216172f3523732389871fc98573",
       "mode": "byte-identical",
-      "adaptation": "Local LI-259 native-review corrections from Source a4b7c4a043c6631aeec3a8c61df2b0856c57fad6; protected coupled adoption pending."
+      "adaptation": "Local LI-259 final native-review corrections from Source 5128b10bef931478541985d314293d879ea317be; protected coupled adoption pending."
     },
     {
       "source_path": "default/scripts/run-native-verifier-retry.sh",
@@ -213,8 +213,8 @@
   "local_preparation_source_commit": "ab6dd8bec5958508b8b4d66920d08d3dd8251e65",
   "local_preparation_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
   "final_protected_source_agents_sha256": "00aa090f2a662cbbe9704bf2fa94a455b4107127f850694e8ec68dd19fe4e779",
-  "final_target_agents_sha256": "39cf215f6d21de4b6116e5eac43062ee561a697ecfb7e08661995315ddb2fb0b",
-  "final_target_copilot_sha256": "d6fce2e475dd88e941155058af01e0449b3c0d2b6f68f9d877657028080e3102",
+  "final_target_agents_sha256": "165e1d43f067ea158ea6212f583c6e21b5ae1acbe233dfb471988d19e40737bb",
+  "final_target_copilot_sha256": "48fba7e3acd3124ecd88ed57ae71c44482c61ee1ecceeba0090fb123703b8284",
   "final_acceptance_status": "PENDING_INDEPENDENT_AND_NATIVE_PORT_ACCEPTANCE",
   "protected_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
   "protected_source_receipt": {

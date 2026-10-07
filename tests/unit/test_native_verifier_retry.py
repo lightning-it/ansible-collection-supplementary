@@ -391,6 +391,13 @@ class NativeRetryTests(unittest.TestCase):
             rows = [run for run in rows if not query.get("head_sha") or run["head_sha"] == query["head_sha"][0]]
         elif bare == "/actions/workflows/6/runs":
             rows, key = self.scheduler_runs, "workflow_runs"
+            if "created" in query:
+                start, end = query["created"][0].split("..")
+                rows = [
+                    run
+                    for run in rows
+                    if RETRY.proof.epoch(start) <= RETRY.proof.epoch(run["created_at"]) <= RETRY.proof.epoch(end)
+                ]
         elif bare.startswith("/actions/runs/199/attempts/") and bare.endswith("/jobs"):
             rows, key = self.extra_jobs[int(bare.split("/")[-2])], "jobs"
         elif bare.startswith("/actions/runs/99/attempts/") and bare.endswith("/jobs"):
@@ -563,6 +570,39 @@ class NativeRetryTests(unittest.TestCase):
                         self.reconcile()
                 self.assertEqual(writes, len(self.writes))
                 self.assertEqual([], self.effects)
+
+    def test_original_handoff_gaps_are_pending_without_writes_and_can_converge(self):
+        for phase in ("before-claim", "before-post", "attempt-two-not-visible", "claim-not-visible"):
+            with self.subTest(phase=phase):
+                self.setUp()
+                self.prime()
+                record_path = RETRY.proof.record_path(f"li219-verifier-operation:v1:23:{self.source}:{self.head}:99")
+                record = self.snapshots[self.oid][record_path]
+                if phase in ("before-claim", "claim-not-visible"):
+                    del self.snapshots[self.oid][record_path]
+                actual = copy.deepcopy(self.run)
+                if phase != "claim-not-visible":
+                    self.run = copy.deepcopy(self.history[1])
+                writes = len(self.writes)
+                self.assertEqual("handoff-pending-readback-only", self.recover())
+                self.assertEqual(writes, len(self.writes))
+                self.assertEqual([], self.effects)
+                self.snapshots[self.oid][record_path] = record
+                self.run = actual
+                self.assertEqual("dispatched", self.recover())
+                self.assertEqual([(f"repos/{self.repo}/actions/jobs/102/rerun", {})], self.effects)
+
+    def test_unconfirmed_original_handoff_expires_read_only_and_real_drift_is_terminal(self):
+        self.prime()
+        self.run = copy.deepcopy(self.history[1])
+        writes = len(self.writes)
+        self.now = self.start + dt.timedelta(seconds=RETRY.POLICY["total_seconds"] + 1)
+        self.assertEqual("handoff-expired-readback-only", self.recover())
+        self.assertEqual(writes, len(self.writes))
+        self.assertEqual([], self.effects)
+        self.pr["draft"] = True
+        self.assertEqual("terminal", self.recover())
+        self.assertEqual([], self.effects)
 
     def test_edit_revert_before_seal_rejects_old_neutral_without_write(self):
         self.edit_and_revert()
@@ -856,6 +896,69 @@ class NativeRetryTests(unittest.TestCase):
         self.assertEqual("native-owner-readback-only", self.recover())
         self.assertEqual(attempts, self.cas_attempts)
         self.assertEqual([], self.effects)
+
+    def test_missing_original_claim_with_impossible_budget_stays_read_only_and_sweep_continues(self):
+        for seconds, result in ((10001, "handoff-pending-readback-only"), (12601, "handoff-expired-readback-only")):
+            with self.subTest(seconds=seconds):
+                self.setUp()
+                self.prime()
+                self.scheduler_runs.clear()
+                self.fail_attempt(2, 1, 10000)
+                self.next_scheduler(66, seconds)
+                self.second_candidate()
+                seed = self.snapshots[self.oid]["li259/199/seed.json"]
+                seed["created_at"] = self.at(seconds - 2102)
+                self.extra_jobs[2][0].update(
+                    created_at=self.at(seconds - 2101),
+                    started_at=self.at(seconds - 2101),
+                    completed_at=self.at(seconds - 1200),
+                )
+                record_path = RETRY.proof.record_path(f"li219-verifier-operation:v1:23:{self.source}:{self.head}:99")
+                del self.snapshots[self.oid][record_path]
+                writes = len(self.writes)
+                self.assertEqual(result, self.recover())
+                self.assertEqual(writes, len(self.writes))
+                self.assertEqual([], self.effects)
+                self.reconcile()
+                self.assertNotIn("li259/99/terminal.json", self.snapshots[self.oid])
+                self.assertEqual([(f"repos/{self.repo}/actions/jobs/202/rerun", {})], self.effects)
+
+    def test_impossible_late_cooldown_closes_seed_before_election_and_sweep_continues(self):
+        self.prime()
+        self.scheduler_runs.clear()
+        self.fail_attempt(2, 1, 10000)
+        self.next_scheduler(66, 12601)
+        self.second_candidate()
+        seed = self.snapshots[self.oid]["li259/199/seed.json"]
+        seed["created_at"] = self.at(10500)
+        self.extra_jobs[2][0].update(created_at=self.at(10501), started_at=self.at(10501), completed_at=self.at(11401))
+        self.reconcile()
+        self.assertEqual("budget-exhausted", self.snapshots[self.oid]["li259/99/terminal.json"]["state"])
+        self.assertEqual([(f"repos/{self.repo}/actions/jobs/202/rerun", {})], self.effects)
+
+    def test_expired_unseen_claim_has_frozen_history_and_does_not_block_fresh_seed(self):
+        self.prime()
+        self.cas_before_visible = True
+        self.assertEqual("unconfirmed-claim-readback-only", self.recover())
+        self.cas_before_visible = False
+        # More than the native inventory cap accumulates after the old deadline.
+        for offset in range(1, 1101):
+            self.next_scheduler(1000 + offset, 10801 + offset * 600)
+        self.second_candidate()
+        seed = self.snapshots[self.oid]["li259/199/seed.json"]
+        seed["created_at"] = self.at(10801 + 1096 * 600)
+        seed["scheduler_frontier"]["run_number"] = 1097
+        self.extra_jobs[2][0].update(
+            created_at=self.at(10801 + 1096 * 600 + 1),
+            started_at=self.at(10801 + 1096 * 600 + 1),
+            completed_at=self.at(10801 + 1098 * 600),
+        )
+        writes = len(self.writes)
+        self.assertEqual("native-owner-readback-only", self.recover())
+        self.assertEqual(writes, len(self.writes))
+        self.reconcile()
+        self.assertEqual([(f"repos/{self.repo}/actions/jobs/202/rerun", {})], self.effects)
+        self.assertNotIn("li259/99/attempt-3.json", self.snapshots[self.oid])
 
     def test_same_run_discovered_for_two_prs_never_repeats_unseen_cas_in_one_sweep(self):
         self.prime()
@@ -1193,7 +1296,7 @@ class PortNativeRetryTests(NativeRetryTests):
 class WorkflowCouplingTests(unittest.TestCase):
     def test_port_binds_exact_candidate_bytes_and_keeps_activation_pending(self):
         manifest = json.loads((ROOT / ".lit/li259-supplementary-port.json").read_text())
-        self.assertEqual("a4b7c4a043c6631aeec3a8c61df2b0856c57fad6", manifest["source_candidate"])
+        self.assertEqual("5128b10bef931478541985d314293d879ea317be", manifest["source_candidate"])
         self.assertEqual("aa45941e2d24194f29f480306bff39d27d7b4824", manifest["core_candidate"])
         self.assertIsNone(manifest["protected_source_commit"])
         self.assertEqual("disabled-until-coupled-protected-adoption", manifest["activation"])
@@ -1207,6 +1310,14 @@ class WorkflowCouplingTests(unittest.TestCase):
                         b"blob " + str(len(content)).encode() + b"\0" + content, usedforsecurity=False
                     ).hexdigest(),
                 )
+        for row in manifest["local_policy_assets"]:
+            self.assertEqual(row["sha256"], hashlib.sha256((ROOT / row["path"]).read_bytes()).hexdigest())
+        instructions = (ROOT / ".github/copilot-instructions.md").read_text()
+        self.assertIn("AGENTS_SHA256: " + hashlib.sha256((ROOT / "AGENTS.md").read_bytes()).hexdigest(), instructions)
+        policy = (ROOT / "AGENTS.md").read_text()
+        self.assertIn("LI259_INFRA_RETRY=enabled", policy)
+        self.assertIn("attempts 3 and 4", policy)
+        self.assertNotIn("no third verifier attempt or LI-259 route is added", policy)
         for row in manifest["preserved_local_assets"]:
             self.assertEqual(row["sha256"], hashlib.sha256((ROOT / row["path"]).read_bytes()).hexdigest(), row["path"])
         for step in yaml.safe_load((ROOT / ".github/workflows/current-revision-rerun.yml").read_text())[

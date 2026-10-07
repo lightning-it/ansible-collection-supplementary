@@ -2,7 +2,7 @@
 
 This is a local candidate on Supplementary develop, based on Core
 `aa45941e2d24194f29f480306bff39d27d7b4824` and Source
-`a4b7c4a043c6631aeec3a8c61df2b0856c57fad6`. Source is not yet protected-adopted.
+`5128b10bef931478541985d314293d879ea317be`. Source is not yet protected-adopted.
 `.lit/li259-supplementary-port.json` binds the candidate bytes and leaves
 `protected_source_commit` null. Historical LI-219 adoption receipts do not
 attest this preparation. No flag is enabled and no native acceptance is claimed.
@@ -43,3 +43,12 @@ then promotes only after live local validation. Promotion and revocation send th
 unchanged evidence summary with their title. Known stale publication states wait
 within five reads; identity or evidence mismatch fails immediately. No uncertain
 POST or PATCH is repeated, and no new AI request is introduced.
+
+Original handoff gaps stay GET-only pending within the sealed deadline. Election
+history is limited to that seed's recovery window; a cooldown and runtime reserve
+that cannot fit terminates before election, without blocking later valid seeds.
+Post-promotion drift emits exact binding-change diagnostic evidence with separate
+metadata, label and review validity flags. Pending-binding and details-URL PATCHes
+are sent once, then confirmed only by bounded GET readback. The bound pending
+check and native publisher-step history retain consumption across later attempts:
+an already attempted publisher never repeats an unconfirmed update or promotion.
