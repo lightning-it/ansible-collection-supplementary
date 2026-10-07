@@ -163,7 +163,9 @@ jobs:
           git add -- "${evidence_path}"
           recovery_tree="$(git write-tree)"
           recovery_head="$(
-            printf '%s\n' 'merge: preserve develop tree and main ancestry' |
+            printf '%s\n\n%s\n' \
+              'merge: preserve develop tree and main ancestry' \
+              'LI-219 one-time recovery boundary revision 2.' |
               GIT_AUTHOR_DATE="${merge_date}" GIT_COMMITTER_DATE="${merge_date}" \
                 git commit-tree "${recovery_tree}" \
                   -p "${develop_sha}" -p "${main_sha}"
@@ -186,7 +188,7 @@ jobs:
           create_backmerge_branch() {
             local branch_name="$1"
             local desired_head="$2"
-            local created encoded_ref remote_head upload_branch upload_encoded upload_head upload_nonce
+            local created encoded_ref remote_head updated upload_branch upload_encoded upload_head upload_nonce
 
             cleanup_upload_ref_best_effort() {
               local observed=''
@@ -211,7 +213,28 @@ jobs:
               gh api "repos/${REPOSITORY}/git/ref/${encoded_ref}" --jq .object.sha 2>/dev/null
             )"; then
               if [ "${remote_head}" != "${desired_head}" ]; then
-                echo "::error::Backmerge branch collision; refusing to overwrite existing history."
+                test "${remote_head}" = bc31e8c124d8cda8cf6a4ffb734652bc3b926b44
+                updated="$(gh api --method PATCH \
+                  "repos/${REPOSITORY}/git/refs/${encoded_ref}" \
+                  -f "sha=${desired_head}" -F force=true)"
+                jq -e \
+                  --arg ref "refs/heads/${branch_name}" \
+                  --arg sha "${desired_head}" '
+                    .ref == $ref and .object.sha == $sha
+                  ' <<<"${updated}" >/dev/null
+                for visibility_delay in 0 1 2 4 8; do
+                  if [ "${visibility_delay}" -gt 0 ]; then
+                    sleep "${visibility_delay}"
+                  fi
+                  remote_head="$(gh api \
+                    "repos/${REPOSITORY}/git/ref/${encoded_ref}" \
+                    --jq .object.sha)"
+                  if [ "${remote_head}" = "${desired_head}" ]; then
+                    echo 'Updated the exact recovery backmerge ref to revision 2.'
+                    return 0
+                  fi
+                done
+                echo '::error::Recovery backmerge ref update did not materialize.'
                 return 1
               fi
               echo 'Exact backmerge branch already exists; no update required.'
