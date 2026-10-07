@@ -2671,7 +2671,7 @@ jobs:
     name: Request protected verifier re-evaluation
     needs: verify-current-revision-policy
     if: >-
-      always() && (vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) && github.event.pull_request.user.type == 'User' &&
+      always() && (vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) &&
       needs.verify-current-revision-policy.result == 'success' &&
       github.event_name == 'pull_request_target' &&
       github.ref_protected && github.event.pull_request.draft == false &&
@@ -2683,7 +2683,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # Bot exemptions already carry deterministic evidence. Let their job
+      # succeed without a dispatch so the terminal skipped-check set is unique.
       - name: Dispatch protected event verifier locator
+        if: github.event.pull_request.user.type == 'User'
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
