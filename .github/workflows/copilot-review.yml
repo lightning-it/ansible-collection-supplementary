@@ -2604,7 +2604,7 @@ jobs:
       producer_run_id: ${{ github.run_id }}
 
   validate-protected-main-helper-pin:
-    name: ${{ (vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) && github.event.pull_request.user.type == 'User' && 'Inactive legacy main pin' || 'Validate protected main helper pin' }}
+    name: ${{ vars.LI219_EVENT_MODE == 'enabled' && github.event.pull_request.user.type == 'User' && 'Inactive legacy main pin' || 'Validate protected main helper pin' }}
     needs: verify-current-revision-policy
     if: >-
       !((vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) && github.event.pull_request.user.type == 'User') &&
