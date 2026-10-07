@@ -602,10 +602,12 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("read_labels_sha256() {", workflow)
         self.assertIn("pull-request metadata, labels, or review state changed during result publication", workflow)
-        self.assertIn("and .external_id == $external_id", workflow)
+        self.assertIn(".external_id == $external and .output.summary == $evidence", workflow)
         self.assertIn("${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}", workflow)
-        self.assertGreaterEqual(workflow.count('-f "details_url=${check_url}"'), 2)
-        self.assertIn('created="$(api_patch "repos/${REPOSITORY}/check-runs/${check_id}"', workflow)
+        self.assertIn('-f "details_url=${check_url}"', workflow)
+        self.assertIn('publication_details "${check_id}" "${external_id}" "${check_url}" || return 1', workflow)
+        self.assertIn('publication_read "${check_id}" "${external_id}" any "${url}" || return 1', workflow)
+        self.assertIn("A prior native publisher consumed every uncertain mutation", workflow)
 
     def test_release_app_is_excluded_except_bound_ancestry_backmerge(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")

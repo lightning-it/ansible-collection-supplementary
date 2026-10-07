@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    Prepare bounded native verifier recovery for classified hosted-runner acquisition failures,
+    retaining protected review and policy bindings and disabled rollout.

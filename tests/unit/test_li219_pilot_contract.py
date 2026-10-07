@@ -9,6 +9,9 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = {
+    ".github/workflows/review-infrastructure-retry.yml",
+    "scripts/native_verifier_retry.py",
+    "scripts/run-native-verifier-retry.sh",
     ".github/workflows/copilot-review.yml",
     ".github/workflows/copilot-review-refresh.yml",
     ".github/workflows/current-revision-rerun.yml",

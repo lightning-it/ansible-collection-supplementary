@@ -229,8 +229,6 @@ jobs:
           This file is embedded in protected workflows, never loaded from a PR checkout.
           The deferred record carries original authorization, not request consumption.
           """
-          # Exact JSON schema types deliberately reject bool as int and subclasses.
-          # pylint: disable=unidiomatic-typecheck
           import base64
           import datetime as dt
           import hashlib
@@ -250,10 +248,10 @@ jobs:
           BOT = "copilot-pull-request-reviewer[bot]"
           REVIEWERS = frozenset({BOT, "copilot-pull-request-reviewer"})
           FAILURE_MARKERS = (
-              "unabletoreviewthispullrequest", "cannotreviewthispullrequest",
+              "unabletoreviewthispullrequest", "cannotreviewthispullrequest", "cannotreviewanyfiles",
               "notabletoreviewthispullrequest", "wasnotabletoreviewthispullrequest",
               "nofilestoreview", "nofileswerereviewed",
-              "unabletoreviewanyfiles", "cannotreviewanyfiles",
+              "unabletoreviewanyfiles",
               "notabletoreviewanyfiles",
               "wasnotabletoreviewanyfiles",
               "quotaexhausted",
@@ -293,8 +291,7 @@ jobs:
           def normalize(value: str) -> str:
               """Match the protected gate's ASCII fold, contraction and Unicode whitespace rules."""
               ascii_lower = "".join(chr(ord(char) + 32) if "A" <= char <= "Z" else char for char in value)
-              expanded = ascii_lower.replace("can't", "cannot").replace("can\u2019t", "cannot")
-              expanded = expanded.replace("n't", " not").replace("n\u2019t", " not")
+              expanded = ascii_lower.replace("can't", "cannot").replace("can’t", "cannot").replace("n't", " not").replace("n’t", " not")
               return "".join(char for char in expanded if not char.isspace())
 
 
@@ -425,18 +422,9 @@ jobs:
                   require(sha(self.oid), "journal commit")
 
               def read(self, path):
-                  query = (
-                      'query($owner:String!,$name:String!,$oid:String!,$manifest:String!,$record:String!){repository(owner:'
-                      '$owner,name:$name){nameWithOwner source:object(expression:$oid){__typename oid} manifest:object(expr'
-                      'ession:$manifest){__typename ... on Blob{isTruncated byteSize text}} record:object(expression:$recor'
-                      'd){__typename ... on Blob{isTruncated byteSize text}}}}'
-                  )
-                  result = api("graphql", fields=[
-                      "-f", "query=" + query,
-                      "-f", f"owner={self.repo.split('/')[0]}", "-f", f"name={self.repo.split('/')[1]}",
-                      "-f", f"oid={self.oid}", "-f", f"manifest={self.oid}:manifest.json",
-                      "-f", f"record={self.oid}:{path}",
-                  ])
+                  result = api("graphql", fields=["-f", "query=query($owner:String!,$name:String!,$oid:String!,$manifest:String!,$record:String!){repository(owner:$owner,name:$name){nameWithOwner source:object(expression:$oid){__typename oid} manifest:object(expression:$manifest){__typename ... on Blob{isTruncated byteSize text}} record:object(expression:$record){__typename ... on Blob{isTruncated byteSize text}}}}",
+                              "-f", f"owner={self.repo.split('/')[0]}", "-f", f"name={self.repo.split('/')[1]}",
+                              "-f", f"oid={self.oid}", "-f", f"manifest={self.oid}:manifest.json", "-f", f"record={self.oid}:{path}"])
                   require("errors" not in result, "partial journal")
                   data = result["data"]["repository"]
                   require(data["nameWithOwner"] == self.repo and data["source"] == {"__typename": "Commit", "oid": self.oid}, "mixed journal")
@@ -447,18 +435,10 @@ jobs:
 
               def create(self, path, record):
                   require(self.read(path) is None, "record already exists")
-                  query = ("mutation($input:CreateCommitOnBranchInput!){"
-                           "createCommitOnBranch(input:$input){commit{oid parents(first:2){nodes{oid}}}}}")
-                  contents = base64.b64encode(json.dumps(record, sort_keys=True, separators=(",", ":")).encode()).decode()
-                  result = commit_response({
-                      "query": query,
-                      "variables": {"input": {
-                          "branch": {"repositoryNameWithOwner": self.repo, "branchName": "lit-review-operations"},
-                          "expectedHeadOid": self.oid,
-                          "message": {"headline": "Record LI-219 first-request continuation"},
-                          "fileChanges": {"additions": [{"path": path, "contents": contents}]},
-                      }},
-                  })
+                  result = commit_response({"query": "mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid parents(first:2){nodes{oid}}}}}",
+                      "variables": {"input": {"branch": {"repositoryNameWithOwner": self.repo, "branchName": "lit-review-operations"},
+                      "expectedHeadOid": self.oid, "message": {"headline": "Record LI-219 first-request continuation"},
+                      "fileChanges": {"additions": [{"path": path, "contents": base64.b64encode(json.dumps(record, sort_keys=True, separators=(",", ":")).encode()).decode()}]}}}})
                   require(isinstance(result, dict) and "errors" not in result, "uncertain CAS")
                   commit = result["data"]["createCommitOnBranch"]["commit"]
                   require(sha(commit["oid"]) and commit["oid"] != self.oid
@@ -639,8 +619,8 @@ jobs:
                       and all(sha(intent[field]) for field in ("base", "head", "source_sha")), "deferred intent")
               require(key == key_for(repo_id, intent["pr"], intent["head"]), "intent budget key")
               if intent["schema"] == 1:
-                  # Schema 1 authenticated the protected Default Develop source,
-                  # independently of its recorded PR base (including Main D != M).
+                  # Schema 1 always authenticated source_sha against the protected
+                  # default Develop controller, independently of the recorded PR base.
                   source_ref = "develop"
               else:
                   require(intent["source_ref"] == "develop", "original default controller ref")
@@ -683,8 +663,7 @@ jobs:
               rerun_key = f"li219-verifier-operation:v1:{intent['pr']}:{intent['base']}:{intent['head']}:{intent['owner_run']}"
               require(journal.read(record_path(rerun_key)) is None and journal.read(record_path(intent["operation"])) is None, "consumed operation")
               reviews = pages(f"repos/{repo}/pulls/{intent['pr']}/reviews")
-              require(not any(review.get("commit_id") == intent["head"] and review.get("user", {}).get("login") in REVIEWERS
-                              for review in reviews), "current-head review exists")
+              require(not any(review.get("commit_id") == intent["head"] and review.get("user", {}).get("login") in REVIEWERS for review in reviews), "current-head review exists")
               pending = api(f"repos/{repo}/pulls/{intent['pr']}/requested_reviewers")
               require(isinstance(pending["users"], list) and not any(item["login"] in REVIEWERS for item in pending["users"]), "review still pending")
               comments = pages(f"repos/{repo}/issues/{intent['pr']}/comments")
@@ -718,8 +697,8 @@ jobs:
               review_id = max(candidates, key=lambda item: (epoch(item["submitted_at"]), item["id"]))["id"]
               clean_old_review(repo, pr, review_id, head, owner["created_at"])
               unconsumed(repo, intent, journal)
-              return {"pr_number": str(pr), "owner_run": str(owner["id"]), "expected_head": head, "old_review": str(review_id),
-                      "resume_ref": intent["base_ref"]}
+              return {"resume_ref": intent["base_ref"], "pr_number": str(pr), "owner_run": str(owner["id"]),
+                      "expected_head": head, "old_review": str(review_id)}
 
 
           def defer():
@@ -734,9 +713,9 @@ jobs:
                       and event["pull_request"]["base"]["sha"] == pr["base"]["sha"] and event["pull_request"]["user"]["login"] == "litroc"
                       and all(event["pull_request"][side]["ref"] == pr[side]["ref"]
                               and event["pull_request"][side]["repo"]["full_name"] == repo for side in ("base", "head")), "event PR")
-              require(os.environ["GITHUB_WORKFLOW_REF"] == f"{repo}/{PRODUCER}@refs/heads/develop", "original default controller execution")
-              require(os.environ["GITHUB_REF"] == f"refs/heads/{pr['base']['ref']}"
+              require(os.environ["GITHUB_REF"] == "refs/heads/" + pr["base"]["ref"]
                       and os.environ["GITHUB_SHA"] == pr["base"]["sha"], "original PR base execution")
+              require(os.environ["GITHUB_WORKFLOW_REF"] == f"{repo}/{PRODUCER}@refs/heads/develop", "original default controller execution")
               require(repository(repo, repo_id, source, "develop") == source, "current default controller")
               require(repository(repo, repo_id, pr["base"]["sha"], pr["base"]["ref"]) == pr["base"]["sha"], "current PR base")
               key = key_for(repo_id, pr["number"], pr["head"]["sha"])
@@ -814,14 +793,9 @@ jobs:
               clean_old_review(repo, pr_number, review_id, intent["head"], owner["created_at"])
               unconsumed(repo, intent, journal)
               # Locator only; no input below grants consumer mutation authority.
-              resume_ref = intent["base_ref"]
-              api(f"repos/{repo}/actions/workflows/review-request-continuation.yml/dispatches", {
-                  "ref": resume_ref,
-                  "inputs": {
-                      "pr_number": str(pr_number), "owner_run": str(owner["id"]),
-                      "expected_head": intent["head"], "old_review": str(review_id),
-                  },
-              })
+              api(f"repos/{repo}/actions/workflows/review-request-continuation.yml/dispatches",
+                  {"ref": intent["base_ref"], "inputs": {"pr_number": str(pr_number), "owner_run": str(owner["id"]),
+                                                "expected_head": intent["head"], "old_review": str(review_id)}})
 
 
           def resume():
@@ -838,8 +812,7 @@ jobs:
               intent = journal.read(record_path(key, True))
               owner = validate_intent(intent, repo, repo_id, key)
               require(intent["owner_run"] == owner_id, "resume original owner")
-              resume_ref = intent["base_ref"]
-              resume_sha = intent["base"]
+              resume_ref, resume_sha = intent["base_ref"], intent["base"]
               require(os.environ["GITHUB_REF"] == f"refs/heads/{resume_ref}"
                       and os.environ["GITHUB_SHA"] == source == resume_sha
                       and os.environ["GITHUB_WORKFLOW_REF"] == f"{repo}/{WORKFLOW}@refs/heads/{resume_ref}", "resume protected source")
@@ -864,19 +837,18 @@ jobs:
 
           def native_resume_run(repo, run_id, source, intent, review_id, completed=True):
               run = api(f"repos/{repo}/actions/runs/{run_id}/attempts/1")
-              expected_title = (
-                  f"First review PR #{intent['pr']} head {intent['head']} "
-                  f"owner {intent['owner_run']} old review {review_id}"
-              )
-              require(type(run["id"]) is int and str(run["id"]) == run_id and type(run["run_attempt"]) is int and run["run_attempt"] == 1
+              resume_ref = intent["base_ref"]
+              resume_sha = intent["base"]
+              # Completed legacy receipts may describe the old Develop consumer at
+              # its own later protected source, not the original request source.
+              if completed and intent["schema"] == 1 and run.get("head_branch") == "develop":
+                  resume_ref, resume_sha = "develop", source
+              require(sha(source) and type(run["id"]) is int and str(run["id"]) == run_id and type(run["run_attempt"]) is int and run["run_attempt"] == 1
                       and run["event"] == "workflow_dispatch" and run["path"] == WORKFLOW and run["name"] == "Continue deferred first review request"
                       and run["repository"]["full_name"] == repo and run["head_repository"]["full_name"] == repo
-                      and run["head_sha"] == source
-                      and ((intent["schema"] == 1 and run["head_branch"] == "develop")
-                           or (run["head_branch"] == intent["base_ref"] and source == intent["base"]))
+                      and run["head_sha"] == source == resume_sha and run["head_branch"] == resume_ref
                       and run["actor"]["login"] == run["triggering_actor"]["login"] == "github-actions[bot]"
-                      and run["display_title"] == expected_title, "resume native run")
-              repository(repo, intent["repository_id"], source, run["head_branch"])
+                      and run["display_title"] == f"First review PR #{intent['pr']} head {intent['head']} owner {intent['owner_run']} old review {review_id}", "resume native run")
               if completed:
                   require(run["status"] == "completed" and run["conclusion"] == "success", "resume native completion")
               else:
@@ -888,7 +860,7 @@ jobs:
               """Read-only Required branch; invoked only after existing verifier-rerun proof."""
               repo, repo_id = context["repository"], context["repository_id"]
               require(set(record) == {"schema", "repository", "repository_id", "action", "operation", "claim_run", "claim_attempt",
-                                      "source_sha", "intent", "intent_commit", "old_review", "old_head"}
+                                     "source_sha", "intent", "intent_commit", "old_review", "old_head"}
                       and type(record["schema"]) is int and record["schema"] == 2 and record["repository"] == repo
                       and record["repository_id"] == repo_id and record["action"] == "request" and record["claim_attempt"] == "1"
                       and isinstance(record["claim_run"], str) and re.fullmatch(r"[1-9][0-9]*", record["claim_run"])
@@ -904,6 +876,7 @@ jobs:
               journal.oid = record["intent_commit"]
               require(journal.read(record_path(key, True)) == intent and journal.read(record_path(key)) is None, "pre-request intent snapshot")
               run = native_resume_run(repo, record["claim_run"], record["source_sha"], intent, record["old_review"])
+              repository(repo, repo_id, record["source_sha"], run["head_branch"])
               job = native_job(repo, run, "Resume deferred first review request", RESUME_STEPS)
               start, end = epoch(job["steps"][2]["started_at"]), epoch(job["steps"][2]["completed_at"])
               require(epoch(original["updated_at"]) <= start, "resume ordering")
@@ -2140,18 +2113,8 @@ jobs:
             done
           }
           api_patch() {
-            local attempt output
-            for attempt in $(seq 1 5); do
-              if output="$(gh api --method PATCH "$@")"; then
-                printf '%s' "${output}"
-                return 0
-              fi
-              if [ "${attempt}" -eq 5 ]; then
-                echo "Idempotent GitHub check update failed after five attempts." >&2
-                return 1
-              fi
-              sleep 5
-            done
+            # An uncertain write consumes this update; never repeat the PATCH.
+            gh api --method PATCH "$@"
           }
           read_metadata_revision() {
             local attempt output
@@ -2404,10 +2367,172 @@ jobs:
               pull_request_labels_sha256:$labels_sha256,
               review_id:(if $review_id == "" then null else $review_id end),
               review_path:$review_path,run_url:$run_url}')"
+          assert_bound_head_current() {
+            local live_pr
+            live_pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")" || return 1
+            jq -e \
+              --argjson number "${PR_NUMBER}" \
+              --arg base_ref "${EVENT_BASE_REF}" \
+              --arg base_sha "${EVENT_BASE}" \
+              --arg body "${EVENT_BODY}" \
+              --arg head_ref "${EVENT_HEAD_REF}" \
+              --arg head_repository "${EVENT_HEAD_REPOSITORY}" \
+              --arg head_sha "${EVENT_HEAD}" \
+              --arg repository "${REPOSITORY}" \
+              --arg title "${EVENT_TITLE}" '
+                .number == $number and .state == "open"
+                and .draft == false
+                and .title == $title
+                and (.body // "") == $body
+                and .base.repo.full_name == $repository
+                and .base.ref == $base_ref
+                and .base.sha == $base_sha
+                and .head.ref == $head_ref
+                and .head.sha == $head_sha
+                and .head.repo.full_name == $head_repository
+              ' <<<"${live_pr}" >/dev/null
+          }
+          authorize_publication_create() {
+            local previous
+            [ "${GITHUB_RUN_ATTEMPT}" = 1 ] && return 0
+            [ "${GITHUB_RUN_ATTEMPT}" = 2 ] || return 1
+            # A lost create response in attempt one must never authorize a
+            # second POST. Only a natively skipped publisher proves no effect.
+            previous="$(api_read --paginate --slurp \
+              "repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/1/jobs?filter=all&per_page=100")" || return 1
+            jq -e --argjson run "${GITHUB_RUN_ID}" --arg head "${EVENT_HEAD}" '
+              select(type == "array" and length > 0) |
+              [.[].jobs[]] as $jobs |
+              select(all(.[]; .total_count == ($jobs | length))
+                and ($jobs | map(.id) | unique | length) == ($jobs | length)) |
+              [$jobs[] | select(.name == "Verify current revision policy")] |
+              select(length == 1) | .[0] |
+              select(.run_id == $run and .run_attempt == 1 and .head_sha == $head
+                and .status == "completed") |
+              [.steps[] | select(.name == "Publish bound neutral result")] |
+              length == 1 and .[0].status == "completed" and .[0].conclusion == "skipped"
+            ' <<<"${previous}" >/dev/null
+          }
+          publication_inputs() {
+            publication_metadata_valid=true
+            publication_labels_valid=true
+            publication_review_valid=true
+            (assert_bound_head_current && test "$(read_metadata_revision)" = "${BOUND_LAST_EDITED_AT}") \
+              || publication_metadata_valid=false
+            test "$(read_labels_sha256)" = "${BOUND_LABELS_SHA256}" || publication_labels_valid=false
+            if [ "${external_kind}" = copilot ]; then
+              (validate_bound_review) || publication_review_valid=false
+            fi
+            test "${publication_metadata_valid}" = true && test "${publication_labels_valid}" = true \
+              && test "${publication_review_valid}" = true
+          }
+          publication_read() {
+            local check_id="$1" external_id="$2" conclusion="$3" url="${4:-}" prior="${5:-null}"
+            local snapshot attempt state
+            for attempt in $(seq 1 5); do
+              if snapshot="$(gh api "repos/${REPOSITORY}/check-runs/${check_id}")"; then
+                state="$(jq -er --argjson id "${check_id}" --arg head "${EVENT_HEAD}" \
+                  --arg external "${external_id}" --arg evidence "${evidence}" --arg title "${result_title}" \
+                  --arg conclusion "${conclusion}" --arg url "${url}" --argjson prior "${prior}" '
+                    def binding: [.id,.name,.app.id,.app.slug,.head_sha,.external_id,
+                                  .status,.conclusion,.output.title,.output.summary,.details_url];
+                    if .id != $id or .name != "Current revision review"
+                      or .app.id != 15368 or .app.slug != "github-actions"
+                      or .head_sha != $head then error("publication identity")
+                    elif .external_id == $external and .output.summary == $evidence and .status == "completed"
+                      and ((.conclusion == "failure" and .output.title == "Current revision publication pending")
+                        or (.conclusion == "success" and .output.title == $title)) then
+                      if ($conclusion == "any" or .conclusion == $conclusion)
+                        and ($url == "" or .details_url == $url) then "ready" else "stale" end
+                    elif $prior != null and binding == ($prior | binding) then "stale"
+                    else error("publication evidence") end
+                  ' <<<"${snapshot}")" || return 1
+                if [ "${state}" = ready ]; then publication_snapshot="${snapshot}"; return 0; fi
+              fi
+              if [ "${attempt}" -lt 5 ]; then sleep 5; fi
+            done
+            return 1
+          }
+          publication_details() {
+            local check_id="$1" external_id="$2" url="$3"
+            publication_read "${check_id}" "${external_id}" any || return 1
+            if [ "$(jq -r '.details_url // empty' <<<"${publication_snapshot}")" != "${url}" ]; then
+              if authorize_publication_create; then
+                gh api --method PATCH "repos/${REPOSITORY}/check-runs/${check_id}" \
+                  -f "details_url=${url}" >/dev/null || true
+              fi
+              publication_read "${check_id}" "${external_id}" any "${url}" || return 1
+            fi
+          }
+          revocation_read() {
+            local check_id="$1" prior_external="$2" external_id="$3" failure_evidence="$4" snapshot attempt state
+            for attempt in $(seq 1 5); do
+              if snapshot="$(gh api "repos/${REPOSITORY}/check-runs/${check_id}")"; then
+                state="$(jq -er --argjson id "${check_id}" --arg head "${EVENT_HEAD}" \
+                  --arg prior_external "${prior_external}" --arg prior_evidence "${evidence}" \
+                  --arg prior_title "${result_title}" --arg external "${external_id}" \
+                  --arg failure_evidence "${failure_evidence}" '
+                    if .id != $id or .name != "Current revision review"
+                      or .app.id != 15368 or .app.slug != "github-actions"
+                      or .head_sha != $head or .status != "completed" then error("revocation identity")
+                    elif .external_id == $external and .conclusion == "failure"
+                      and .output.title == "Current revision binding changed during publication"
+                      and .output.summary == $failure_evidence then "revoked"
+                    elif .external_id == $prior_external and .conclusion == "success"
+                      and .output.title == $prior_title and .output.summary == $prior_evidence then "stale"
+                    else error("revocation evidence") end
+                  ' <<<"${snapshot}")" || return 1
+                [ "${state}" != revoked ] || return 0
+              fi
+              if [ "${attempt}" -lt 5 ]; then sleep 5; fi
+            done
+            return 1
+          }
+          promote_publication() {
+            local check_id="$1" external_id="$2" failure_evidence failure_external
+            if ! authorize_publication_create; then
+              # A prior native publisher consumed every uncertain mutation.
+              # Only an already materialized success can complete on readback.
+              publication_read "${check_id}" "${external_id}" success || return 1
+              (publication_inputs) || return 1
+              return 0
+            fi
+            # A confirmed create or exact unknown-create readback grants only
+            # this existing check's promotion, never another create/AI request.
+            publication_read "${check_id}" "${external_id}" failure || return 1
+            (publication_inputs) || return 1
+            # An unknown PATCH outcome is resolved through GET, never a retry.
+            gh api --method PATCH "repos/${REPOSITORY}/check-runs/${check_id}" \
+              -f status=completed -f conclusion=success \
+              -f "completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              -f "output[title]=${result_title}" -f "output[summary]=${evidence}" >/dev/null || true
+            publication_read "${check_id}" "${external_id}" success || return 1
+            if publication_inputs; then return 0; fi
+            # Drift observed during promotion revokes only this exact owned
+            # result. Head drift must not prevent invalidating its old-head check.
+            publication_read "${check_id}" "${external_id}" success || return 1
+            failure_external="mlx90-current-revision:binding-change:v1:${PR_NUMBER}:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}"
+            failure_evidence="$(jq -cn --arg base "${EVENT_BASE}" --arg head "${EVENT_HEAD}" \
+              --argjson pr_number "${PR_NUMBER}" --argjson run_id "${GITHUB_RUN_ID}" --arg run_url "${run_url}" \
+              --arg reason "bound pull-request state did not remain valid during result publication" \
+              --argjson metadata_valid "${publication_metadata_valid}" --argjson labels_valid "${publication_labels_valid}" \
+              --argjson review_valid "${publication_review_valid}" '
+                {schema:4,base_sha:$base,head_sha:$head,pull_request_number:$pr_number,
+                 producer_run_id:$run_id,reason:$reason,run_url:$run_url,
+                 metadata_valid:$metadata_valid,labels_valid:$labels_valid,
+                 review_valid:$review_valid}')"
+            gh api --method PATCH "repos/${REPOSITORY}/check-runs/${check_id}" \
+              -f status=completed -f conclusion=failure -f "external_id=${failure_external}" \
+              -f 'output[title]=Current revision binding changed during publication' \
+              -f "output[summary]=${failure_evidence}" >/dev/null || true
+            revocation_read "${check_id}" "${external_id}" "${failure_external}" "${failure_evidence}" || return 1
+            return 1
+          }
           publish_once() {
-            local check_name="$1" external_id="$2" title="$3"
-            local checks named count check_id check_url completed_at created
-            local recovered recovery_attempt updated
+            local check_name="$1" external_id="$2"
+            local checks named count check_id check_url created
+            local recovered recovery_attempt
+            assert_bound_head_current || return $?
             read_named_checks() {
               checks="$(api_read --paginate --slurp \
                 "repos/${REPOSITORY}/commits/${EVENT_HEAD}/check-runs?check_name=$(jq -rn --arg value "${check_name}" '$value|@uri')&filter=all&per_page=100")" || return 1
@@ -2418,65 +2543,50 @@ jobs:
                   select(.app.id == 15368 and .app.slug == "github-actions")]' \
                 <<<"${checks}"
             }
-            named="$(read_named_checks)"
+            named="$(read_named_checks)" || return 1
             count="$(jq 'length' <<<"${named}")"
             if [ "${count}" -gt 1 ]; then
               echo "Multiple protected ${check_name} results exist for ${EVENT_HEAD}." >&2
               exit 1
             fi
             if [ "${count}" -eq 1 ]; then
-              if [[ "${EVENT_ACTION}" =~ ^(edited|labeled|unlabeled)$ ]]; then
-                reservation_kind="${EVENT_ACTION}"
-                if [ "${reservation_kind}" = edited ]; then
-                  reservation_kind=edit
-                fi
-                expected_reservation="mlx90-current-revision:metadata-${reservation_kind}:v1:${PR_NUMBER}:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}"
-                test "$(jq -r '.[0].external_id // empty' <<<"${named}")" = \
-                  "${expected_reservation}"
-              fi
-              check_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' <<<"${named}")"
+              check_id="$(jq -er '.[0].id | select(type == "number" and . > 0)' <<<"${named}")" || return 1
               check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}"
-              # A new bound producer must refresh the terminal timestamp. GitHub's
-              # strict status policy can otherwise retain the check as expected.
-              completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              updated="$(api_patch "repos/${REPOSITORY}/check-runs/${check_id}" \
-                -f status=completed \
-                -f conclusion=success \
-                -f "completed_at=${completed_at}" \
-                -f "details_url=${check_url}" \
-                -f "external_id=${external_id}" \
-                -f "output[title]=${title}" \
-                -f "output[summary]=${evidence}")"
-              jq -e \
-                --arg check_name "${check_name}" \
-                --arg completed_at "${completed_at}" \
-                --arg evidence "${evidence}" \
-                --arg external_id "${external_id}" \
-                --arg head "${EVENT_HEAD}" \
-                --arg url "${check_url}" \
-                --argjson check_id "${check_id}" '
-                  .id == $check_id
-                  and .name == $check_name
-                  and .app.id == 15368
-                  and .app.slug == "github-actions"
-                  and .head_sha == $head
-                  and .details_url == $url
-                  and .external_id == $external_id
-                  and .completed_at == $completed_at
-                  and .status == "completed"
-                  and .conclusion == "success"
-                  and .output.summary == $evidence
-                ' <<<"${updated}" >/dev/null
+              if ! jq -e --arg external "${external_id}" --arg evidence "${evidence}" '
+                .[0].external_id == $external and .[0].output.summary == $evidence
+                ' <<<"${named}" >/dev/null; then
+                if [[ "${EVENT_ACTION}" =~ ^(edited|labeled|unlabeled)$ ]]; then
+                  reservation_kind="${EVENT_ACTION}"
+                  if [ "${reservation_kind}" = edited ]; then reservation_kind=edit; fi
+                  expected_reservation="mlx90-current-revision:metadata-${reservation_kind}:v1:${PR_NUMBER}:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}"
+                  test "$(jq -r '.[0].external_id // empty' <<<"${named}")" = "${expected_reservation}" || return 1
+                fi
+                # The first publisher owns this one binding update. A later
+                # attempted publisher only observes the consumed pending state.
+                if authorize_publication_create; then
+                  gh api --method PATCH "repos/${REPOSITORY}/check-runs/${check_id}" \
+                    -f status=completed -f conclusion=failure \
+                    -f "completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                    -f "details_url=${check_url}" -f "external_id=${external_id}" \
+                    -f 'output[title]=Current revision publication pending' \
+                    -f "output[summary]=${evidence}" >/dev/null || true
+                fi
+                publication_read "${check_id}" "${external_id}" failure "${check_url}" \
+                  "$(jq -c '.[0]' <<<"${named}")" || return 1
+              fi
+              publication_details "${check_id}" "${external_id}" "${check_url}" || return 1
               printf '%s' "${check_id}"
               return
             fi
+            assert_bound_head_current || return $?
+            authorize_publication_create || return 1
             if ! created="$(gh api --method POST "repos/${REPOSITORY}/check-runs" \
                 -f name="${check_name}" \
                 -f head_sha="${EVENT_HEAD}" \
                 -f status=completed \
-                -f conclusion=success \
+                -f conclusion=failure \
                 -f external_id="${external_id}" \
-                -f "output[title]=${title}" \
+                -f 'output[title]=Current revision publication pending' \
                 -f "output[summary]=${evidence}")"; then
               # Never retry a create blindly: GitHub can materialize the check
               # even when the client receives a non-success response. Recover
@@ -2485,7 +2595,7 @@ jobs:
               for recovery_attempt in $(seq 1 5); do
                 echo "Recovering protected check creation outcome (attempt ${recovery_attempt}/5)." >&2
                 sleep 5
-                named="$(read_named_checks)"
+                named="$(read_named_checks)" || return 1
                 recovered="$(jq -c \
                   --arg external_id "${external_id}" \
                   --arg head "${EVENT_HEAD}" '
@@ -2510,30 +2620,15 @@ jobs:
             fi
             check_id="$(jq -er '.id | select(type == "number" and . > 0)' <<<"${created}")"
             check_url="${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}"
-            created="$(api_patch "repos/${REPOSITORY}/check-runs/${check_id}" \
-              -f "details_url=${check_url}")"
-            jq -e \
-              --arg evidence "${evidence}" \
-              --arg external_id "${external_id}" \
-              --arg head "${EVENT_HEAD}" \
-              --arg url "${check_url}" \
-              --argjson check_id "${check_id}" '
-                .id == $check_id
-                and .app.id == 15368
-                and .app.slug == "github-actions"
-                and .head_sha == $head
-                and .details_url == $url
-                and .external_id == $external_id
-                and .status == "completed"
-                and .conclusion == "success"
-                and .output.summary == $evidence
-              ' <<<"${created}" >/dev/null
+            publication_read "${check_id}" "${external_id}" failure || return 1
+            publication_details "${check_id}" "${external_id}" "${check_url}" || return 1
             printf '%s' "${check_id}"
           }
+          assert_bound_head_current
           published_check_id="$(publish_once \
             'Current revision review' \
             "mlx90-current-revision:${external_kind}:v6:${PR_NUMBER}:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}" \
-            "${result_title}")"
+            "${result_title}")" || exit $?
           [[ "${published_check_id}" =~ ^[1-9][0-9]*$ ]]
           final_last_edited_at=''
           final_labels_sha256=''
@@ -2581,6 +2676,8 @@ jobs:
             echo "Pull-request metadata, labels, or review state changed during result publication." >&2
             exit 1
           fi
+          promote_publication "${published_check_id}" \
+            "mlx90-current-revision:${external_kind}:v6:${PR_NUMBER}:${GITHUB_RUN_ID}:${EVENT_BASE}:${EVENT_HEAD}" || exit $?
 
   request-protected-verifier-reevaluation-develop:
     name: ${{ (vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) && github.event.pull_request.user.type == 'User' && 'Inactive legacy develop handoff' || 'Request protected verifier re-evaluation' }}

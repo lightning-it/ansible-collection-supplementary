@@ -20,10 +20,11 @@
       "target_path": ".github/workflows/current-revision-rerun.yml",
       "source_sha256": "2febd480773ecbe19840c4c22bf147cd1fbe77abfe0c23b66b2f07a727e58c8f",
       "source_blob": "86112dc304cbba9e2837e022605eff9f9ff03c97",
-      "target_blob": "58e4c0003def6eab89663a67996a7a550f682673",
-      "target_sha256": "fe0845c8e80c77b4284fdf3f5fdcb488ff4aa0f6e94c992011e74aec4c3b67fe",
+      "target_blob": "d583b05f64e5b5c8422a444507f23525ad7c1eac",
+      "target_sha256": "25013246f828c79fb35486b1aa373ac537d28adeab5162fde76bc7e8208891e4",
       "mode": "adapted-local",
-      "target_mode": "0644"
+      "target_mode": "0644",
+      "adaptation": "Local LI-259 preparation; candidate provenance in li259-supplementary-port.json; protected adoption pending."
     },
     {
       "source_path": "default/.github/workflows/review-event-reconcile.yml",
@@ -70,10 +71,11 @@
       "target_path": "scripts/review_content_markers.py",
       "source_sha256": "00e73bad77fc2b7eaf3182f302f375a981deb6578a21f219ff410d52d62daf09",
       "source_blob": "617ac13543c358f1abb44da7c7885907abd8ab4c",
-      "target_blob": "08ad1f790c88ec25f52e25d338c35e262d4dfdf5",
-      "target_sha256": "0f3c112d70c16211a6947e593f6f6a315b22f5e8308dd76827e5d7de1e076dd8",
+      "target_blob": "fe7dd1d080cdf495b590fc15b5cf73923bb7d2f6",
+      "target_sha256": "c74034b84d22704581064bdd410d7afb7012c509694da66246d19ec5db17f5db",
       "mode": "adapted-local",
-      "target_mode": "0644"
+      "target_mode": "0644",
+      "adaptation": "Content classifier AST parity with canonical LI-259 proof; no classification change."
     },
     {
       "source_path": "scripts/verify-dot-github-current-revision.py",
@@ -90,10 +92,11 @@
       "target_path": ".github/workflows/copilot-review.yml",
       "source_sha256": "1bdbb4bd62ebda00ef689ce063e6b74299d9b1ee067c1c972730cd1212114b98",
       "source_blob": "9f8d54e95bccffd7de815826ea8bba1bdab66f81",
-      "target_blob": "5eba533ca80d4ba1385bdc9b99290e813ef61831",
-      "target_sha256": "89123e40f5566f1af9a4f493f6f42ba6501a056465a4af9d8aaf2130cc74d444",
+      "target_blob": "3822d4d2fb85023ba7534ae86fd72046c0d5b24a",
+      "target_sha256": "2bce344229639df839e0558ecca129e4e47ef030bd2be37b8c9c673e9ad0fad8",
       "mode": "adapted-local",
-      "target_mode": "0644"
+      "target_mode": "0644",
+      "adaptation": "Local LI-259 final native-review corrections from Source 5128b10bef931478541985d314293d879ea317be; protected coupled adoption pending."
     },
     {
       "source_path": "default/scripts/lit-push-ready.py",
@@ -110,30 +113,61 @@
       "target_path": ".github/workflows/review-request-continuation.yml",
       "source_sha256": "5d5de0d48ab51f2fb742aaed82fef9eb06f5d05aa5c5cbbbf4ee21fd27c29584",
       "source_blob": "ae826a6b3efa7df6bec8e1b567112605a92d8815",
-      "target_blob": "b737349048a6290317a704092c8ef011fca20736",
-      "target_sha256": "d682a4d72847fbd74390a9abd8eea252218c5b89d19b1044b9b0873ab78216f9",
+      "target_blob": "c07e2f4f5e16ecdc5327e3309200bfbd3f979c53",
+      "target_sha256": "a3dc819738ad06f533edd7f4575cd11678f05b51fd20bd75f525017227e29b84",
       "mode": "adapted-local",
-      "target_mode": "0644"
+      "target_mode": "0644",
+      "adaptation": "Local LI-259 preparation; candidate provenance in li259-supplementary-port.json; protected adoption pending."
     },
     {
       "source_path": "default/scripts/review_request_continuation.py",
       "target_path": "scripts/review_request_continuation.py",
       "source_sha256": "29014fe17a418763f294e9724354809abf56d051333e690768b5d17cce24452f",
       "source_blob": "da7bba5c5faba9f7abfe5285f3f8a5a3c561ff17",
-      "target_blob": "ff1c7a9f0f8a4bc68400ad93f4667dd0ddfcb079",
-      "target_sha256": "44f52b8205008321c1c37212562d7f1b5bb50569602424fc047a5a92fc17ecf9",
+      "target_blob": "3f6780a738103630f44a1fc49b904da256242a11",
+      "target_sha256": "5a89febc2ed9e381f73fdfc395f7d2bdb6f1ab8699c8ffff521d7b3013c96ae1",
       "mode": "adapted-local",
-      "target_mode": "0644"
+      "target_mode": "0644",
+      "adaptation": "Local LI-259 preparation; candidate provenance in li259-supplementary-port.json; protected adoption pending."
     },
     {
       "source_path": "default/scripts/review_request_provenance.py",
       "target_path": "scripts/review_request_provenance.py",
       "source_sha256": "742d38d26c580c7220acb03462c27146327608ea964915efad9d0be2b0f6d8f3",
       "source_blob": "17ae4e232221846a4865fa2fe728caa85b33b45c",
-      "target_blob": "c774f32c950e87baa576712e41fad5bb7098c6b2",
-      "target_sha256": "8952688c647d6960cbe6e5715cd127fe6b8121d960895d8136819745180cba50",
+      "target_blob": "a9ee3493cb1dfdb53b4879bece73586743a9af2a",
+      "target_sha256": "5621bdba718e5fb37ad3622dd0772b8c93ce42be82b6c091391dc05544b84185",
       "mode": "adapted-local",
-      "target_mode": "0644"
+      "target_mode": "0644",
+      "adaptation": "Content classifier AST parity with canonical LI-259 proof; no classification change."
+    },
+    {
+      "source_path": "default/scripts/native_verifier_retry.py",
+      "target_path": "scripts/native_verifier_retry.py",
+      "source_sha256": "5e1908c75b99ab195f523599d751c8f5c2384216172f3523732389871fc98573",
+      "source_blob": "0d5483278f9cc25a2a637ccd4f1bd57caf24e84b",
+      "target_blob": "0d5483278f9cc25a2a637ccd4f1bd57caf24e84b",
+      "target_sha256": "5e1908c75b99ab195f523599d751c8f5c2384216172f3523732389871fc98573",
+      "mode": "byte-identical",
+      "adaptation": "Local LI-259 final native-review corrections from Source 5128b10bef931478541985d314293d879ea317be; protected coupled adoption pending."
+    },
+    {
+      "source_path": "default/scripts/run-native-verifier-retry.sh",
+      "target_path": "scripts/run-native-verifier-retry.sh",
+      "source_sha256": "afcff9889dcffb32a101aa2bfe8f9770c0f30bcab56e1261da0b061cb5b4a987",
+      "source_blob": "1e3908021aa747a529931a8ef6741114d1f592c4",
+      "target_blob": "1e3908021aa747a529931a8ef6741114d1f592c4",
+      "target_sha256": "afcff9889dcffb32a101aa2bfe8f9770c0f30bcab56e1261da0b061cb5b4a987",
+      "mode": "byte-identical"
+    },
+    {
+      "source_path": "default/.github/workflows/review-infrastructure-retry.yml",
+      "target_path": ".github/workflows/review-infrastructure-retry.yml",
+      "source_sha256": "861f741f197c30805b9e8565fd085968657b8a3c3a4ada828196586fae81a6d6",
+      "source_blob": "21c0d4d54f06ec256fdf56c3b44b77e46556bfc2",
+      "target_blob": "21c0d4d54f06ec256fdf56c3b44b77e46556bfc2",
+      "target_sha256": "861f741f197c30805b9e8565fd085968657b8a3c3a4ada828196586fae81a6d6",
+      "mode": "byte-identical"
     }
   ],
   "prior_preparation_source_commit": "3eff591b19da313ea501c4962f1452d3f35545e6",
@@ -179,8 +213,8 @@
   "local_preparation_source_commit": "ab6dd8bec5958508b8b4d66920d08d3dd8251e65",
   "local_preparation_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
   "final_protected_source_agents_sha256": "00aa090f2a662cbbe9704bf2fa94a455b4107127f850694e8ec68dd19fe4e779",
-  "final_target_agents_sha256": "39cf215f6d21de4b6116e5eac43062ee561a697ecfb7e08661995315ddb2fb0b",
-  "final_target_copilot_sha256": "d6fce2e475dd88e941155058af01e0449b3c0d2b6f68f9d877657028080e3102",
+  "final_target_agents_sha256": "165e1d43f067ea158ea6212f583c6e21b5ae1acbe233dfb471988d19e40737bb",
+  "final_target_copilot_sha256": "48fba7e3acd3124ecd88ed57ae71c44482c61ee1ecceeba0090fb123703b8284",
   "final_acceptance_status": "PENDING_INDEPENDENT_AND_NATIVE_PORT_ACCEPTANCE",
   "protected_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
   "protected_source_receipt": {
