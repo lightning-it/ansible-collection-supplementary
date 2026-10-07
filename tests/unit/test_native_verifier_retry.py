@@ -327,7 +327,16 @@ class NativeRetryTests(unittest.TestCase):
                                 "ref": "refs/heads/lit-review-operations",
                             }
                         ),
-                        "record": self.blob(self.snapshots[oid].get(path)),
+                        "record": self.blob(
+                            {
+                                "schema": 1,
+                                "repository": self.repo,
+                                "repository_id": self.repo_id,
+                                "ref": "refs/heads/lit-review-operations",
+                            }
+                            if path == "manifest.json"
+                            else self.snapshots[oid].get(path)
+                        ),
                     }
                 }
             }
@@ -343,6 +352,18 @@ class NativeRetryTests(unittest.TestCase):
             return {"status": "identical"}
         if route == prefix + "/git/ref/heads/lit-review-operations":
             return {"ref": "refs/heads/lit-review-operations", "object": {"type": "commit", "sha": self.oid}}
+        if route.startswith(prefix + "/git/commits/"):
+            oid = route.rsplit("/", 1)[1]
+            return {"sha": oid, "tree": {"sha": oid}}
+        if route.startswith(prefix + "/git/trees/"):
+            oid = route.rsplit("/", 1)[1].split("?")[0]
+            return {
+                "sha": oid,
+                "truncated": False,
+                "tree": [
+                    {"path": path, "type": "blob", "mode": "100644", "sha": "a" * 40} for path in self.snapshots[oid]
+                ],
+            }
         if route == prefix + "/pulls/23":
             return copy.deepcopy(self.pr)
         if route == prefix + "/actions/runs/99":
@@ -364,9 +385,10 @@ class NativeRetryTests(unittest.TestCase):
         parsed, query = urlsplit(route), parse_qs(urlsplit(route).query)
         bare = parsed.path[len(prefix) :]
         if bare == "/pulls":
-            return [copy.deepcopy(self.pr)]
+            return [copy.deepcopy(self.pr)] if self.pr["state"] == "open" else []
         if bare == "/actions/runs":
             rows, key = [self.run] + ([] if self.extra_run is None else [self.extra_run]), "workflow_runs"
+            rows = [run for run in rows if not query.get("head_sha") or run["head_sha"] == query["head_sha"][0]]
         elif bare == "/actions/workflows/6/runs":
             rows, key = self.scheduler_runs, "workflow_runs"
         elif bare.startswith("/actions/runs/199/attempts/") and bare.endswith("/jobs"):
@@ -494,6 +516,53 @@ class NativeRetryTests(unittest.TestCase):
         self.pr.update(title="Edited title", body="Edited body")
         self.last_edited_at = self.at(100)
         self.pr.update(original)
+
+    def test_reconcile_observed_pr_drift_never_revives_after_restore(self):
+        for drift in ("head", "draft", "closed"):
+            with self.subTest(drift=drift):
+                self.setUp()
+                self.prime()
+                original = copy.deepcopy(self.pr)
+                if drift == "head":
+                    self.pr["head"]["sha"] = "e" * 40
+                elif drift == "draft":
+                    self.pr["draft"] = True
+                else:
+                    self.pr["state"] = "closed"
+                self.reconcile()
+                self.assertEqual("contract-drift", self.snapshots[self.oid]["li259/99/terminal.json"]["state"])
+                writes = len(self.writes)
+                self.pr = original
+                self.reconcile()
+                self.assertEqual(writes, len(self.writes))
+                self.assertEqual([], self.effects)
+
+    def test_seed_inventory_rejects_incomplete_duplicate_or_unbound_trees_before_effects(self):
+        for corruption in ("truncated", "duplicate", "sha", "mode"):
+            with self.subTest(corruption=corruption):
+                self.setUp()
+                self.prime()
+                original = self.api
+
+                def malformed(route, payload=None, fields=(), original=original, corruption=corruption):
+                    result = original(route, payload, fields)
+                    if "/git/trees/" in route:
+                        if corruption == "truncated":
+                            result["truncated"] = True
+                        elif corruption == "duplicate":
+                            result["tree"] *= 2
+                        elif corruption == "sha":
+                            result["sha"] = "f" * 40
+                        else:
+                            result["tree"][0]["mode"] = "120000"
+                    return result
+
+                writes = len(self.writes)
+                with patch.object(RETRY.proof, "api", side_effect=malformed):
+                    with self.assertRaises(RETRY.GlobalReadFailure):
+                        self.reconcile()
+                self.assertEqual(writes, len(self.writes))
+                self.assertEqual([], self.effects)
 
     def test_edit_revert_before_seal_rejects_old_neutral_without_write(self):
         self.edit_and_revert()
@@ -1124,7 +1193,7 @@ class PortNativeRetryTests(NativeRetryTests):
 class WorkflowCouplingTests(unittest.TestCase):
     def test_port_binds_exact_candidate_bytes_and_keeps_activation_pending(self):
         manifest = json.loads((ROOT / ".lit/li259-supplementary-port.json").read_text())
-        self.assertEqual("89a8f8afb1e2345a1a0471973875ab6d66751bbc", manifest["source_candidate"])
+        self.assertEqual("a4b7c4a043c6631aeec3a8c61df2b0856c57fad6", manifest["source_candidate"])
         self.assertEqual("aa45941e2d24194f29f480306bff39d27d7b4824", manifest["core_candidate"])
         self.assertIsNone(manifest["protected_source_commit"])
         self.assertEqual("disabled-until-coupled-protected-adoption", manifest["activation"])

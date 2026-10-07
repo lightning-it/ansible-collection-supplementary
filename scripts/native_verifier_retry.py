@@ -643,6 +643,36 @@ def receiver(repo, repo_id, run_id, attempt, now):
     require(utc_now().timestamp() <= proof.epoch(seed["created_at"]) + POLICY["total_seconds"], "final receiver deadline")
 
 
+def active_seed_runs(repo, repo_id):
+    """Inventory the immutable journal, including closed/draft/old-head PRs."""
+    try:
+        journal = proof.Journal(repo, repo_id)
+        journal.read("manifest.json")  # Authenticate the journal repository binding.
+        commit = api(f"repos/{repo}/git/commits/{journal.oid}")
+        proof.require(commit["sha"] == journal.oid and proof.sha(commit["tree"]["sha"]), "journal tree binding")
+        tree_sha = commit["tree"]["sha"]
+        tree = api(f"repos/{repo}/git/trees/{tree_sha}?recursive=1")
+        proof.require(tree["sha"] == tree_sha and tree["truncated"] is False
+                      and isinstance(tree["tree"], list) and len(tree["tree"]) <= 10000, "journal tree inventory")
+        entries = {}
+        for entry in tree["tree"]:
+            path = entry["path"]
+            proof.require(isinstance(path, str) and path and path not in entries
+                          and proof.sha(entry["sha"]), "journal tree entry")
+            entries[path] = entry
+        runs = []
+        for path, entry in entries.items():
+            match = re.fullmatch(r"li259/([1-9][0-9]*)/seed\.json", path)
+            if match:
+                proof.require(entry["type"] == "blob" and entry["mode"] == "100644", "journal seed entry")
+                if f"li259/{match[1]}/terminal.json" not in entries:
+                    runs.append(int(match[1]))
+        proof.require(len(runs) < 1000, "active seed inventory limit")
+        return sorted(runs)
+    except (KeyError, TypeError, ValueError, OSError, subprocess.SubprocessError) as exc:
+        raise GlobalReadFailure("active seed inventory failed") from exc
+
+
 def main():
     if os.environ.get("LI259_INFRA_RETRY") != "enabled" or os.environ.get("LI219_EVENT_MODE") != "enabled":
         require(sys.argv[1] != "receiver", "receiver feature disabled")
@@ -655,15 +685,10 @@ def main():
     elif mode == "receiver":
         receiver(repo, repo_id, int(os.environ["GITHUB_RUN_ID"]), int(os.environ["GITHUB_RUN_ATTEMPT"]), now)
     elif mode == "reconcile":
-        # Bounded native inventories; never infer authority from scheduler payload.
-        visited = set()
-        for pr in proof.pages(f"repos/{repo}/pulls?state=open"):
-            if pr["draft"] or pr["user"]["login"] != "litroc":
-                continue
-            for run in proof.pages(f"repos/{repo}/actions/runs?head_sha={pr['head']['sha']}", "workflow_runs"):
-                if run["path"] == RECEIVER and run["run_attempt"] >= 2 and run["id"] not in visited:
-                    visited.add(run["id"])
-                    print(f"LI-259 run {run['id']}: {recover(repo, repo_id, run['id'], os.environ['GITHUB_WORKFLOW_SHA'], now)}")
+        # Seed authority survives PR listing filters. Observe drift once and
+        # close it durably before an old head or ready/open state can return.
+        for run_id in active_seed_runs(repo, repo_id):
+            print(f"LI-259 run {run_id}: {recover(repo, repo_id, run_id, os.environ['GITHUB_WORKFLOW_SHA'], now)}")
     else:
         raise ValueError("unknown mode")
 

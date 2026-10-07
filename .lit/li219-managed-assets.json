@@ -66,7 +66,7 @@
     {
       "path": ".github/workflows/copilot-review.yml",
       "category": "local-required",
-      "sha256": "ca333a00c1e6094b042f9be4bf75bc916611a4b96113bb5a99b32d9b24fa7c94",
+      "sha256": "b9ba482a6cc4a3d27b7ff0584a7d947e6912cc401f7b8cfad1a306dd85b1184e",
       "owner": "ansible-collection-supplementary",
       "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
     },
@@ -105,7 +105,7 @@
       "path": "scripts/native_verifier_retry.py",
       "category": "central-managed",
       "source": "shared-assets-lit/default/scripts/native_verifier_retry.py",
-      "sha256": "9812af28c08e3a49a00494fa248f9d3c125cc964b15dc1dbc68e8e2dd135ac91"
+      "sha256": "064e1123a0a167330598ea447f36c4bfa871f75d53ec78171457f6e042170a69"
     },
     {
       "path": "scripts/run-native-verifier-retry.sh",

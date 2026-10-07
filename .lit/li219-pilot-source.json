@@ -92,11 +92,11 @@
       "target_path": ".github/workflows/copilot-review.yml",
       "source_sha256": "1bdbb4bd62ebda00ef689ce063e6b74299d9b1ee067c1c972730cd1212114b98",
       "source_blob": "9f8d54e95bccffd7de815826ea8bba1bdab66f81",
-      "target_blob": "6657f6d1bf55713a1dadf8460b602f1526860b8e",
-      "target_sha256": "ca333a00c1e6094b042f9be4bf75bc916611a4b96113bb5a99b32d9b24fa7c94",
+      "target_blob": "17d7111ba39d9a3199e455da51230db7dfbf88ad",
+      "target_sha256": "b9ba482a6cc4a3d27b7ff0584a7d947e6912cc401f7b8cfad1a306dd85b1184e",
       "mode": "adapted-local",
       "target_mode": "0644",
-      "adaptation": "Local LI-259 preparation; candidate provenance in li259-supplementary-port.json; protected adoption pending."
+      "adaptation": "Local LI-259 native-review corrections from Source a4b7c4a043c6631aeec3a8c61df2b0856c57fad6; protected coupled adoption pending."
     },
     {
       "source_path": "default/scripts/lit-push-ready.py",
@@ -144,11 +144,12 @@
     {
       "source_path": "default/scripts/native_verifier_retry.py",
       "target_path": "scripts/native_verifier_retry.py",
-      "source_sha256": "9812af28c08e3a49a00494fa248f9d3c125cc964b15dc1dbc68e8e2dd135ac91",
-      "source_blob": "46ed24b8724be42968a8d4d6dfeaa45e5f38178b",
-      "target_blob": "46ed24b8724be42968a8d4d6dfeaa45e5f38178b",
-      "target_sha256": "9812af28c08e3a49a00494fa248f9d3c125cc964b15dc1dbc68e8e2dd135ac91",
-      "mode": "byte-identical"
+      "source_sha256": "064e1123a0a167330598ea447f36c4bfa871f75d53ec78171457f6e042170a69",
+      "source_blob": "22cc3e363c2a70325b58636dea89d5afbeabdb30",
+      "target_blob": "22cc3e363c2a70325b58636dea89d5afbeabdb30",
+      "target_sha256": "064e1123a0a167330598ea447f36c4bfa871f75d53ec78171457f6e042170a69",
+      "mode": "byte-identical",
+      "adaptation": "Local LI-259 native-review corrections from Source a4b7c4a043c6631aeec3a8c61df2b0856c57fad6; protected coupled adoption pending."
     },
     {
       "source_path": "default/scripts/run-native-verifier-retry.sh",
