@@ -223,6 +223,9 @@ class KeycloakBrokerCatalogTests(unittest.TestCase):
             realm_task["loop"],
             "{{ keycloak_cac_realm_reconciliation_catalog | default(keycloak_cac_realms) }}",
         )
+        readme = (ROLE / "README.md").read_text()
+        self.assertIn("reusing direct realm\nreconciliation", readme)
+        self.assertNotIn("plan/reconciliation path", readme)
         binding = yaml.safe_load((ROLE / "tasks/cac_21_realm_flow_bindings.yml").read_text())[0]
         self.assertEqual(binding["ansible.builtin.include_tasks"], "cac_11_realms.yml")
         self.assertEqual(
