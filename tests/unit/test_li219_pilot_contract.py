@@ -103,8 +103,12 @@ class PilotContractTests(unittest.TestCase):
             jobs["request-protected-verifier-reevaluation-main"]["uses"],
         )
         event = jobs["dispatch-event-verifier-reevaluation"]
-        self.assertIn("user.type == 'User'", event["if"])
+        self.assertNotIn("user.type == 'User'", event["if"])
         self.assertIn("LI219_EVENT_MODE", event["if"])
+        self.assertEqual(
+            "github.event.pull_request.user.type == 'User'",
+            event["steps"][0]["if"],
+        )
         self.assertIn("inputs[producer_run_attempt]", event["steps"][0]["run"])
         verifier = jobs["verify-current-revision-policy"]
         self.assertIn("user.login != 'lightning-it-release-automation[bot]'", verifier["if"])
