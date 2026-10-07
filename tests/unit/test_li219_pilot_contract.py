@@ -26,6 +26,21 @@ ASSETS = {
 
 
 class PilotContractTests(unittest.TestCase):
+    def test_source_adoption_receipt_is_portable_and_content_bound_in_all_manifests(self):
+        receipts = []
+        for name, key in (
+            ("li219-gateway-source.json", "protected_source_receipt"),
+            ("li219-pilot-source.json", "protected_source_receipt"),
+            ("li219-protected-adoption.json", "source_receipt"),
+        ):
+            manifest = json.loads((ROOT / ".lit" / name).read_text())
+            receipt = manifest[key]
+            self.assertEqual({"id", "sha256"}, set(receipt))
+            self.assertRegex(receipt["sha256"], r"^[0-9a-f]{64}$")
+            self.assertEqual("sha256:" + receipt["sha256"], receipt["id"])
+            receipts.append(receipt)
+        self.assertTrue(all(receipt == receipts[0] for receipt in receipts))
+
     def test_scoped_inventory_binds_exact_assets_without_fleet_admission(self):
         inventory = json.loads((ROOT / ".lit/li219-managed-assets.json").read_text())
         source = json.loads((ROOT / ".lit/li219-pilot-source.json").read_text())

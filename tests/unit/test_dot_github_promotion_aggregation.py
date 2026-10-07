@@ -132,6 +132,7 @@ def verification_environment(workflow_sha: str) -> dict[str, str]:
         "EVENT_BASE_REF": "main",
         "EVENT_AUTHOR": MODULE.RELEASE_APP_LOGIN,
         "EVENT_AUTHOR_TYPE": "Bot",
+        "EVENT_SENDER": MODULE.RELEASE_APP_LOGIN,
         "PR_NUMBER": str(PR_NUMBER),
         "GITHUB_SERVER_URL": "https://github.com",
         "WORKFLOW_REF": MODULE.SOURCE_WORKFLOW_REF,

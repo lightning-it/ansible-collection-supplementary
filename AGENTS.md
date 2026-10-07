@@ -136,7 +136,9 @@ POST also must not publish an accepted marker; a consumed claim remains consumed
 New deferred eligibility uses typed intent schema2: source_ref/source_sha bind the original
 protected default develop execution, while base_ref/base bind the independent PR target.
 The request receipt keeps the later base-controller source_sha separate from its nested
-original intent. Legacy schema1 is readable only for its original develop/base-equal facts.
+original intent. Legacy schema1 binds its original protected default develop source independently
+of the PR base. New continuations use the exact PR base controller for both schemas;
+historical schema1 receipts may bind an authentic protected develop resume source.
 Exact live controller and PR-base fences apply before/after eligibility CAS, and before
 request CAS and after CAS/before POST; unknown writes remain consumed/readback-only.
 Ordinary human fork verification/handoff/refresh preserves native head repository identity;

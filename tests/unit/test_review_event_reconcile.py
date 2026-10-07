@@ -30,6 +30,7 @@ class ReviewEventTests(unittest.TestCase):
                 "Current revision review gate",
                 "Protected current-revision evidence verifier",
                 "Protected dot-github current-revision verifier",
+                "Refresh Copilot review gate",
             },
             set(events["workflow_run"]["workflows"]),
         )
@@ -46,6 +47,120 @@ class ReviewEventTests(unittest.TestCase):
         mirror = ROOT / "default/.github/workflows/review-event-reconcile.yml"
         if mirror.exists():
             self.assertEqual(path.read_bytes(), mirror.read_bytes())
+
+    def test_review_completion_wakeup_is_scoped_to_review_events_and_loop_free(self):
+        import json
+        from types import SimpleNamespace as NS
+
+        import yaml
+
+        workflow = yaml.safe_load((ROOT / ".github/workflows/review-event-reconcile.yml").read_text())
+        events = workflow.get("on", workflow.get(True))
+        expression = " ".join(workflow["jobs"]["reconcile"]["if"].replace("&&", " and ").replace("||", " or ").split())
+        missing_path = object()
+
+        class WorkflowRun(NS):
+            def __getattr__(self, _name):
+                # GitHub expressions evaluate a missing property as an empty string.
+                return ""
+
+        def enabled(
+            name="Refresh Copilot review gate",
+            upstream="pull_request_review",
+            conclusion="success",
+            event="workflow_run",
+            mode="enabled",
+            status="completed",
+            attempt=1,
+            repository="lightning-it/ansible-collection-supplementary",
+            head_repository="lightning-it/ansible-collection-supplementary",
+            actor="Copilot",
+            triggering_actor="Copilot",
+            path=".github/workflows/copilot-review-refresh.yml",
+        ):
+            github = NS(
+                repository="lightning-it/ansible-collection-supplementary",
+                event_name=event,
+                event=NS(
+                    workflow_run=WorkflowRun(
+                        name=name,
+                        event=upstream,
+                        conclusion=conclusion,
+                        status=status,
+                        run_attempt=attempt,
+                        repository=NS(full_name=repository),
+                        head_repository=NS(full_name=head_repository),
+                        actor=NS(login=actor),
+                        triggering_actor=NS(login=triggering_actor),
+                        **({"path": path} if path is not missing_path else {}),
+                    )
+                ),
+            )
+            triggered = event == "schedule" or name in events["workflow_run"]["workflows"]
+            return triggered and eval(  # noqa: S307 -- Actual bounded workflow predicate.
+                expression,
+                {"__builtins__": {}},
+                {
+                    "github": github,
+                    "vars": NS(LI219_EVENT_MODE=mode),
+                    "contains": lambda values, item: item in values,
+                    "fromJSON": json.loads,
+                },
+            )
+
+        for conclusion in (
+            "success",
+            "skipped",
+            "failure",
+            "cancelled",
+            "timed_out",
+            "neutral",
+            "action_required",
+            "stale",
+        ):
+            for upstream in ("pull_request_review", "pull_request_review_comment"):
+                self.assertEqual(conclusion == "success", enabled(upstream=upstream, conclusion=conclusion))
+            for upstream in ("workflow_dispatch", "pull_request_target", "push", "schedule", "workflow_run"):
+                self.assertFalse(enabled(upstream=upstream, conclusion=conclusion))
+        self.assertFalse(enabled(mode="disabled"))
+        self.assertFalse(enabled(name="Reconcile delayed review events"))
+        self.assertTrue(enabled(event="schedule", upstream="workflow_dispatch"))
+        for path in (
+            missing_path,
+            "",
+            None,
+            ".github/workflows/foreign-refresh.yml",
+            ".github/workflows/copilot-review-refresh.yml@refs/heads/foreign",
+        ):
+            with self.subTest(path=path):
+                self.assertFalse(enabled(path=path))
+                self.assertTrue(enabled(event="schedule", path=path))
+        self.assertTrue(enabled(path=".github/workflows/copilot-review-refresh.yml"))
+        for name in ("Copilot", "Running Copilot Code Review", "Refresh Copilot review gate"):
+            for actor in ("Copilot", "copilot-pull-request-reviewer", "copilot-pull-request-reviewer[bot]"):
+                self.assertTrue(enabled(name=name, actor=actor, triggering_actor=actor))
+        for changes in (
+            {"status": "in_progress"},
+            {"status": "queued"},
+            {"attempt": 2},
+            {"attempt": 0},
+            {"repository": "foreign/repo"},
+            {"head_repository": "contributor/fork"},
+            {"actor": "contributor", "triggering_actor": "contributor"},
+            {"triggering_actor": "contributor"},
+            {"actor": "github-actions[bot]", "triggering_actor": "github-actions[bot]"},
+            {"name": "Current revision review gate"},
+            {"name": "Protected dot-github current-revision verifier"},
+            {"name": "Protected current-revision evidence verifier"},
+            {"event": "workflow_dispatch"},
+        ):
+            with self.subTest(changes=changes):
+                self.assertFalse(enabled(**changes))
+        self.assertTrue(
+            enabled(event="schedule", conclusion="failure", actor="contributor", head_repository="fork/repo")
+        )
+        self.assertIn("github.event.workflow_run.conclusion == 'success'", workflow["jobs"]["reconcile"]["if"])
+        self.assertNotIn("Refresh Copilot review gate", workflow["jobs"]["reconcile"]["steps"][1]["run"])
 
     def review(self, **changes):
         return {
@@ -64,6 +179,10 @@ class ReviewEventTests(unittest.TestCase):
             "THE BOT WAS\u00a0ABLE\u2003TO REVIEW ANY FILES",
         )
         negatives = (
+            "I can't review this pull request.",
+            "I can\u2019t review this pull request.",
+            "I can't review any files.",
+            "I can\u2019t review any files.",
             "Copilot wasn't able to review any files.",
             "Copilot wasn\u2019t able to review any files.",
             "Copilot isn't able to review any files.",
@@ -118,8 +237,37 @@ class ReviewEventTests(unittest.TestCase):
             self.review(user={"login": "litroc"}),
         ):
             self.assertFalse(EVENT.clean_review(review, [], self.head))
+
         self.assertFalse(EVENT.clean_review(self.review(), [{"body": "Suppressed comments"}], self.head))
         self.assertTrue(EVENT.clean_review(self.review(body=""), [{"body": "Reviewed files"}], self.head))
+
+    def test_maintainer_label_required_sender_and_original_rerun_provenance(self):
+        for action in ("labeled", "unlabeled"):
+            original = self.required_run()
+            original.update(
+                actor={"login": "maintainer"},
+                triggering_actor={"login": "maintainer"},
+                display_title=f"Cross-protect .github PR #23 {action} {self.head}",
+            )
+            self.assertEqual(1, len(self.reconcile(neutral=True, required=[original])))
+            rerun = {**original, "run_attempt": 2, "triggering_actor": {"login": "github-actions[bot]"}}
+            self.assertEqual(1, len(self.reconcile(neutral=True, required=[rerun], original_required=original)))
+            for changes in (
+                {"actor": {"login": "foreign"}},
+                {"triggering_actor": {"login": "foreign"}},
+                {"id": 999},
+                {"run_attempt": 2},
+                {"status": "in_progress"},
+                {"conclusion": "success"},
+                {"head_sha": self.base},
+                {"display_title": f"Cross-protect .github PR #23 opened {self.head}"},
+            ):
+                with self.subTest(action=action, changes=changes):
+                    self.assertEqual(
+                        [], self.reconcile(neutral=True, required=[rerun], original_required={**original, **changes})
+                    )
+            rerun["triggering_actor"] = {"login": "maintainer"}
+            self.assertEqual([], self.reconcile(neutral=True, required=[rerun], original_required=original))
 
     def reconcile(
         self,
@@ -140,6 +288,7 @@ class ReviewEventTests(unittest.TestCase):
         head_repo="lightning-it/.github",
         producer_head_repo=None,
         final_head_repo=None,
+        original_required=None,
     ):
         prefix = "repos/lightning-it/.github"
         pr = {
@@ -222,6 +371,17 @@ class ReviewEventTests(unittest.TestCase):
                 return inventory_transform(route, response)
             if route == f"{prefix}/actions/runs/77":
                 return run
+            if route.endswith("/attempts/1"):
+                if original_required is not None:
+                    return original_required
+                run_id = int(route.split("/actions/runs/")[1].split("/")[0])
+                original = next(item for item in (required or [default_required]) if item["id"] == run_id)
+                return {
+                    **original,
+                    "run_attempt": 1,
+                    "triggering_actor": original["actor"],
+                    "conclusion": "failure",
+                }
             if route == prefix:
                 return {"default_branch": "develop"}
             if route.startswith(f"{prefix}/pulls/"):
@@ -332,6 +492,108 @@ class ReviewEventTests(unittest.TestCase):
         run = self.required_run()
         run["conclusion"] = "success"
         self.assertEqual([], self.reconcile(neutral=True, required=[run]))
+
+    def test_label_required_titles_reconcile_same_producer_without_review_request(self):
+        for action in ("labeled", "unlabeled"):
+            with self.subTest(action=action):
+                run = self.required_run()
+                run["display_title"] = f"Cross-protect .github PR #23 {action} {self.head}"
+                calls = self.reconcile(neutral=True, required=[run])
+                self.assertEqual(1, len(calls))
+                self.assertTrue(calls[0][0].endswith("current-revision-rerun.yml/dispatches"))
+                self.assertEqual("77", calls[0][1]["inputs"]["producer_run_id"])
+                self.assertEqual("1", calls[0][1]["inputs"]["producer_run_attempt"])
+                run["actor"] = {"login": "foreign"}
+                self.assertEqual([], self.reconcile(neutral=True, required=[run]))
+
+    def test_label_required_locator_keeps_exact_native_authority_for_all_pilots(self):
+        import json
+
+        for repo in EVENT.PILOTS:
+            for action in ("labeled", "unlabeled"):
+                with self.subTest(repo=repo, action=action):
+                    run = json.loads(json.dumps(self.required_run()).replace("lightning-it/.github", repo))
+                    central = repo == "lightning-it/.github"
+                    prefix = "Cross-protect .github" if central else "Protected current revision"
+                    if not central:
+                        run["path"] = ".github/workflows/supplementary-current-revision-required.yml"
+                        run["name"] = "Protected current-revision evidence verifier"
+                    run["display_title"] = f"{prefix} PR #23 {action} {self.head}"
+                    pr = {
+                        "number": 23,
+                        "head": {"sha": self.head, "ref": "fix/final", "repo": {"full_name": repo}},
+                        "base": {"sha": self.base, "ref": "develop"},
+                    }
+                    self.assertTrue(EVENT.required_locator(run, repo, pr))
+                    run["display_title"] = f"{prefix} PR #24 {action} {self.head}"
+                    self.assertFalse(EVENT.required_locator(run, repo, pr))
+                    run["display_title"] = f"{prefix} PR #23 converted_to_draft {self.head}"
+                    self.assertFalse(EVENT.required_locator(run, repo, pr))
+
+    def test_required_title_action_sets_match_triggers_and_actual_helper_selection(self):
+        import ast
+        import json
+        import re
+        import shutil
+        import subprocess
+
+        import yaml
+
+        verifier = ast.parse((ROOT / "scripts/verify-dot-github-current-revision.py").read_text())
+        action_set = next(
+            node.value.args[0]
+            for node in verifier.body
+            if isinstance(node, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "PRODUCER_ACTIONS" for t in node.targets)
+        )
+        actions = {node.value for node in action_set.elts}
+        locator = ast.parse((ROOT / "scripts/review-event-reconcile.py").read_text())
+        function = next(n for n in locator.body if isinstance(n, ast.FunctionDef) and n.name == "required_locator")
+        action_tuple = next(n.iter for n in ast.walk(function) if isinstance(n, ast.comprehension))
+        self.assertEqual(actions, {node.value for node in action_tuple.elts})
+        outer = yaml.safe_load((ROOT / ".github/workflows/dot-github-current-revision-required.yml").read_text())
+        self.assertEqual(actions, set(outer.get("on", outer.get(True))["pull_request_target"]["types"]))
+        helper = yaml.safe_load((ROOT / ".github/workflows/current-revision-rerun.yml").read_text())
+        scripts = [step.get("run", "") for job in helper["jobs"].values() for step in job.get("steps", [])]
+        body = next(script for script in scripts if 'required_runs="$(jq -c' in script)
+        start = body.index('required_runs="$(jq -c')
+        end = body.index("\nrequired_run_count=", start)
+        selection = body[start:end]
+        self.assertEqual(
+            actions, set(re.findall(r'\+ \(\$pr_number \| tostring\) \+ " ([a-z_]+) " \+ \$head_sha', selection))
+        )
+        repo = "lightning-it/ansible-collection-supplementary"
+        for action in ("labeled", "unlabeled", "converted_to_draft"):
+            for number in (23, 24):
+                with self.subTest(action=action, number=number):
+                    run = json.loads(json.dumps(self.required_run()).replace("lightning-it/.github", repo))
+                    run["path"] = ".github/workflows/supplementary-current-revision-required.yml"
+                    run["name"] = "Protected current-revision evidence verifier"
+                    run["display_title"] = f"Protected current revision PR #{number} {action} {self.head}"
+                    result = subprocess.run(  # noqa: S603 -- actual local readonly JQ selector, no transport or effect code.
+                        [
+                            shutil.which("bash") or "/bin/bash",
+                            "-c",
+                            "set -euo pipefail\n" + selection + '\nprintf "%s" "$required_runs"',
+                        ],
+                        env={
+                            **os.environ,
+                            "GITHUB_API_URL": "https://api.github.com",
+                            "base_ref": "develop",
+                            "EXPECTED_BASE": self.base,
+                            "head_ref": "fix/final",
+                            "head_repository": repo,
+                            "EXPECTED_HEAD": self.head,
+                            "REPOSITORY": repo,
+                            "PR_NUMBER": "23",
+                            "required_runs_pages": json.dumps([{"total_count": 1, "workflow_runs": [run]}]),
+                        },
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(0, result.returncode, result.stderr)
+                    self.assertEqual([run] if action in actions and number == 23 else [], json.loads(result.stdout))
 
     def test_local_foreign_stale_or_ambiguous_runs_never_stand_in_for_required(self):
         for field, value in (

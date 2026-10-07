@@ -246,7 +246,7 @@ jobs:
             else error("review.body must be null or a string")
             end
             | ascii_downcase
-            | gsub("n[\u0027\u2019]t"; " not")
+            | gsub("can[\u0027\u2019]t"; "cannot") | gsub("n[\u0027\u2019]t"; " not")
             | gsub("\\s"; "")
           ' "${GITHUB_EVENT_PATH}")"; then
             echo "Copilot review body is malformed; remediation is forbidden." >&2
@@ -257,10 +257,10 @@ jobs:
           review_content_usable() {
             jq -e --argjson require_content "${1:-false}" '
               def normalize_review_text:
-                ascii_downcase | gsub("n[\u0027\u2019]t"; " not") | gsub("\\s"; "");
-              ["unabletoreviewthispullrequest", "notabletoreviewthispullrequest",
+                ascii_downcase | gsub("can[\u0027\u2019]t"; "cannot") | gsub("n[\u0027\u2019]t"; " not") | gsub("\\s"; "");
+              ["unabletoreviewthispullrequest", "cannotreviewthispullrequest", "notabletoreviewthispullrequest",
                "wasnotabletoreviewthispullrequest", "nofilestoreview", "nofileswerereviewed",
-               "unabletoreviewanyfiles", "notabletoreviewanyfiles", "wasnotabletoreviewanyfiles",
+               "unabletoreviewanyfiles", "cannotreviewanyfiles", "notabletoreviewanyfiles", "wasnotabletoreviewanyfiles",
                "quotaexhausted", "quotaexceeded", "premiumrequestquota", "premiumrequestsquota",
                "suppressedcomment", "encounteredanerror"] as $markers |
               all(.[]; normalize_review_text as $text |

@@ -89,7 +89,7 @@ elif '/git/ref/' in route:
     result = {'ref': 'refs/heads/lit-review-operations', 'object': {'type': 'commit',
                                                             'sha': s.get('stale_ref', s['oid'])}}
 elif '/compare/' in route:
-    result = s.get('ancestry', {'status': 'identical'})
+    result = s.get('ancestries', {}).get(route, s.get('ancestry', {'status': 'identical'}))
 elif payload is not None:
     if route.endswith('/dispatches'):
         assert route.endswith('/review-request-continuation.yml/dispatches')
@@ -486,6 +486,10 @@ class ContinuationTests(unittest.TestCase):
         self.assertEqual(0, self.defer().returncode)
         baseline = copy.deepcopy(self.state)
         markers = (
+            "I can't review this pull request.",
+            "I can\u2019t review this pull request.",
+            "I can't review any files.",
+            "I can\u2019t review any files.",
             "Copilot was not able to review this pull request.",
             "Copilot wasn't able to review this pull request.",
             "Copilot wasn\u2019t able to review this pull request.",
@@ -720,9 +724,17 @@ class ContinuationTests(unittest.TestCase):
                 self.assertNotIn(REQUEST, self.state["versions"][self.state["oid"]])
 
     def test_embedded_helpers_match_canonical_source_and_narrow_job_guards(self):
+        import ast
         import textwrap
 
         helper = (ROOT / "scripts/review_request_continuation.py").read_text().strip()
+        candidates = [
+            node
+            for node in ast.parse(helper).body
+            if isinstance(node, ast.FunctionDef) and node.name == "reconcile_candidate"
+        ]
+        self.assertEqual(1, len(candidates))
+        self.assertIn('"resume_ref": intent["base_ref"]', ast.get_source_segment(helper, candidates[0]))
         for path in (".github/workflows/copilot-review.yml", ".github/workflows/review-request-continuation.yml"):
             text = (ROOT / path).read_text()
             chunks = text.split("<<'CONTINUATION'\n")[1:]

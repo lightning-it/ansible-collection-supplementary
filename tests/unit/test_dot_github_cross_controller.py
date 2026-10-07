@@ -92,6 +92,7 @@ def valid_environment(*, action: str = "opened", base: str = BASE) -> dict[str, 
         "EVENT_BASE_REF": "develop",
         "EVENT_AUTHOR": "lightning-it-shared-assets-sync[bot]",
         "EVENT_AUTHOR_TYPE": "Bot",
+        "EVENT_SENDER": "lightning-it-shared-assets-sync[bot]",
         "PR_NUMBER": str(PR_NUMBER),
         "GITHUB_SERVER_URL": SERVER,
         "WORKFLOW_REF": MODULE.SOURCE_WORKFLOW_REF,
@@ -151,9 +152,8 @@ def valid_neutral():
                     "pull_request_number": PR_NUMBER,
                     "base_sha": BASE,
                     "head_sha": HEAD,
-                    "head_repository": TARGET,
-                    "pull_request_last_edited_at": None,
-                    "pull_request_labels_sha256": MODULE.labels_digest([]),
+                    "controller_sha": SOURCE,
+                    "review_path": "applicable Copilot or governed automation exemption",
                     "producer_run_id": 42,
                     "run_url": f"{SERVER}/{TARGET}/actions/runs/42",
                 }
@@ -741,6 +741,8 @@ class DotGitHubCrossControllerTests(unittest.TestCase):
                         "reopened",
                         "ready_for_review",
                         "edited",
+                        "labeled",
+                        "unlabeled",
                     ]
                 }
             },
@@ -793,6 +795,7 @@ class AuthenticatedCoreForkTests(unittest.TestCase):
             EVENT_BASE_REF=branch,
             EVENT_AUTHOR="contributor",
             EVENT_AUTHOR_TYPE="User",
+            EVENT_SENDER="contributor",
         )
         responses = valid_responses()
         pr = responses[PR_PATH]
@@ -801,13 +804,6 @@ class AuthenticatedCoreForkTests(unittest.TestCase):
             ref="feature/fork", repo={"full_name": "contributor/core-fork", "owner": {"login": "contributor"}}
         )
         pr["user"] = {"login": "contributor", "type": "User"}
-        neutral_key = (
-            f"repos/{TARGET}/commits/{HEAD}/check-runs?check_name=Current%20revision%20review&filter=all&per_page=100"
-        )
-        neutral = responses[neutral_key]["check_runs"][0]
-        summary = json.loads(neutral["output"]["summary"])
-        summary["head_repository"] = "contributor/core-fork"
-        neutral["output"]["summary"] = json.dumps(summary)
         producer = responses[f"repos/{TARGET}/actions/runs/{RUN_ID}"]
         producer.update(
             head_branch="feature/fork",
@@ -913,7 +909,178 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class OrdinaryHumanPublisherABITests(unittest.TestCase):
+    def test_actual_eight_key_publisher_accepts_default_controller_distinct_from_base(self):
+        summary = json.loads(valid_neutral()["output"]["summary"])
+        self.assertEqual(
+            set(summary),
+            {
+                "schema",
+                "base_sha",
+                "head_sha",
+                "controller_sha",
+                "pull_request_number",
+                "producer_run_id",
+                "review_path",
+                "run_url",
+            },
+        )
+        self.assertNotEqual(summary["controller_sha"], summary["base_sha"])
+        client = FakeClient(valid_responses(action="edited"))
+        MODULE.verify(client, valid_environment(action="edited"), attempts=1, sleep=lambda _: None)
+        self.assertEqual(client.calls[PR_PATH], 2)
+        self.assertEqual(client.calls[f"metadata/{PR_NUMBER}"], 2)
+
+    def test_human_summary_rejects_missing_immutable_binding_and_fabricated_extensions(self):
+        key = f"repos/{TARGET}/commits/{HEAD}/check-runs?check_name=Current%20revision%20review&filter=all&per_page=100"
+        for field in ("head_sha", "base_sha", "controller_sha", "producer_run_id", "review_path"):
+            with self.subTest(missing=field):
+                responses = valid_responses()
+                check = responses[key]["check_runs"][0]
+                summary = json.loads(check["output"]["summary"])
+                del summary[field]
+                check["output"]["summary"] = json.dumps(summary)
+                with self.assertRaises(MODULE.VerificationError):
+                    MODULE.verify(FakeClient(responses), valid_environment(), attempts=1, sleep=lambda _: None)
+        for field, value in (("controller_sha", "invalid"), ("head_repository", TARGET), ("review_path", "")):
+            with self.subTest(field=field):
+                responses = valid_responses()
+                check = responses[key]["check_runs"][0]
+                summary = json.loads(check["output"]["summary"])
+                summary[field] = value
+                check["output"]["summary"] = json.dumps(summary)
+                with self.assertRaises(MODULE.VerificationError):
+                    MODULE.verify(FakeClient(responses), valid_environment(), attempts=1, sleep=lambda _: None)
+
+    def test_actual_renovate_extension_retains_mutable_metadata_and_identity_binding(self):
+        key = f"repos/{TARGET}/commits/{HEAD}/check-runs?check_name=Current%20revision%20review&filter=all&per_page=100"
+        check = valid_neutral()
+        summary = json.loads(check["output"]["summary"])
+        summary.update(
+            controller_ref="develop",
+            head_repository=TARGET,
+            pull_request_last_edited_at=None,
+            pull_request_labels_sha256=MODULE.labels_digest([]),
+            review_id=None,
+            review_path="deterministic policy-bound Renovate exemption",
+        )
+        check["output"]["title"] = "Current revision Renovate exemption passed"
+        check["external_id"] = f"mlx90-current-revision:renovate:v6:{PR_NUMBER}:42:{BASE}:{HEAD}"
+        check["output"]["summary"] = json.dumps(summary)
+        pr = valid_pr()
+        pr["_metadata_revision"] = None
+
+        def validate(candidate):
+            return MODULE.validate_neutral_metadata(
+                FakeClient({key: {"total_count": 1, "check_runs": [candidate]}}),
+                valid_check(),
+                pr,
+                PR_NUMBER,
+                BASE,
+                HEAD,
+                SERVER,
+            )
+
+        self.assertEqual(validate(check), check)
+        for field, value in (
+            ("pull_request_last_edited_at", "2026-10-06T23:59:59Z"),
+            ("pull_request_labels_sha256", "0" * 64),
+            ("head_repository", "contributor/core-fork"),
+            ("review_id", 42),
+        ):
+            with self.subTest(field=field):
+                changed = copy.deepcopy(check)
+                invalid_summary = dict(summary, **{field: value})
+                changed["output"]["summary"] = json.dumps(invalid_summary)
+                with self.assertRaises(MODULE.VerificationError):
+                    validate(changed)
+        for field, value in (
+            ("title", "Current revision review passed"),
+            ("external_id", valid_neutral()["external_id"]),
+        ):
+            with self.subTest(check_field=field):
+                changed = copy.deepcopy(check)
+                if field == "title":
+                    changed["output"][field] = value
+                else:
+                    changed[field] = value
+                with self.assertRaises(MODULE.VerificationError):
+                    validate(changed)
+
+
 class MutableEventBindingTests(unittest.TestCase):
+    def label_fixture(self, action):
+        environment = valid_environment(action=action)
+        responses = valid_responses(action=action)
+        labels = [{"name": "review-current"}] if action == "labeled" else []
+        responses[PR_PATH]["labels"] = labels
+        responses[PR_PATH]["user"] = {"login": "litroc", "type": "User"}
+        environment.update(
+            EVENT_LABELS_JSON=json.dumps(labels), EVENT_AUTHOR="litroc", EVENT_AUTHOR_TYPE="User", EVENT_SENDER="litroc"
+        )
+        run = responses[f"repos/{TARGET}/actions/runs/{RUN_ID}"]
+        run["actor"] = {"login": "litroc"}
+        run["triggering_actor"] = {"login": "litroc"}
+        return environment, responses
+
+    def test_authenticated_labeled_and_unlabeled_events_bind_both_live_reads(self):
+        for action in ("labeled", "unlabeled"):
+            with self.subTest(action=action):
+                environment, responses = self.label_fixture(action)
+                client = FakeClient(responses)
+                MODULE.verify(client, environment, attempts=1, sleep=lambda _: None)
+                self.assertEqual(2, client.calls[PR_PATH])
+                self.assertEqual(2, client.calls[f"metadata/{PR_NUMBER}"])
+
+    def test_maintainer_label_sender_is_separate_from_contributor_author_and_rerun_actor(self):
+        for action in ("labeled", "unlabeled"):
+            for attempt in (1, 2):
+                with self.subTest(action=action, attempt=attempt):
+                    environment, responses = self.label_fixture(action)
+                    environment.update(EVENT_AUTHOR="contributor", EVENT_SENDER="maintainer")
+                    responses[PR_PATH]["user"]["login"] = "contributor"
+                    run = responses[f"repos/{TARGET}/actions/runs/{RUN_ID}"]
+                    run.update(
+                        actor={"login": "maintainer"},
+                        triggering_actor={"login": "maintainer" if attempt == 1 else "github-actions[bot]"},
+                        run_attempt=attempt,
+                    )
+                    if attempt == 2:
+                        jobs = responses.pop(f"repos/{TARGET}/actions/runs/{RUN_ID}/attempts/1/jobs?per_page=100")
+                        responses[f"repos/{TARGET}/actions/runs/{RUN_ID}/attempts/2/jobs?per_page=100"] = jobs
+                    MODULE.verify(FakeClient(responses), environment, attempts=1, sleep=lambda _: None)
+                    for sender in (None, "another", "contributor"):
+                        with self.subTest(sender=sender), self.assertRaises(MODULE.VerificationError):
+                            MODULE.verify(
+                                FakeClient(responses),
+                                {**environment, "EVENT_SENDER": sender},
+                                attempts=1,
+                                sleep=lambda _: None,
+                            )
+                    run["triggering_actor"] = {"login": "another"}
+                    with self.assertRaises(MODULE.VerificationError):
+                        MODULE.verify(FakeClient(responses), environment, attempts=1, sleep=lambda _: None)
+
+    def test_label_event_rejects_old_action_time_and_labels_drift_at_either_read(self):
+        for action in ("labeled", "unlabeled"):
+            for defect in ("action", "creation", "first-labels", "second-labels"):
+                with self.subTest(action=action, defect=defect):
+                    environment, responses = self.label_fixture(action)
+                    run = responses[f"repos/{TARGET}/actions/runs/{RUN_ID}"]
+                    if defect == "action":
+                        run["display_title"] = f"Protected current revision PR #{PR_NUMBER} edited {HEAD}"
+                    elif defect == "creation":
+                        run["created_at"] = "2026-10-06T23:59:59Z"
+                    else:
+                        original = copy.deepcopy(responses[PR_PATH])
+                        changed = copy.deepcopy(original)
+                        changed["labels"] = [{"name": "later-label"}]
+                        responses[PR_PATH] = (
+                            changed if defect == "first-labels" else ResponseSequence(original, changed)
+                        )
+                    with self.assertRaises(MODULE.VerificationError):
+                        MODULE.verify(FakeClient(responses), environment, attempts=1, sleep=lambda _: None)
+
     def test_rejects_mutable_metadata_and_label_drift_at_either_read(self):
         for field, value in (("title", "new title"), ("body", "new body"), ("labels", [{"name": "new"}])):
             for read in (1, 2):
@@ -953,13 +1120,9 @@ class MutableEventBindingTests(unittest.TestCase):
             self.assertEqual(client.calls[PR_PATH], 2)
             self.assertEqual(client.calls[f"metadata/{PR_NUMBER}"], 2)
 
-    def test_neutral_publisher_stale_metadata_labels_producer_or_ambiguity_rejected(self):
+    def test_neutral_publisher_wrong_producer_or_ambiguity_rejected(self):
         key = f"repos/{TARGET}/commits/{HEAD}/check-runs?check_name=Current%20revision%20review&filter=all&per_page=100"
-        for field, value in (
-            ("pull_request_last_edited_at", "2026-10-06T23:59:59Z"),
-            ("pull_request_labels_sha256", "0" * 64),
-            ("producer_run_id", 43),
-        ):
+        for field, value in (("producer_run_id", 43),):
             with self.subTest(field=field):
                 responses = valid_responses()
                 check = responses[key]["check_runs"][0]

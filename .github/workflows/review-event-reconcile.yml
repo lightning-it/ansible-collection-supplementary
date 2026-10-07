@@ -14,6 +14,7 @@ on:
       - Current revision review gate
       - Protected current-revision evidence verifier
       - Protected dot-github current-revision verifier
+      - Refresh Copilot review gate
     types: [completed]
   schedule:
     - cron: '*/10 * * * *'
@@ -35,7 +36,28 @@ env:
 jobs:
   reconcile:
     if: >-
-      vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)
+      vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository) &&
+      (
+        github.event_name == 'schedule' ||
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.status == 'completed' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.run_attempt == 1 &&
+          github.event.workflow_run.repository.full_name == github.repository &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          github.event.workflow_run.actor.login == github.event.workflow_run.triggering_actor.login &&
+          contains(fromJSON('["Copilot","copilot-pull-request-reviewer","copilot-pull-request-reviewer[bot]"]'), github.event.workflow_run.actor.login) &&
+          (
+            contains(fromJSON('["Copilot","Running Copilot Code Review"]'), github.event.workflow_run.name) ||
+            (
+              github.event.workflow_run.name == 'Refresh Copilot review gate' &&
+              github.event.workflow_run.path == '.github/workflows/copilot-review-refresh.yml' &&
+              contains(fromJSON('["pull_request_review","pull_request_review_comment"]'), github.event.workflow_run.event)
+            )
+          )
+        )
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -788,14 +788,22 @@ jobs:
           validate_event_producer() {
             local payload="${1}" jobs="${2}"
             [[ "${EVENT_PRODUCER_RUN_ATTEMPT}" =~ ^(1|2)$ ]] || return 1
-            jq -e --arg actor "${author}" --argjson id "${producer_id}" \
+            jq -e --argjson origin "${event_producer_origin}" --argjson id "${producer_id}" \
               --argjson attempt "${EVENT_PRODUCER_RUN_ATTEMPT}" '
-              .id == $id and .run_attempt == $attempt
+              . as $payload | .id == $id and .run_attempt == $attempt
               and .status == "completed"
               and (.conclusion == "success" or .conclusion == "failure")
-              and .actor.login == $actor
+              and ($origin.id == $id and $origin.run_attempt == 1
+                and $origin.status == "completed"
+                and ($origin.conclusion == "success" or $origin.conclusion == "failure")
+                and ($origin.actor.login | type == "string" and length > 0)
+                and $origin.triggering_actor.login == $origin.actor.login)
+              and all(["event", "path", "head_sha", "head_branch", "repository",
+                "head_repository", "pull_requests", "created_at", "display_title", "actor"][];
+                . as $field | $origin[$field] == $payload[$field])
+              and .actor.login == $origin.actor.login
               and .triggering_actor.login == (
-                if $attempt == 1 then $actor else "github-actions[bot]" end)
+                if $attempt == 1 then $origin.actor.login else "github-actions[bot]" end)
             ' <<<"${payload}" >/dev/null || return 1
             jq -e --arg head "${EXPECTED_HEAD}" \
               --arg conclusion "$(jq -r .conclusion <<<"${payload}")" \
@@ -824,6 +832,8 @@ jobs:
           }
           if [ "${LI219_EVENT_MODE:-disabled}" = enabled ]; then
             test "${evidence_version}:${external_kind}" = v6:copilot
+            event_producer_origin="$(gh api \
+              "repos/${REPOSITORY}/actions/runs/${producer_id}/attempts/1")"
             event_producer_jobs="$(gh api --paginate --slurp \
               "repos/${REPOSITORY}/actions/runs/${producer_id}/attempts/${EVENT_PRODUCER_RUN_ATTEMPT}/jobs?filter=all&per_page=100")"
             validate_event_producer "${producer}" "${event_producer_jobs}"
@@ -1063,6 +1073,10 @@ jobs:
                     + ($pr_number | tostring) + " ready_for_review " + $head_sha)
                   or .display_title == ("Protected current revision PR #"
                     + ($pr_number | tostring) + " edited " + $head_sha)
+                  or .display_title == ("Protected current revision PR #"
+                    + ($pr_number | tostring) + " labeled " + $head_sha)
+                  or .display_title == ("Protected current revision PR #"
+                    + ($pr_number | tostring) + " unlabeled " + $head_sha)
                 ) |
                 select(.name == .display_title or .name == $workflow_name) |
                 select((.pull_requests | length) == 1) |

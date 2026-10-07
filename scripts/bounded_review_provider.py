@@ -223,6 +223,7 @@ class ResponseBudget:
                 truncation="disabled",
                 service_tier="default",
             )
+            require(len(canonical(bounded)) <= self.request_byte_limit, "provider-request-size")
             digest = sha(canonical(bounded))
             require(digest not in self.requests, "provider-request-replay")
             require(len(self.requests) < self.max_requests, "provider-request-budget")

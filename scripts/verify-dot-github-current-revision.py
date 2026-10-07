@@ -48,7 +48,7 @@ RESERVATION_PATTERN = re.compile(
     r"(?P<head>[0-9a-f]{40})$"
 )
 PRODUCER_ACTIONS = frozenset(
-    {"opened", "synchronize", "reopened", "ready_for_review", "edited"}
+    {"opened", "synchronize", "reopened", "ready_for_review", "edited", "labeled", "unlabeled"}
 )
 NONTERMINAL_RUN_STATUSES = frozenset(
     {"pending", "queued", "requested", "waiting", "in_progress"}
@@ -90,7 +90,6 @@ class GitHubClient:
             ) from exc
         except (urllib.error.URLError, TimeoutError) as exc:
             raise VerificationError(f"GitHub API read failed: {path}") from exc
-
 
     def metadata_revision(self, number: int) -> Any:
         """Read only the existing protected lastEditedAt contract; never a mutation."""
@@ -144,6 +143,11 @@ def labels_digest(labels: Any) -> str:
 
 def validate_event_producer(run: Mapping[str, Any], binding: Mapping[str, Any], number: int, head: str) -> None:
     require_equal(
+        require_mapping(run.get("actor"), "event producer actor").get("login"),
+        binding["sender"],
+        "event producer sender",
+    )
+    require_equal(
         run.get("display_title"),
         f"Protected current revision PR #{number} {binding['action']} {head}",
         "event producer action",
@@ -171,6 +175,8 @@ def validate_neutral_metadata(
         "neutral inventory",
     )
     checks = require_list(payload.get("check_runs"), "neutral checks")
+    # Exact JSON integers reject bool and subclasses; retain this schema fence.
+    # pylint: disable-next=unidiomatic-typecheck
     if type(payload.get("total_count")) is not int or payload["total_count"] != len(checks) or len(checks) > 100:
         raise VerificationError("neutral inventory is incomplete")
     matches = [check for check in checks if isinstance(check, dict) and check.get("name") == "Current revision review"]
@@ -183,11 +189,10 @@ def validate_neutral_metadata(
     require_equal(app.get("id"), 15368, "neutral App ID")
     require_equal(app.get("slug"), "github-actions", "neutral App slug")
     cid = check.get("id")
-    if type(cid) is not int or cid <= 0:
+    if type(cid) is not int or cid <= 0:  # pylint: disable=unidiomatic-typecheck
         raise VerificationError("neutral check ID is invalid")
     require_equal(check.get("details_url"), f"{server}/{TARGET_REPOSITORY}/runs/{cid}", "neutral URL")
     output = require_mapping(check.get("output"), "neutral output")
-    require_equal(output.get("title"), "Current revision review passed", "neutral title")
     try:
         summary = require_mapping(json.loads(output.get("summary", "")), "neutral summary")
     except (ValueError, TypeError) as exc:
@@ -197,19 +202,52 @@ def validate_neutral_metadata(
         ("pull_request_number", number),
         ("base_sha", base),
         ("head_sha", head),
-        ("head_repository", pr["head"]["repo"]["full_name"]),
-        ("pull_request_last_edited_at", pr["_metadata_revision"]),
-        ("pull_request_labels_sha256", labels_digest(pr.get("labels"))),
     ):
         require_equal(summary.get(field), value, f"neutral {field}")
+    common_keys = {
+        "schema", "base_sha", "head_sha", "controller_sha", "pull_request_number",
+        "producer_run_id", "review_path", "run_url",
+    }
+    # Core's ordinary-human publisher has eight fields. Only its separate
+    # Renovate branch adds mutable metadata; live event fences bind both reads.
+    kind = "copilot"
+    title = "Current revision review passed"
+    if set(summary) != common_keys:
+        require_equal(
+            set(summary),
+            common_keys | {
+                "controller_ref", "head_repository", "pull_request_last_edited_at",
+                "pull_request_labels_sha256", "review_id",
+            },
+            "neutral Renovate schema4 fields",
+        )
+        for field, value in (
+            ("head_repository", pr["head"]["repo"]["full_name"]),
+            ("pull_request_last_edited_at", pr["_metadata_revision"]),
+            ("pull_request_labels_sha256", labels_digest(pr.get("labels"))),
+            ("review_id", None),
+            ("review_path", "deterministic policy-bound Renovate exemption"),
+        ):
+            require_equal(summary.get(field), value, f"neutral {field}")
+        if summary.get("controller_ref") not in {"main", "develop"}:
+            raise VerificationError("neutral Renovate controller ref is invalid")
+        kind = "renovate"
+        title = "Current revision Renovate exemption passed"
+    require_equal(output.get("title"), title, "neutral title")
+    controller = summary.get("controller_sha")
+    if not isinstance(controller, str):
+        raise VerificationError("neutral controller SHA is invalid")
+    require_sha(controller, "neutral controller SHA")
+    if not isinstance(summary.get("review_path"), str) or not summary["review_path"]:
+        raise VerificationError("neutral review path is invalid")
     producer = summary.get("producer_run_id")
-    if type(producer) is not int or producer <= 0:
+    if type(producer) is not int or producer <= 0:  # pylint: disable=unidiomatic-typecheck
         raise VerificationError("neutral producer ID is invalid")
     run_url = f"{server}/{TARGET_REPOSITORY}/actions/runs/{producer}"
     require_equal(summary.get("run_url"), run_url, "neutral producer URL")
     require_equal(
         check.get("external_id"),
-        f"mlx90-current-revision:copilot:v6:{number}:{producer}:{base}:{head}",
+        f"mlx90-current-revision:{kind}:v6:{number}:{producer}:{base}:{head}",
         "neutral producer identity",
     )
     require_equal(
@@ -327,6 +365,7 @@ def event_pr_binding(environment: Mapping[str, str]) -> Mapping[str, Any]:
         "base_ref": "EVENT_BASE_REF",
         "author": "EVENT_AUTHOR",
         "author_type": "EVENT_AUTHOR_TYPE",
+        "sender": "EVENT_SENDER",
     }
     binding = {}
     for key, name in fields.items():
@@ -616,17 +655,14 @@ def validate_aggregated_promotion(
     require_equal(run.get("head_sha"), event_head, "promotion run head")
     require_equal(run.get("head_branch"), "develop", "promotion run head branch")
     require_equal(run.get("run_attempt"), 1, "promotion run attempt")
-    author = require_mapping(pr.get("user"), "pull request author").get("login")
-    require_equal(
-        require_mapping(run.get("actor"), "promotion actor").get("login"),
-        author,
-        "promotion actor",
-    )
+    sender = require_mapping(run.get("actor"), "promotion actor").get("login")
+    if not isinstance(sender, str) or not sender or any(char.isspace() for char in sender):
+        raise VerificationError("promotion sender is invalid")
     require_equal(
         require_mapping(
             run.get("triggering_actor"), "promotion triggering actor"
         ).get("login"),
-        author,
+        sender,
         "promotion triggering actor",
     )
     allowed_titles = {
@@ -867,19 +903,16 @@ def validate_reservation(
             require_equal(require_mapping(native.get("repo"), f"verifier {side} repository").get("url"),
                           f"{client.api_url}/repos/{repository_name}", f"verifier {side} repository URL")
 
-    author = require_mapping(pr.get("user"), "pull request author").get("login")
-    require_equal(
-        require_mapping(producer.get("actor"), "verifier actor").get("login"),
-        author,
-        "verifier actor",
-    )
+    sender = require_mapping(producer.get("actor"), "verifier actor").get("login")
+    if not isinstance(sender, str) or not sender or any(char.isspace() for char in sender):
+        raise VerificationError("verifier sender is invalid")
     run_attempt = producer.get("run_attempt")
     if run_attempt not in {1, 2}:
         raise VerificationError("verifier run attempt is outside the bounded contract")
     triggering_actor = require_mapping(
         producer.get("triggering_actor"), "verifier triggering actor"
     ).get("login")
-    expected_triggering_actor = author if run_attempt == 1 else "github-actions[bot]"
+    expected_triggering_actor = sender if run_attempt == 1 else "github-actions[bot]"
     require_equal(
         triggering_actor,
         expected_triggering_actor,

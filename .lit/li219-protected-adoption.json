@@ -3,7 +3,7 @@
   "protected_source_commit": "a44cb1762aa6ae3edba91d6cf75ada2a99182af5",
   "protected_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
   "source_receipt": {
-    "path": "/Users/rene/Documents/Codex/2026-10-05/analyisere-warum-das-so-lange-daurt/outputs/source6b-main-admission-c56a480e-9f0b-45cc-b3a9-120caa89f540.json",
+    "id": "sha256:9fb53417e0bfcd0ba5be2bffad5d2825661df19b093a8b9d9fae567681a5fc0d",
     "sha256": "9fb53417e0bfcd0ba5be2bffad5d2825661df19b093a8b9d9fae567681a5fc0d"
   },
   "protected_core_commit": "aff0fd056d52460a9d2191a095244ed2778599f1",
@@ -15,7 +15,11 @@
       "target_path": ".github/workflows/codex-copilot-remediation.yml",
       "blob": "06440e21e5a690d1c0888c7d76d9efb809f1ecc2",
       "sha256": "7810b3a287096f84dec6e49cf555a27aa2322360fc048b2b32d6a87ef2fc946a",
-      "target_mode": "0644"
+      "target_mode": "0644",
+      "target_blob": "41110ab6613891981d23af1e46d20b1fd9222668",
+      "target_sha256": "c29475d64ef5ec1960ada27709b2d3f6f6e952f8e34d8b421dcbc672ab04ed68",
+      "mode": "adapted-local",
+      "adaptation": "Local failure-content contract: normalize ASCII/curly cannot before generic not contractions and reject the two cannot-review markers; original Source blob/sha256 retained separately."
     },
     {
       "source_path": "default/.github/codex/prompts/review-exact-head.md",

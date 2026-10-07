@@ -10,8 +10,8 @@
       "target_path": ".github/workflows/copilot-review-refresh.yml",
       "source_sha256": "31e34a9ccd7f5dbfaac62bcb308ebeafb69c00d41b0a80b579f557f66980583b",
       "source_blob": "a42cd8725cbd4fafc170bc3158631f7f09973fac",
-      "target_blob": "317f37a84ab32e1dc428201aef827e35675c8bfa",
-      "target_sha256": "64a715d029d6ed43040e36cf836d8ec8716d36471d0904cff641e516b0ef347d",
+      "target_blob": "4bc360c4a56582f61e75a75033c3bdc0ed1741ca",
+      "target_sha256": "d0990effed093be2e9a64a1a2a9a0370d0683d8619297d28e22a759c9ed2f394",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -20,9 +20,9 @@
       "target_path": ".github/workflows/current-revision-rerun.yml",
       "source_sha256": "2febd480773ecbe19840c4c22bf147cd1fbe77abfe0c23b66b2f07a727e58c8f",
       "source_blob": "86112dc304cbba9e2837e022605eff9f9ff03c97",
-      "target_blob": "86112dc304cbba9e2837e022605eff9f9ff03c97",
-      "target_sha256": "2febd480773ecbe19840c4c22bf147cd1fbe77abfe0c23b66b2f07a727e58c8f",
-      "mode": "byte-identical",
+      "target_blob": "58e4c0003def6eab89663a67996a7a550f682673",
+      "target_sha256": "fe0845c8e80c77b4284fdf3f5fdcb488ff4aa0f6e94c992011e74aec4c3b67fe",
+      "mode": "adapted-local",
       "target_mode": "0644"
     },
     {
@@ -30,9 +30,9 @@
       "target_path": ".github/workflows/review-event-reconcile.yml",
       "source_sha256": "bbee309bac5c9831cd4689cb32651c94ade87d832248e21a799e2a706185af5a",
       "source_blob": "7d292f504eb3aa4e54284a467f3307a6ac6f87e9",
-      "target_blob": "7d292f504eb3aa4e54284a467f3307a6ac6f87e9",
-      "target_sha256": "bbee309bac5c9831cd4689cb32651c94ade87d832248e21a799e2a706185af5a",
-      "mode": "byte-identical",
+      "target_blob": "be094d83b9ab5bf9cd455f2eabd11389358591df",
+      "target_sha256": "84da713ab5a5b895cd02defe18faa1e7517229264d24708e51eb8da2584e47d4",
+      "mode": "adapted-local",
       "target_mode": "0644"
     },
     {
@@ -40,8 +40,8 @@
       "target_path": "scripts/review-event-reconcile.py",
       "source_sha256": "74bf8eb90116afa0a58ebf57be3e141c95e0127d08d008b33cc28d3b3569602c",
       "source_blob": "45a9920e640fb220f5f3db06f98f684f15d73735",
-      "target_blob": "535dbcdbb7a0a081cbb3f6b4e43975506ad3f8cd",
-      "target_sha256": "52177b4abacf0458fc8bca1871e7572156da49d0640dae3fc3df7cbd240b4583",
+      "target_blob": "cabd318559256301d8b8b821858ac49457776833",
+      "target_sha256": "218a5d1a045a69fb6b9013bfd34dc42f0f697ce1a311812833b7064ab3e700b1",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -50,8 +50,8 @@
       "target_path": ".github/workflows/dot-github-current-revision-required.yml",
       "source_sha256": "734f922840311920ea0c78a3f2e4ded3a0a74c53381bec4671f89d5c5d8fa2a6",
       "source_blob": "db644996d86fe14d9b9ccb4d8e8156b5180ddabf",
-      "target_blob": "b8588b37dc89ac805f99272feeba780150c37d61",
-      "target_sha256": "0851b9385dc3cace8362d105a9e813b8feaf58e60f0b6a27d598063e2274a1e3",
+      "target_blob": "50b4d232d5e6fd9c19edb2deac596924faa7dd53",
+      "target_sha256": "bcbe9bac9e0c4d4151525853489807ccaf8da96ca20bff4d36d8a036bd524a7d",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -70,8 +70,8 @@
       "target_path": "scripts/review_content_markers.py",
       "source_sha256": "00e73bad77fc2b7eaf3182f302f375a981deb6578a21f219ff410d52d62daf09",
       "source_blob": "617ac13543c358f1abb44da7c7885907abd8ab4c",
-      "target_blob": "a9f366a20a0be6ea63509b768e076d279a8de1e1",
-      "target_sha256": "846efa703a39d59ffeefe946958fdb8ac82eb32617c91bdbb1eae9ae084d4a44",
+      "target_blob": "08ad1f790c88ec25f52e25d338c35e262d4dfdf5",
+      "target_sha256": "0f3c112d70c16211a6947e593f6f6a315b22f5e8308dd76827e5d7de1e076dd8",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -80,8 +80,8 @@
       "target_path": "scripts/verify-dot-github-current-revision.py",
       "source_sha256": "4ac1573add6dd927b236966dc22ae68f23f6fbb89c4244f8e7f40d7ab1c95863",
       "source_blob": "708db09e084a20e25ba0f980b05f076a1074119a",
-      "target_blob": "a48392cc8fc2c13fd113b1c386d2dec316f09ea0",
-      "target_sha256": "e5f5171e1dd9e04d8f11fa66f7ff220012f2b8daefbecf2ee3b49e07297996a3",
+      "target_blob": "1de40c129f4ef8bd72156e90ef76801a61535ad3",
+      "target_sha256": "e478d450b162eefaa5bd8f65a88a73d89b01ddbcdfb9d1a753cdf173339757ba",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -90,8 +90,8 @@
       "target_path": ".github/workflows/copilot-review.yml",
       "source_sha256": "1bdbb4bd62ebda00ef689ce063e6b74299d9b1ee067c1c972730cd1212114b98",
       "source_blob": "9f8d54e95bccffd7de815826ea8bba1bdab66f81",
-      "target_blob": "d2937ef862259d4c782a4248821173999aa77dbe",
-      "target_sha256": "8e986d677e44153b0bc54b17318262c4a9e9940e14b59f4a84aa8e06495b92e9",
+      "target_blob": "5eba533ca80d4ba1385bdc9b99290e813ef61831",
+      "target_sha256": "718fcc71cd4e30dc14abc4c5c73e290c9a414479f844d9662b35ac459e5a331a",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -110,8 +110,8 @@
       "target_path": ".github/workflows/review-request-continuation.yml",
       "source_sha256": "5d5de0d48ab51f2fb742aaed82fef9eb06f5d05aa5c5cbbbf4ee21fd27c29584",
       "source_blob": "ae826a6b3efa7df6bec8e1b567112605a92d8815",
-      "target_blob": "d172d2f1712e371b497a334125cde61f01864338",
-      "target_sha256": "51db6b88700eb625f215993c54b76038729606d71a6b26404d15eeb459ddbe0f",
+      "target_blob": "b737349048a6290317a704092c8ef011fca20736",
+      "target_sha256": "d682a4d72847fbd74390a9abd8eea252218c5b89d19b1044b9b0873ab78216f9",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -120,8 +120,8 @@
       "target_path": "scripts/review_request_continuation.py",
       "source_sha256": "29014fe17a418763f294e9724354809abf56d051333e690768b5d17cce24452f",
       "source_blob": "da7bba5c5faba9f7abfe5285f3f8a5a3c561ff17",
-      "target_blob": "1da6c5c0b6ed69f06b1883bba043d3016849b19f",
-      "target_sha256": "98f13fa58b6d1d87ffec7eba321108a4826bb79d9f2c4a140cceae2dd6279d72",
+      "target_blob": "ff1c7a9f0f8a4bc68400ad93f4667dd0ddfcb079",
+      "target_sha256": "44f52b8205008321c1c37212562d7f1b5bb50569602424fc047a5a92fc17ecf9",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -130,8 +130,8 @@
       "target_path": "scripts/review_request_provenance.py",
       "source_sha256": "742d38d26c580c7220acb03462c27146327608ea964915efad9d0be2b0f6d8f3",
       "source_blob": "17ae4e232221846a4865fa2fe728caa85b33b45c",
-      "target_blob": "69406a2d6b1193d74c2de12582780f53213b1b11",
-      "target_sha256": "e4fe6f64012399295269c122d87c7b702a3155ca33dcbf560fd07d7a531bed97",
+      "target_blob": "c774f32c950e87baa576712e41fad5bb7098c6b2",
+      "target_sha256": "8952688c647d6960cbe6e5715cd127fe6b8121d960895d8136819745180cba50",
       "mode": "adapted-local",
       "target_mode": "0644"
     }
@@ -179,12 +179,12 @@
   "local_preparation_source_commit": "ab6dd8bec5958508b8b4d66920d08d3dd8251e65",
   "local_preparation_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
   "final_protected_source_agents_sha256": "00aa090f2a662cbbe9704bf2fa94a455b4107127f850694e8ec68dd19fe4e779",
-  "final_target_agents_sha256": "82a3f0df0579560aba7b3021b221f1fdc208a424d6ea667c9559117cc2888657",
-  "final_target_copilot_sha256": "6af201707af78aa734398c046d00b7fd2290fd9483abc2a07fb7b2a3c9eccc5b",
+  "final_target_agents_sha256": "39cf215f6d21de4b6116e5eac43062ee561a697ecfb7e08661995315ddb2fb0b",
+  "final_target_copilot_sha256": "d6fce2e475dd88e941155058af01e0449b3c0d2b6f68f9d877657028080e3102",
   "final_acceptance_status": "PENDING_INDEPENDENT_AND_NATIVE_PORT_ACCEPTANCE",
   "protected_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
   "protected_source_receipt": {
-    "path": "/Users/rene/Documents/Codex/2026-10-05/analyisere-warum-das-so-lange-daurt/outputs/source6b-main-admission-c56a480e-9f0b-45cc-b3a9-120caa89f540.json",
+    "id": "sha256:9fb53417e0bfcd0ba5be2bffad5d2825661df19b093a8b9d9fae567681a5fc0d",
     "sha256": "9fb53417e0bfcd0ba5be2bffad5d2825661df19b093a8b9d9fae567681a5fc0d"
   },
   "native_acceptance": false

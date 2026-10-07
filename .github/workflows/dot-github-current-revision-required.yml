@@ -14,7 +14,7 @@ run-name: >-
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review, edited]
+    types: [opened, synchronize, reopened, ready_for_review, edited, labeled, unlabeled]
 
 permissions:
   contents: read
@@ -64,6 +64,7 @@ jobs:
           EVENT_BASE_REF: ${{ github.event.pull_request.base.ref }}
           EVENT_AUTHOR: ${{ github.event.pull_request.user.login }}
           EVENT_AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+          EVENT_SENDER: ${{ github.event.sender.login }}
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}

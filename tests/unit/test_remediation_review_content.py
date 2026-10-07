@@ -127,7 +127,19 @@ class RemediationReviewContentTests(unittest.TestCase):
                 self.assertNotIn("--method", calls.read_text())
                 return dict(line.split("=", 1) for line in output.read_text().splitlines()), calls.read_text()
 
-            for phrase in ("No files to review.", "No files were reviewed.", "NO FILES\u00a0WERE\nREVIEWED."):
+            for phrase in (
+                "No files to review.",
+                "No files were reviewed.",
+                "NO FILES\u00a0WERE\nREVIEWED.",
+                "I can't review this pull request.",
+                "I can\u2019t review this pull request.",
+                "I can't review any files.",
+                "I can\u2019t review any files.",
+                "I wasn't able to review any files.",
+                "I wasn\u2019t able to review any files.",
+                "I isn't able to review any files.",
+                "I isn\u2019t able to review any files.",
+            ):
                 for body, comments in (
                     (phrase, []),
                     (phrase, [current]),

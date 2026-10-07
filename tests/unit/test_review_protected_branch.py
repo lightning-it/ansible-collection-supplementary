@@ -30,9 +30,13 @@ class ProtectedReviewBranchTests(unittest.TestCase):
         }
         for run in ("88", "89"):
             fixture.route("/actions/runs/" + run + "/attempts/1")["head_branch"] = branch
-        # PRT executes default develop D; dispatch resumes on PR base M.
+        # PRT workflow uses default develop D; runner ref/SHA identifies PR base M.
         original = "c" * 40 if branch == "main" else continuation.BASE
-        fixture.env.update(WORKFLOW_SHA=original, GITHUB_SHA=original)
+        fixture.env.update(
+            WORKFLOW_SHA=original,
+            GITHUB_SHA=continuation.BASE,
+            GITHUB_REF="refs/heads/" + branch,
+        )
         fixture.route("/branches/develop")["commit"]["sha"] = original
         fixture.resume_changes = {
             "WORKFLOW_SHA": continuation.BASE,
@@ -43,6 +47,23 @@ class ProtectedReviewBranchTests(unittest.TestCase):
             + branch,
         }
         return fixture
+
+    def test_original_main_target_authenticates_controller_and_runner_base_separately(self):
+        for changes in (
+            {"GITHUB_REF": "refs/heads/develop"},
+            {"GITHUB_SHA": "c" * 40},
+            {"WORKFLOW_SHA": "d" * 40},
+            {"GITHUB_WORKFLOW_REF": continuation.REPO + "/.github/workflows/copilot-review.yml@refs/heads/main"},
+            {"GITHUB_REF_PROTECTED": "false"},
+        ):
+            with self.subTest(changes=changes):
+                f = self.fixture("main")
+                f.env.update(changes)
+                before = copy.deepcopy(f.state["versions"])
+                result = f.defer()
+                self.assertNotEqual(0, result.returncode, result.stderr)
+                self.assertEqual(before, f.state["versions"])
+                self.assertEqual([], f.state["requests"])
 
     def test_develop_and_main_locator_and_consumer_share_exact_protected_ref(self):
         for branch in ("develop", "main"):

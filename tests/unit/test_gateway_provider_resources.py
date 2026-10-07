@@ -16,6 +16,48 @@ gateway = fixtures.gateway
 transport = gateway.transport
 
 
+class NormalizedRequestBudgetTests(unittest.TestCase):
+    def test_normalized_byte_boundary_rejects_before_digest_request_consumption_or_charge(self):
+        import bounded_review_provider as provider
+
+        profile = gateway.config.profile()
+        for metadata in (None, {"agent": "codex"}):
+            request = {"model": profile["model"], "input": "boundary"}
+            if metadata is not None:
+                request["client_metadata"] = metadata
+            reference = gateway.ResponseBudget(profile, max_cost_microusd=1_000_000, start_ms=0, timeout_ms=1000)
+            _digest, normalized = reference.reserve(request, now_ms=1)
+            size = len(gateway.review.canonical(normalized))
+            self.assertLess(len(gateway.review.canonical(request)), size)
+            self.assertNotIn("client_metadata", normalized)
+            for limit in (size - 1, size, size + 1):
+                with self.subTest(metadata=metadata, limit=limit, normalized_size=size):
+                    budget = gateway.ResponseBudget(
+                        profile,
+                        max_cost_microusd=1_000_000,
+                        start_ms=0,
+                        timeout_ms=1000,
+                        request_byte_limit=limit,
+                    )
+                    with patch.object(provider, "sha", wraps=provider.sha) as digest:
+                        if limit < size:
+                            with self.assertRaisesRegex(gateway.review.ReviewError, "provider-request-size"):
+                                budget.reserve(request, now_ms=1)
+                            digest.assert_not_called()
+                            self.assertEqual(0, budget.charged)
+                            self.assertEqual(set(), budget.requests)
+                            self.assertEqual(set(), budget.responses)
+                            self.assertIsNone(budget.active)
+                            self.assertIsNone(budget.admitted)
+                            self.assertTrue(budget.failed)
+                        else:
+                            _digest, bounded = budget.reserve(request, now_ms=1)
+                            self.assertEqual(normalized, bounded)
+                            self.assertEqual(1, digest.call_count)
+                            self.assertEqual(1, len(budget.requests))
+                            self.assertGreater(budget.charged, 0)
+
+
 class ProviderResourceTests(unittest.TestCase):
     setUp = fixtures.SingleReviewGatewayTests.setUp
     request = fixtures.SingleReviewGatewayTests.request

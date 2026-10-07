@@ -115,7 +115,7 @@ else:raise SystemExit('unexpected route '+route)
                         )
                     )
 
-    def direct(self, branch, changed=None, live_source=None):
+    def direct(self, branch, changed=None, live_source=None, runner=None):
         pr = self.pr(branch)
         if changed:
             changed(pr)
@@ -131,12 +131,13 @@ else:raise SystemExit('unexpected route '+route)
                 "PR_AUTHOR": "contributor",
                 "PR_NUMBER": "23",
                 "WORKFLOW_SHA": ("e" * 40 if branch == "main" else BASE),
-                "GITHUB_SHA": ("e" * 40 if branch == "main" else BASE),
+                "GITHUB_SHA": BASE,
                 "GITHUB_WORKFLOW_REF": REPO + "/.github/workflows/copilot-review.yml@refs/heads/develop",
-                "GITHUB_REF": "refs/heads/develop",
+                "GITHUB_REF": "refs/heads/" + branch,
                 "GITHUB_RUN_ID": "77",
                 "GITHUB_RUN_ATTEMPT": "1",
                 "LIVE_SOURCE": live_source or ("e" * 40 if branch == "main" else BASE),
+                **(runner or {}),
             },
             pr,
         )
@@ -162,6 +163,18 @@ else:raise SystemExit('unexpected route '+route)
             result, calls = self.direct(branch, live_source="c" * 40)
             self.assertNotEqual(0, result.returncode)
             self.assertFalse(any("POST" in c for c in calls))
+
+    def test_direct_main_target_rejects_runner_base_and_controller_confusion(self):
+        for runner in (
+            {"GITHUB_REF": "refs/heads/develop"},
+            {"GITHUB_SHA": "e" * 40},
+            {"WORKFLOW_SHA": "c" * 40},
+            {"GITHUB_WORKFLOW_REF": REPO + "/.github/workflows/copilot-review.yml@refs/heads/main"},
+        ):
+            with self.subTest(runner=runner):
+                result, calls = self.direct("main", runner=runner)
+                self.assertNotEqual(0, result.returncode, result.stderr)
+                self.assertFalse(any("POST" in call for call in calls))
 
     def test_refresh_owner_election_binds_actual_fork_and_empty_association(self):
         function = shell_function(ROOT / ".github/workflows/copilot-review-refresh.yml", "elect_once")
@@ -215,7 +228,12 @@ else:raise SystemExit('unexpected route '+route)
                     "PRODUCER_OWNER_MODE": "verification",
                 }
 
-                def call(r=run, ps=None, env=env, pr=pr, jobs=jobs):
+                def call(r=None, ps=None, env=None, pr=None, jobs=None, fixtures=(run, env, pr, jobs)):
+                    default_run, default_env, default_pr, default_jobs = fixtures
+                    r = default_run if r is None else r
+                    env = default_env if env is None else env
+                    pr = default_pr if pr is None else pr
+                    jobs = default_jobs if jobs is None else jobs
                     return self.shell(
                         'oa() { gh api "$@"; }\n' + function + "\nelect_once",
                         env,
@@ -240,10 +258,17 @@ else:raise SystemExit('unexpected route '+route)
                     )
                     self.assertNotEqual(0, call(altered)[0].returncode)
 
-    def test_refresh_forward_hydration_and_final_fence_bind_fork(self):
+    def test_fork_skips_direct_write_but_protected_hydration_and_final_fence_bind_fork(self):
+        workflow = self.document("copilot-review-refresh.yml")
+        same_repo = "github.event.pull_request.head.repo.full_name == github.repository"
+        self.assertIn(same_repo, workflow["jobs"]["forward-review-event"]["if"])
+        self.assertIn(same_repo, workflow["concurrency"]["group"])
         fixture = branch_tests.ProtectedReviewBranchTests()
         for branch in ("develop", "main"):
             result, calls = fixture.refresh(branch, head_repository=FORK)
+            self.assertNotEqual(0, result.returncode)
+            self.assertEqual([], calls)
+            result, calls = fixture.refresh(branch, head_repository=REPO)
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertEqual(1, len(calls))
             result, calls = fixture.refresh(branch, consumer=True, head_repository=FORK)

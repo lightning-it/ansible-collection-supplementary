@@ -26,10 +26,10 @@ REVIEWERS = frozenset({BOT, "copilot-pull-request-reviewer"})
 
 
 FAILURE_MARKERS = (
-    "unabletoreviewthispullrequest",
+    "unabletoreviewthispullrequest", "cannotreviewthispullrequest",
     "notabletoreviewthispullrequest", "wasnotabletoreviewthispullrequest",
     "nofilestoreview", "nofileswerereviewed",
-    "unabletoreviewanyfiles",
+    "unabletoreviewanyfiles", "cannotreviewanyfiles",
     "notabletoreviewanyfiles",
     "wasnotabletoreviewanyfiles",
     "quotaexhausted",
@@ -56,7 +56,8 @@ class ReviewContentError(ValueError):
 def normalize(value: str) -> str:
     """Match the protected gate's ASCII fold, contraction and Unicode whitespace rules."""
     ascii_lower = "".join(chr(ord(char) + 32) if "A" <= char <= "Z" else char for char in value)
-    expanded = ascii_lower.replace("n't", " not").replace("n\u2019t", " not")
+    expanded = ascii_lower.replace("can't", "cannot").replace("can\u2019t", "cannot")
+    expanded = expanded.replace("n't", " not").replace("n\u2019t", " not")
     return "".join(char for char in expanded if not char.isspace())
 
 
@@ -311,9 +312,8 @@ def validate_intent(intent, repo, repo_id, key):
             and all(sha(intent[field]) for field in ("base", "head", "source_sha")), "deferred intent")
     require(key == key_for(repo_id, intent["pr"], intent["head"]), "intent budget key")
     if intent["schema"] == 1:
-        # Legacy facts retain their original meaning; they cannot describe a
-        # default-controller/Main-base split that the old schema never carried.
-        require(intent["base_ref"] == "develop" and intent["source_sha"] == intent["base"], "legacy original controller")
+        # Schema 1 authenticated the protected Default Develop source,
+        # independently of its recorded PR base (including Main D != M).
         source_ref = "develop"
     else:
         require(intent["source_ref"] == "develop", "original default controller ref")
@@ -356,9 +356,12 @@ def native_resume_run(repo, run_id, source, intent, review_id, completed=True):
     require(type(run["id"]) is int and str(run["id"]) == run_id and type(run["run_attempt"]) is int and run["run_attempt"] == 1
             and run["event"] == "workflow_dispatch" and run["path"] == WORKFLOW and run["name"] == "Continue deferred first review request"
             and run["repository"]["full_name"] == repo and run["head_repository"]["full_name"] == repo
-            and run["head_sha"] == source == intent["base"] and run["head_branch"] == intent["base_ref"]
+            and run["head_sha"] == source
+            and ((intent["schema"] == 1 and run["head_branch"] == "develop")
+                 or (run["head_branch"] == intent["base_ref"] and source == intent["base"]))
             and run["actor"]["login"] == run["triggering_actor"]["login"] == "github-actions[bot]"
             and run["display_title"] == expected_title, "resume native run")
+    repository(repo, intent["repository_id"], source, run["head_branch"])
     if completed:
         require(run["status"] == "completed" and run["conclusion"] == "success", "resume native completion")
     else:
@@ -385,7 +388,6 @@ def verify_receipt(context, record):
     journal = Journal(repo, repo_id)
     journal.oid = record["intent_commit"]
     require(journal.read(record_path(key, True)) == intent and journal.read(record_path(key)) is None, "pre-request intent snapshot")
-    repository(repo, repo_id, record["source_sha"], intent["base_ref"])
     run = native_resume_run(repo, record["claim_run"], record["source_sha"], intent, record["old_review"])
     job = native_job(repo, run, "Resume deferred first review request", RESUME_STEPS)
     start, end = epoch(job["steps"][2]["started_at"]), epoch(job["steps"][2]["completed_at"])

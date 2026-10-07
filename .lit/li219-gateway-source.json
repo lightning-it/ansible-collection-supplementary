@@ -5,8 +5,8 @@
   "local_preparation_source_commit": "ab6dd8bec5958508b8b4d66920d08d3dd8251e65",
   "local_preparation_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
   "protected_source_commit": "a44cb1762aa6ae3edba91d6cf75ada2a99182af5",
-  "final_target_agents_sha256": "52f55fc8252d7b5714a1758f20a19946d06729d8ee6ac51a2ada312a51266290",
-  "final_target_copilot_sha256": "683e27e7dd39c90b2c64e18b65dc311dc75a0e8e91293e55bcebcbac9afbef7e",
+  "final_target_agents_sha256": "39cf215f6d21de4b6116e5eac43062ee561a697ecfb7e08661995315ddb2fb0b",
+  "final_target_copilot_sha256": "d6fce2e475dd88e941155058af01e0449b3c0d2b6f68f9d877657028080e3102",
   "bindings": [
     {
       "source_path": "default/.github/workflows/release-bot-exact-head-review.yml",
@@ -66,9 +66,9 @@
       "target_path": "scripts/bounded_review_provider.py",
       "source_blob": "2491731ef65e54f823eb5813bf1c197e9d8124af",
       "source_sha256": "61dea0b1de49356a49e75aaa556a2495398775e8b1a848e13f460ed2b13f62bd",
-      "target_sha256": "7d435da4942f74a8923eb3bd56e0bfcd7806c4dbe0874cec76bfd5375d8935a8",
+      "target_sha256": "58a866e1c29aac1eb4412c96a0dfa1307162ef0c61eb446870b08c905747ee8d",
       "mode": "adapted-local",
-      "target_blob": "4d126dd9b80fe59ea7fe1e391ef3d5869d1d83d0",
+      "target_blob": "a3cd6c1e5a27378088062c32b835123711c85c4e",
       "target_mode": "0644",
       "adaptation": "Native Ansible sanity source compatibility: strict JSON schema types retained; discarded values named, runtime Unicode preserved as ASCII escapes."
     },
@@ -97,7 +97,7 @@
   ],
   "protected_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
   "protected_source_receipt": {
-    "path": "/Users/rene/Documents/Codex/2026-10-05/analyisere-warum-das-so-lange-daurt/outputs/source6b-main-admission-c56a480e-9f0b-45cc-b3a9-120caa89f540.json",
+    "id": "sha256:9fb53417e0bfcd0ba5be2bffad5d2825661df19b093a8b9d9fae567681a5fc0d",
     "sha256": "9fb53417e0bfcd0ba5be2bffad5d2825661df19b093a8b9d9fae567681a5fc0d"
   },
   "final_protected_source_agents_sha256": "00aa090f2a662cbbe9704bf2fa94a455b4107127f850694e8ec68dd19fe4e779",

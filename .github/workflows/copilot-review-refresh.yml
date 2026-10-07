@@ -58,7 +58,7 @@ concurrency:
       !(vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) && format('copilot-review-refresh-{0}-{1}', github.repository, inputs.pr_number) ||
       github.event_name == 'workflow_dispatch' && github.ref_protected && github.actor == 'github-actions[bot]' &&
       format('current-revision-{0}-head-{1}-check-current-revision-review', github.repository_id, inputs.expected_head) ||
-      github.event.pull_request.draft == false && github.event.pull_request.base.repo.full_name == github.repository && github.event.pull_request.head.repo.full_name != '' && (github.event.pull_request.head.repo.full_name == github.repository || github.event.pull_request.user.type == 'User') &&
+      github.event.pull_request.draft == false && github.event.pull_request.base.repo.full_name == github.repository && github.event.pull_request.head.repo.full_name == github.repository &&
       (
         ('pull_request_review' == github.event_name && (
           (contains(fromJSON('["Copilot","copilot-pull-request-reviewer","copilot-pull-request-reviewer[bot]"]'), github.actor) && 'copilot-pull-request-reviewer[bot]' == github.event.review.user.login) ||
@@ -84,7 +84,7 @@ jobs:
     if: >-
       (vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) &&
       github.event.pull_request.draft == false &&
-      github.event.pull_request.base.repo.full_name == github.repository && github.event.pull_request.head.repo.full_name != '' && (github.event.pull_request.head.repo.full_name == github.repository || github.event.pull_request.user.type == 'User') &&
+      github.event.pull_request.base.repo.full_name == github.repository && github.event.pull_request.head.repo.full_name == github.repository &&
       (
         (
           github.event_name == 'pull_request_review' &&
@@ -139,6 +139,7 @@ jobs:
           [[ "${EXPECTED_HEAD}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${EXPECTED_BASE}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${HEAD_REPOSITORY}" =~ ^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+$ ]]
+          test "${HEAD_REPOSITORY}" = "${REPOSITORY}"
           validate_locator_pr() {
             pr="$(api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
             jq -e --arg repo "${REPOSITORY}" --arg head_repository "${HEAD_REPOSITORY}" --arg head "${EXPECTED_HEAD}" --arg base "${EXPECTED_BASE}" \
@@ -1413,7 +1414,16 @@ jobs:
                 and $summary.schema == 4
                 and $summary.base_sha == $base
                 and $summary.head_sha == $head
-                and $summary.head_repository == $head_repository
+                and (
+                  if ($check.external_id |
+                    test("^mlx90-current-revision:(copilot|ancestry-backmerge):v5:")) then
+                    $head_repository == $repository
+                    and ((($summary | has("head_repository")) | not)
+                      or $summary.head_repository == $head_repository)
+                  else
+                    $summary.head_repository == $head_repository
+                  end
+                )
                 and (
                   (
                     (
@@ -1536,14 +1546,14 @@ jobs:
                 | select(all(.[]; type == "array"))
                 | [$review.body, .[][].body]
                 | select(all(.[]; type == "string" or . == null))
-                | map((. // "") | ascii_downcase | gsub("n[\u0027\u2019]t"; " not") | gsub("\\s"; ""))
+                | map((. // "") | ascii_downcase | gsub("can[\u0027\u2019]t"; "cannot") | gsub("n[\u0027\u2019]t"; " not") | gsub("\\s"; ""))
                 ' <<<"${comments}")" || return 1
               if jq -e '
                 any(.[]; length > 0) and all(.[];
                   (contains("unabletoreviewthispullrequest")
-                   or contains("notabletoreviewthispullrequest")
+                   or contains("notabletoreviewthispullrequest") or contains("cannotreviewthispullrequest")
                    or contains("nofilestoreview") or contains("nofileswerereviewed")
-                   or contains("unabletoreviewanyfiles")
+                   or contains("unabletoreviewanyfiles") or contains("cannotreviewanyfiles")
                    or contains("notabletoreviewanyfiles")
                    or contains("wasnotabletoreviewanyfiles")
                    or contains("quotaexhausted")
@@ -2756,7 +2766,7 @@ jobs:
               then ([($review.body // "")] + [$pages[][]? | .body]
                 | map(
                     ascii_downcase
-                    | gsub("n[\u0027\u2019]t"; " not")
+                    | gsub("can[\u0027\u2019]t"; "cannot") | gsub("n[\u0027\u2019]t"; " not")
                     | gsub("\\p{White_Space}"; "")
                   )) as $parts
                 | if any($parts[]; length > 0) then ($parts | join("|"))
@@ -2766,7 +2776,7 @@ jobs:
             ' <(printf '%s\n' "${review_payload}") \
               <(printf '%s\n' "${review_comment_pages}"))"
             case "${normalized_review_body}" in
-              *unabletoreviewthispullrequest*|*notabletoreviewthispullrequest*|*nofilestoreview*|*nofileswerereviewed*|*notabletoreviewanyfiles*|*unabletoreviewanyfiles*|*quotaexhausted*|*quotaexceeded*|*premiumrequestquota*|*premiumrequestsquota*|*suppressedcomment*|*encounteredanerror*)
+              *unabletoreviewthispullrequest*|*cannotreviewthispullrequest*|*notabletoreviewthispullrequest*|*nofilestoreview*|*nofileswerereviewed*|*notabletoreviewanyfiles*|*unabletoreviewanyfiles*|*cannotreviewanyfiles*|*quotaexhausted*|*quotaexceeded*|*premiumrequestquota*|*premiumrequestsquota*|*suppressedcomment*|*encounteredanerror*)
                 return 1
                 ;;
             esac

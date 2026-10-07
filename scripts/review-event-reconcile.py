@@ -29,10 +29,10 @@ DISPATCH_INVENTORY_REQUESTS = 256
 REVIEWERS = {"copilot-pull-request-reviewer", "copilot-pull-request-reviewer[bot]"}
 # Match the canonical producer/refresh terminal marker vocabulary.
 MARKERS = (
-    "unabletoreviewthispullrequest",
+    "unabletoreviewthispullrequest", "cannotreviewthispullrequest",
     "notabletoreviewthispullrequest", "wasnotabletoreviewthispullrequest",
     "nofilestoreview", "nofileswerereviewed",
-    "unabletoreviewanyfiles",
+    "unabletoreviewanyfiles", "cannotreviewanyfiles",
     "notabletoreviewanyfiles",
     "wasnotabletoreviewanyfiles",
     "quotaexhausted",
@@ -179,6 +179,8 @@ def clean_review(review, comments, head):
             "",
             (text or "")
             .lower()
+            .replace("can't", "cannot")
+            .replace("can\u2019t", "cannot")
             .replace("n't", " not")
             .replace("n\u2019t", " not"),
         )
@@ -254,7 +256,9 @@ def required_locator(run, repository, pr):
         and recorded.get("base", {}).get("repo", {}).get("url") == api_url
         and run.get("display_title") in {
             f"{title} PR #{pr['number']} {action} {pr['head']['sha']}"
-            for action in ("opened", "synchronize", "reopened", "ready_for_review", "edited")
+            for action in (
+                "opened", "synchronize", "reopened", "ready_for_review", "edited", "labeled", "unlabeled"
+            )
         }
         and run.get("name") in (name, run.get("display_title"))
     )
@@ -280,12 +284,25 @@ def latest_required(runs, repository, pr):
         except ValueError:
             return None
         attempt = run.get("run_attempt")
+        sender = run.get("actor", {}).get("login")
         if (type(attempt) is not int or attempt not in (1, 2)
-                or run.get("actor", {}).get("login") != pr["user"]["login"]
-                or run.get("triggering_actor", {}).get("login") != (pr["user"]["login"] if attempt == 1 else "github-actions[bot]")
+                or not isinstance(sender, str) or not sender or any(char.isspace() for char in sender)
+                or run.get("triggering_actor", {}).get("login") != (sender if attempt == 1 else "github-actions[bot]")
                 or run.get("status") != "completed"
                 or run.get("conclusion") not in {"success", "failure", "cancelled"}):
             return None
+        if attempt == 2:
+            original = api(f"repos/{repository}/actions/runs/{run['id']}/attempts/1")
+            if (not isinstance(original, dict) or not required_locator(original, repository, pr)
+                    or type(original.get("run_attempt")) is not int or original["run_attempt"] != 1
+                    or original.get("status") != "completed"
+                    or original.get("conclusion") not in {"failure", "cancelled"}
+                    or original.get("triggering_actor", {}).get("login") != sender
+                    or any(original.get(field) != run.get(field) for field in (
+                        "id", "created_at", "display_title", "actor", "workflow_id", "workflow_url",
+                        "path", "event", "repository", "head_repository", "head_sha", "head_branch", "pull_requests"
+                    ))):
+                return None
     return max(selected, key=lambda run: (run["created_at"], run["id"]))
 
 
@@ -447,7 +464,7 @@ def reconcile(repository, now):
                     continue
                 if inputs is None:
                     continue
-                path, ref = CONTINUATION, pr["base"]["ref"]
+                path, ref = CONTINUATION, inputs.pop("resume_ref")
                 title = f"First review PR #{number} head {head} owner {inputs['owner_run']} old review {inputs['old_review']}"
             else:
                 review = max(usable, key=lambda item: item["id"])
