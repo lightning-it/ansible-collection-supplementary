@@ -378,7 +378,8 @@ def reconcile(repository, now):
             and check["conclusion"] == "success"
         ]
         if len(neutral) > 1:
-            raise ValueError("ambiguous neutral evidence")
+            print(f"PR {number}: ambiguous neutral evidence; required failure remains blocking")
+            continue
         if neutral:
             # This is only a locator. The helper independently verifies summary,
             # immutable owner, terminal jobs, source and current PR before writing.
