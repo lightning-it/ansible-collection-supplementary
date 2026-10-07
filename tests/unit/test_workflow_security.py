@@ -407,24 +407,9 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             1,
         )
         helper_name_line = next(line.strip() for line in main_guard.splitlines() if line.strip().startswith("name: "))
-        self.assertEqual(
-            "name: ${{ vars.LI219_EVENT_MODE == 'enabled' && "
-            "github.event.pull_request.user.type == 'User' && "
-            "'Inactive legacy main pin' || 'Validate protected main helper pin' }}",
-            helper_name_line,
-        )
-        self.assertNotIn("contains(fromJSON(", helper_name_line)
-        for event_mode, author_type, expected_name in (
-            ("enabled", "User", "Inactive legacy main pin"),
-            ("enabled", "Bot", "Validate protected main helper pin"),
-            ("disabled", "User", "Validate protected main helper pin"),
-        ):
-            actual_name = (
-                "Inactive legacy main pin"
-                if event_mode == "enabled" and author_type == "User"
-                else "Validate protected main helper pin"
-            )
-            self.assertEqual(expected_name, actual_name)
+        self.assertEqual("name: Validate protected main helper pin", helper_name_line)
+        self.assertNotIn("${{", helper_name_line)
+        self.assertNotIn("Inactive legacy main pin", main_guard)
         self.assertIn("uses: ./.github/workflows/current-revision-rerun.yml", develop_handoff)
         self.assertIn(
             "uses: lightning-it/ansible-collection-supplementary/.github/workflows/"
