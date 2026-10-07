@@ -12,7 +12,7 @@
     {
       "path": ".github/workflows/current-revision-rerun.yml",
       "category": "local-required",
-      "sha256": "fe0845c8e80c77b4284fdf3f5fdcb488ff4aa0f6e94c992011e74aec4c3b67fe",
+      "sha256": "25013246f828c79fb35486b1aa373ac537d28adeab5162fde76bc7e8208891e4",
       "source": "shared-assets-lit/default/.github/workflows/current-revision-rerun.yml",
       "owner": "ansible-collection-supplementary",
       "purpose": "Local Required-title label-action compatibility; authenticated labeled/unlabeled locator filters match the protected Required trigger and consumer allowlists."
@@ -51,7 +51,7 @@
     {
       "path": "scripts/review_content_markers.py",
       "category": "local-required",
-      "sha256": "0f3c112d70c16211a6947e593f6f6a315b22f5e8308dd76827e5d7de1e076dd8",
+      "sha256": "c74034b84d22704581064bdd410d7afb7012c509694da66246d19ec5db17f5db",
       "source": "shared-assets-lit/scripts/review_content_markers.py",
       "owner": "ansible-collection-supplementary",
       "purpose": "Protected PR base-ref dispatch/consumer binding and native sanity source compatibility; strict schema types and runtime Unicode content semantics retained."
@@ -66,7 +66,7 @@
     {
       "path": ".github/workflows/copilot-review.yml",
       "category": "local-required",
-      "sha256": "89123e40f5566f1af9a4f493f6f42ba6501a056465a4af9d8aaf2130cc74d444",
+      "sha256": "ca333a00c1e6094b042f9be4bf75bc916611a4b96113bb5a99b32d9b24fa7c94",
       "owner": "ansible-collection-supplementary",
       "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
     },
@@ -81,7 +81,7 @@
       "path": ".github/workflows/review-request-continuation.yml",
       "category": "local-required",
       "source": "shared-assets-lit/default/.github/workflows/review-request-continuation.yml",
-      "sha256": "d682a4d72847fbd74390a9abd8eea252218c5b89d19b1044b9b0873ab78216f9",
+      "sha256": "a3dc819738ad06f533edd7f4575cd11678f05b51fd20bd75f525017227e29b84",
       "owner": "ansible-collection-supplementary",
       "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
     },
@@ -89,7 +89,7 @@
       "path": "scripts/review_request_continuation.py",
       "category": "local-required",
       "source": "shared-assets-lit/default/scripts/review_request_continuation.py",
-      "sha256": "44f52b8205008321c1c37212562d7f1b5bb50569602424fc047a5a92fc17ecf9",
+      "sha256": "5a89febc2ed9e381f73fdfc395f7d2bdb6f1ab8699c8ffff521d7b3013c96ae1",
       "owner": "ansible-collection-supplementary",
       "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
     },
@@ -97,9 +97,27 @@
       "path": "scripts/review_request_provenance.py",
       "category": "local-required",
       "source": "shared-assets-lit/default/scripts/review_request_provenance.py",
-      "sha256": "8952688c647d6960cbe6e5715cd127fe6b8121d960895d8136819745180cba50",
+      "sha256": "5621bdba718e5fb37ad3622dd0772b8c93ce42be82b6c091391dc05544b84185",
       "owner": "ansible-collection-supplementary",
       "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+    },
+    {
+      "path": "scripts/native_verifier_retry.py",
+      "category": "central-managed",
+      "source": "shared-assets-lit/default/scripts/native_verifier_retry.py",
+      "sha256": "9812af28c08e3a49a00494fa248f9d3c125cc964b15dc1dbc68e8e2dd135ac91"
+    },
+    {
+      "path": "scripts/run-native-verifier-retry.sh",
+      "category": "central-managed",
+      "source": "shared-assets-lit/default/scripts/run-native-verifier-retry.sh",
+      "sha256": "afcff9889dcffb32a101aa2bfe8f9770c0f30bcab56e1261da0b061cb5b4a987"
+    },
+    {
+      "path": ".github/workflows/review-infrastructure-retry.yml",
+      "category": "central-managed",
+      "source": "shared-assets-lit/default/.github/workflows/review-infrastructure-retry.yml",
+      "sha256": "861f741f197c30805b9e8565fd085968657b8a3c3a4ada828196586fae81a6d6"
     }
   ],
   "scope": "li219-three-pilot",
