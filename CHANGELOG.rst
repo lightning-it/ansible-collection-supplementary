@@ -4,6 +4,14 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v4.0.4
+======
+
+Bugfixes
+--------
+
+- Use the managed PostgreSQL container name as Keycloak's readable, network-local database endpoint, bind it to the validated private address through the portable Pod `hostAliases` contract, and fail closed unless the running Keycloak container resolves it exclusively to that address.
+
 v4.0.3
 ======
 
