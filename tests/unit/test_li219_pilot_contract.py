@@ -49,6 +49,23 @@ class PilotContractTests(unittest.TestCase):
                 self.assertEqual("ansible-collection-supplementary", asset["owner"])
         self.assertFalse((ROOT / ".github/workflows/supplementary-current-revision-required.yml").exists())
 
+    def test_every_gateway_binding_binds_a_regular_target_and_source_identity(self):
+        manifest = json.loads((ROOT / ".lit/li219-gateway-source.json").read_text())
+        bindings = manifest["bindings"]
+        self.assertGreater(len(bindings), 0)
+        self.assertEqual(len(bindings), len({row["target_path"] for row in bindings}))
+        for row in bindings:
+            with self.subTest(target=row["target_path"]):
+                target = ROOT / row["target_path"]
+                self.assertFalse(target.is_symlink())
+                self.assertTrue(target.is_file())
+                self.assertTrue(target.resolve().is_relative_to(ROOT.resolve()))
+                digest = hashlib.sha256(target.read_bytes()).hexdigest()
+                self.assertEqual(row["target_sha256"], digest)
+                self.assertIn(row["mode"], {"byte-identical", "adapted-local"})
+                if row["mode"] == "byte-identical":
+                    self.assertEqual(row["source_sha256"], digest)
+
     def test_producer_keeps_exact_source_and_separate_legacy_routes(self):
         text = (ROOT / ".github/workflows/copilot-review.yml").read_text()
         jobs = yaml.safe_load(text)["jobs"]

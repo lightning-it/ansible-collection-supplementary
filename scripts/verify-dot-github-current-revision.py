@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -11,6 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
+from datetime import datetime
 from typing import Any
 
 SOURCE_REPOSITORY = "lightning-it/ansible-collection-supplementary"
@@ -88,6 +90,134 @@ class GitHubClient:
             ) from exc
         except (urllib.error.URLError, TimeoutError) as exc:
             raise VerificationError(f"GitHub API read failed: {path}") from exc
+
+
+    def metadata_revision(self, number: int) -> Any:
+        """Read only the existing protected lastEditedAt contract; never a mutation."""
+        query = 'query($number:Int!){repository(owner:"lightning-it",name:".github"){pullRequest(number:$number){number lastEditedAt}}}'
+        request = urllib.request.Request(
+            f"{self._api_url}/graphql",
+            data=json.dumps({"query": query, "variables": {"number": number}}).encode(),
+            headers={"Authorization": f"Bearer {self._token}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                payload = json.load(response)
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise VerificationError("pull request metadata revision read failed") from exc
+        if not isinstance(payload, dict) or payload.get("errors"):
+            raise VerificationError("pull request metadata revision is unavailable")
+        record = require_mapping(
+            require_mapping(
+                require_mapping(payload.get("data"), "metadata data").get("repository"), "metadata repository"
+            ).get("pullRequest"),
+            "metadata pull request",
+        )
+        require_equal(record.get("number"), number, "metadata pull request number")
+        revision = record.get("lastEditedAt")
+        if revision is not None:
+            require_timestamp(revision, "metadata revision")
+        return revision
+
+
+def require_timestamp(value: Any, label: str) -> datetime:
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", value):
+        raise VerificationError(f"{label} must be an exact UTC timestamp")
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise VerificationError(f"{label} is invalid") from exc
+
+
+def labels_digest(labels: Any) -> str:
+    names = []
+    for item in require_list(labels, "pull request labels"):
+        name = require_mapping(item, "pull request label").get("name")
+        if not isinstance(name, str):
+            raise VerificationError("pull request label name must be a string")
+        names.append(name)
+    if len(names) != len(set(names)):
+        raise VerificationError("pull request labels are ambiguous")
+    return hashlib.sha256(json.dumps(sorted(names), ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+
+
+def validate_event_producer(run: Mapping[str, Any], binding: Mapping[str, Any], number: int, head: str) -> None:
+    require_equal(
+        run.get("display_title"),
+        f"Protected current revision PR #{number} {binding['action']} {head}",
+        "event producer action",
+    )
+    if require_timestamp(run.get("created_at"), "event producer creation") < require_timestamp(
+        binding["updated_at"], "event metadata revision"
+    ):
+        raise VerificationError("event producer predates the bound metadata revision")
+
+
+def validate_neutral_metadata(
+    client: GitHubClient,
+    reservation: Mapping[str, Any],
+    pr: Mapping[str, Any],
+    number: int,
+    base: str,
+    head: str,
+    server: str,
+) -> Mapping[str, Any]:
+    """Bind the actual existing schema4 publisher, never a new sender format."""
+    payload = require_mapping(
+        client.get(
+            f"repos/{TARGET_REPOSITORY}/commits/{head}/check-runs?check_name=Current%20revision%20review&filter=all&per_page=100"
+        ),
+        "neutral inventory",
+    )
+    checks = require_list(payload.get("check_runs"), "neutral checks")
+    if type(payload.get("total_count")) is not int or payload["total_count"] != len(checks) or len(checks) > 100:
+        raise VerificationError("neutral inventory is incomplete")
+    matches = [check for check in checks if isinstance(check, dict) and check.get("name") == "Current revision review"]
+    if len(matches) != 1:
+        raise VerificationError("neutral publisher is missing or ambiguous")
+    check = matches[0]
+    for field, value in (("head_sha", head), ("status", "completed"), ("conclusion", "success")):
+        require_equal(check.get(field), value, f"neutral {field}")
+    app = require_mapping(check.get("app"), "neutral App")
+    require_equal(app.get("id"), 15368, "neutral App ID")
+    require_equal(app.get("slug"), "github-actions", "neutral App slug")
+    cid = check.get("id")
+    if type(cid) is not int or cid <= 0:
+        raise VerificationError("neutral check ID is invalid")
+    require_equal(check.get("details_url"), f"{server}/{TARGET_REPOSITORY}/runs/{cid}", "neutral URL")
+    output = require_mapping(check.get("output"), "neutral output")
+    require_equal(output.get("title"), "Current revision review passed", "neutral title")
+    try:
+        summary = require_mapping(json.loads(output.get("summary", "")), "neutral summary")
+    except (ValueError, TypeError) as exc:
+        raise VerificationError("neutral summary is invalid") from exc
+    for field, value in (
+        ("schema", 4),
+        ("pull_request_number", number),
+        ("base_sha", base),
+        ("head_sha", head),
+        ("head_repository", pr["head"]["repo"]["full_name"]),
+        ("pull_request_last_edited_at", pr["_metadata_revision"]),
+        ("pull_request_labels_sha256", labels_digest(pr.get("labels"))),
+    ):
+        require_equal(summary.get(field), value, f"neutral {field}")
+    producer = summary.get("producer_run_id")
+    if type(producer) is not int or producer <= 0:
+        raise VerificationError("neutral producer ID is invalid")
+    run_url = f"{server}/{TARGET_REPOSITORY}/actions/runs/{producer}"
+    require_equal(summary.get("run_url"), run_url, "neutral producer URL")
+    require_equal(
+        check.get("external_id"),
+        f"mlx90-current-revision:copilot:v6:{number}:{producer}:{base}:{head}",
+        "neutral producer identity",
+    )
+    require_equal(
+        require_mapping(reservation.get("output"), "reservation output").get("summary"),
+        f"PR #{number}; base {base}; head {head}; producer {run_url}.",
+        "reservation neutral producer association",
+    )
+    return check
 
 
 def require_mapping(value: Any, label: str) -> Mapping[str, Any]:
@@ -188,7 +318,7 @@ def validate_source(
             raise VerificationError(f"source file {path} has no immutable blob")
 
 
-def event_pr_binding(environment: Mapping[str, str]) -> Mapping[str, str]:
+def event_pr_binding(environment: Mapping[str, str]) -> Mapping[str, Any]:
     """Freeze identity from the protected pull_request_target event, never fork code."""
     fields = {
         "head_repository": "EVENT_HEAD_REPOSITORY",
@@ -213,6 +343,21 @@ def event_pr_binding(environment: Mapping[str, str]) -> Mapping[str, str]:
         raise VerificationError("event author type is invalid")
     if binding["head_repository"] != TARGET_REPOSITORY and binding["author_type"] != "User":
         raise VerificationError("automation must remain same-repository")
+    binding["action"] = environment.get("EVENT_ACTION", "")
+    binding["updated_at"] = environment.get("EVENT_UPDATED_AT", "")
+    require_timestamp(binding["updated_at"], "event metadata revision")
+    for field in ("title", "body"):
+        try:
+            value = json.loads(environment.get(f"EVENT_{field.upper()}_JSON", ""))
+        except (ValueError, TypeError) as exc:
+            raise VerificationError(f"event {field} is invalid") from exc
+        if not isinstance(value, str) and not (field == "body" and value is None):
+            raise VerificationError(f"event {field} is invalid")
+        binding[field] = value
+    try:
+        binding["labels_sha256"] = labels_digest(json.loads(environment.get("EVENT_LABELS_JSON", "")))
+    except (ValueError, TypeError) as exc:
+        raise VerificationError("event labels are invalid") from exc
     return binding
 
 
@@ -221,18 +366,14 @@ def validate_live_pr(
     pr_number: int,
     event_base: str,
     event_head: str,
-    binding: Mapping[str, str],
+    binding: Mapping[str, Any],
 ) -> Mapping[str, Any]:
-    repository = require_mapping(
-        client.get(f"repos/{TARGET_REPOSITORY}"), "target repository"
-    )
+    repository = require_mapping(client.get(f"repos/{TARGET_REPOSITORY}"), "target repository")
     require_equal(repository.get("full_name"), TARGET_REPOSITORY, "target repository")
     require_equal(repository.get("default_branch"), "develop", "target default branch")
     require_equal(repository.get("archived"), False, "target archive state")
     require_equal(repository.get("disabled"), False, "target disabled state")
-    pr = require_mapping(
-        client.get(f"repos/{TARGET_REPOSITORY}/pulls/{pr_number}"), "pull request"
-    )
+    pr = require_mapping(client.get(f"repos/{TARGET_REPOSITORY}/pulls/{pr_number}"), "pull request")
     require_equal(pr.get("number"), pr_number, "pull request number")
     require_equal(pr.get("state"), "open", "pull request state")
     require_equal(pr.get("draft"), False, "pull request draft state")
@@ -251,13 +392,21 @@ def validate_live_pr(
         "head repository",
     )
     head_repository = require_mapping(head.get("repo"), "head repository")
-    require_equal(require_mapping(head_repository.get("owner"), "head owner").get("login"),
-                  binding["head_owner"], "head repository owner")
+    require_equal(
+        require_mapping(head_repository.get("owner"), "head owner").get("login"),
+        binding["head_owner"],
+        "head repository owner",
+    )
     require_equal(base.get("ref"), binding["base_ref"], "live base ref")
     require_equal(head.get("ref"), binding["head_ref"], "live head ref")
     author = require_mapping(pr.get("user"), "pull request author")
     require_equal(author.get("login"), binding["author"], "live author")
     require_equal(author.get("type"), binding["author_type"], "live author type")
+    require_equal(pr.get("title"), binding["title"], "live title")
+    require_equal(pr.get("body"), binding["body"], "live body")
+    require_equal(labels_digest(pr.get("labels")), binding["labels_sha256"], "live labels digest")
+    pr = dict(pr)
+    pr["_metadata_revision"] = client.metadata_revision(pr_number)
     return pr
 
 
@@ -650,7 +799,7 @@ def validate_reservation(
     *,
     attempts: int,
     sleep: Callable[[float], None],
-) -> None:
+) -> Mapping[str, Any]:
     check_id = check.get("id")
     if not isinstance(check_id, int) or check_id <= 0:
         raise VerificationError("protected verifier check ID is invalid")
@@ -787,6 +936,8 @@ def validate_reservation(
     require_equal(job.get("status"), "completed", "verifier job status")
     require_equal(job.get("conclusion"), "success", "verifier job conclusion")
 
+    return producer
+
 
 def verify(
     client: GitHubClient,
@@ -835,10 +986,12 @@ def verify(
             event_head,
             server_url,
         )
+        validate_event_producer(evidence[1], binding, pr_number, event_head)
         # Re-read every mutable binding and ensure the selected native result
         # remains the newest exact evidence at the final mutation boundary.
         validate_source(client, workflow_ref, workflow_sha)
         final_pr = validate_live_pr(client, pr_number, event_base, event_head, binding)
+        require_equal(final_pr["_metadata_revision"], pr["_metadata_revision"], "final metadata revision")
         if not is_aggregated_promotion(final_pr):
             raise VerificationError("protected promotion shape drifted")
         validate_aggregated_promotion_shape(final_pr)
@@ -866,7 +1019,7 @@ def verify(
         attempts=attempts,
         sleep=sleep,
     )
-    validate_reservation(
+    native_run = validate_reservation(
         client,
         check,
         pr,
@@ -877,9 +1030,13 @@ def verify(
         attempts=attempts,
         sleep=sleep,
     )
+    validate_event_producer(native_run, binding, pr_number, event_head)
+    neutral = validate_neutral_metadata(client, check, pr, pr_number, event_base, event_head, server_url)
     # Re-read every mutable binding after evidence verification.
     validate_source(client, workflow_ref, workflow_sha)
-    validate_live_pr(client, pr_number, event_base, event_head, binding)
+    final_pr = validate_live_pr(client, pr_number, event_base, event_head, binding)
+    require_equal(final_pr["_metadata_revision"], pr["_metadata_revision"], "final metadata revision")
+    require_equal(validate_neutral_metadata(client, check, final_pr, pr_number, event_base, event_head, server_url), neutral, "final neutral publisher")
     final_matches = matching_reservations(
         client, pr_number, event_base, event_head
     )

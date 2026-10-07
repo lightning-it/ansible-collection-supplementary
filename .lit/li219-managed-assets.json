@@ -32,7 +32,7 @@
     {
       "path": ".github/workflows/dot-github-current-revision-required.yml",
       "category": "local-required",
-      "sha256": "69abcb288f22f3a525a491acf59d4f4e2e7b7b01b24abf8c8d452757dd2d1726",
+      "sha256": "0851b9385dc3cace8362d105a9e813b8feaf58e60f0b6a27d598063e2274a1e3",
       "source": "shared-assets-lit/.github/workflows/dot-github-current-revision-required.yml",
       "owner": "ansible-collection-supplementary",
       "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
@@ -55,7 +55,7 @@
     {
       "path": "scripts/verify-dot-github-current-revision.py",
       "category": "local-required",
-      "sha256": "335ff0df92731c29df169fcf45c8e050274f5e7d04aef6d4aadf64757e4168a4",
+      "sha256": "e5f5171e1dd9e04d8f11fa66f7ff220012f2b8daefbecf2ee3b49e07297996a3",
       "owner": "ansible-collection-supplementary",
       "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
     },

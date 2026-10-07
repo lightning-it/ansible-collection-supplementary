@@ -50,8 +50,8 @@
       "target_path": ".github/workflows/dot-github-current-revision-required.yml",
       "source_sha256": "734f922840311920ea0c78a3f2e4ded3a0a74c53381bec4671f89d5c5d8fa2a6",
       "source_blob": "db644996d86fe14d9b9ccb4d8e8156b5180ddabf",
-      "target_blob": "48ff2cd8ed56ce605fdb15ef2939ba0b50979918",
-      "target_sha256": "69abcb288f22f3a525a491acf59d4f4e2e7b7b01b24abf8c8d452757dd2d1726",
+      "target_blob": "b8588b37dc89ac805f99272feeba780150c37d61",
+      "target_sha256": "0851b9385dc3cace8362d105a9e813b8feaf58e60f0b6a27d598063e2274a1e3",
       "mode": "adapted-local",
       "target_mode": "0644"
     },
@@ -80,8 +80,8 @@
       "target_path": "scripts/verify-dot-github-current-revision.py",
       "source_sha256": "4ac1573add6dd927b236966dc22ae68f23f6fbb89c4244f8e7f40d7ab1c95863",
       "source_blob": "708db09e084a20e25ba0f980b05f076a1074119a",
-      "target_blob": "42e7af2d5088f644b4a60cc9db6c0cbe010ff56b",
-      "target_sha256": "335ff0df92731c29df169fcf45c8e050274f5e7d04aef6d4aadf64757e4168a4",
+      "target_blob": "a48392cc8fc2c13fd113b1c386d2dec316f09ea0",
+      "target_sha256": "e5f5171e1dd9e04d8f11fa66f7ff220012f2b8daefbecf2ee3b49e07297996a3",
       "mode": "adapted-local",
       "target_mode": "0644"
     },

@@ -51,6 +51,10 @@ jobs:
 
       - name: Verify the independently protected current-revision result
         env:
+          EVENT_UPDATED_AT: ${{ github.event.pull_request.updated_at }}
+          EVENT_TITLE_JSON: ${{ toJson(github.event.pull_request.title) }}
+          EVENT_BODY_JSON: ${{ toJson(github.event.pull_request.body) }}
+          EVENT_LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_BASE: ${{ github.event.pull_request.base.sha }}
           EVENT_HEAD: ${{ github.event.pull_request.head.sha }}

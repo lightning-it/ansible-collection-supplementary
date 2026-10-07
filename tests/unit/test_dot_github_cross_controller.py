@@ -57,6 +57,9 @@ class FakeClient:
         self.calls: dict[str, int] = {}
         self.api_url = API
 
+    def metadata_revision(self, number: int) -> Any:
+        return self.get(f"metadata/{number}")
+
     def get(self, path: str) -> Any:
         if path not in self.responses:
             raise AssertionError(f"unexpected API path: {path}")
@@ -77,6 +80,10 @@ def valid_environment(*, action: str = "opened", base: str = BASE) -> dict[str, 
     return {
         "REPOSITORY": TARGET,
         "EVENT_ACTION": action,
+        "EVENT_UPDATED_AT": "2026-10-07T00:00:00Z",
+        "EVENT_TITLE_JSON": json.dumps(valid_pr()["title"]),
+        "EVENT_BODY_JSON": json.dumps(valid_pr()["body"]),
+        "EVENT_LABELS_JSON": json.dumps(valid_pr()["labels"]),
         "EVENT_BASE": base,
         "EVENT_HEAD": HEAD,
         "EVENT_HEAD_REPOSITORY": TARGET,
@@ -95,6 +102,9 @@ def valid_environment(*, action: str = "opened", base: str = BASE) -> dict[str, 
 def valid_pr(*, head: str = HEAD) -> dict[str, Any]:
     return {
         "number": PR_NUMBER,
+        "title": "ordinary human change",
+        "body": None,
+        "labels": [],
         "state": "open",
         "draft": False,
         "base": {"ref": "develop", "sha": BASE, "repo": {"full_name": TARGET}},
@@ -117,6 +127,38 @@ def valid_check(*, conclusion: str = "success") -> dict[str, Any]:
         "external_id": (f"rep60-required-workflow:v3:{RUN_ID}:{PR_NUMBER}:{BASE}:{HEAD}"),
         "details_url": f"{SERVER}/{TARGET}/runs/{CHECK_ID}",
         "app": {"id": 15368, "slug": "github-actions"},
+        "output": {
+            "summary": f"PR #{PR_NUMBER}; base {BASE}; head {HEAD}; producer {SERVER}/{TARGET}/actions/runs/42."
+        },
+    }
+
+
+def valid_neutral():
+    return {
+        "id": 123,
+        "name": "Current revision review",
+        "head_sha": HEAD,
+        "status": "completed",
+        "conclusion": "success",
+        "app": {"id": 15368, "slug": "github-actions"},
+        "details_url": f"{SERVER}/{TARGET}/runs/123",
+        "external_id": f"mlx90-current-revision:copilot:v6:{PR_NUMBER}:42:{BASE}:{HEAD}",
+        "output": {
+            "title": "Current revision review passed",
+            "summary": json.dumps(
+                {
+                    "schema": 4,
+                    "pull_request_number": PR_NUMBER,
+                    "base_sha": BASE,
+                    "head_sha": HEAD,
+                    "head_repository": TARGET,
+                    "pull_request_last_edited_at": None,
+                    "pull_request_labels_sha256": MODULE.labels_digest([]),
+                    "producer_run_id": 42,
+                    "run_url": f"{SERVER}/{TARGET}/actions/runs/42",
+                }
+            ),
+        },
     }
 
 
@@ -156,9 +198,15 @@ def valid_responses(*, action: str = "opened") -> dict[str, Any]:
             "disabled": False,
         },
         PR_PATH: valid_pr(),
+        f"metadata/{PR_NUMBER}": None,
+        f"repos/{TARGET}/commits/{HEAD}/check-runs?check_name=Current%20revision%20review&filter=all&per_page=100": {
+            "total_count": 1,
+            "check_runs": [valid_neutral()],
+        },
         CHECK_PATH: {"total_count": 1, "check_runs": [check]},
         f"repos/{TARGET}/actions/runs/{RUN_ID}": {
             "id": RUN_ID,
+            "created_at": "2026-10-07T00:00:00Z",
             "event": "pull_request_target",
             "path": MODULE.TARGET_VERIFIER_PATH,
             "status": "completed",
@@ -723,6 +771,13 @@ class DotGitHubCrossControllerTests(unittest.TestCase):
             job["steps"][1]["env"]["EVENT_HEAD_REPOSITORY_OWNER"],
             "${{ github.event.pull_request.head.repo.owner.login }}",
         )
+        for field, expression in {
+            "EVENT_UPDATED_AT": "${{ github.event.pull_request.updated_at }}",
+            "EVENT_TITLE_JSON": "${{ toJson(github.event.pull_request.title) }}",
+            "EVENT_BODY_JSON": "${{ toJson(github.event.pull_request.body) }}",
+            "EVENT_LABELS_JSON": "${{ toJson(github.event.pull_request.labels) }}",
+        }.items():
+            self.assertEqual(job["steps"][1]["env"][field], expression)
         self.assertNotIn("github.event.pull_request", json.dumps(checkout))
         self.assertNotIn("copilot", source.lower())
         self.assertNotIn("codex", source.lower())
@@ -746,6 +801,13 @@ class AuthenticatedCoreForkTests(unittest.TestCase):
             ref="feature/fork", repo={"full_name": "contributor/core-fork", "owner": {"login": "contributor"}}
         )
         pr["user"] = {"login": "contributor", "type": "User"}
+        neutral_key = (
+            f"repos/{TARGET}/commits/{HEAD}/check-runs?check_name=Current%20revision%20review&filter=all&per_page=100"
+        )
+        neutral = responses[neutral_key]["check_runs"][0]
+        summary = json.loads(neutral["output"]["summary"])
+        summary["head_repository"] = "contributor/core-fork"
+        neutral["output"]["summary"] = json.dumps(summary)
         producer = responses[f"repos/{TARGET}/actions/runs/{RUN_ID}"]
         producer.update(
             head_branch="feature/fork",
@@ -849,3 +911,72 @@ class AuthenticatedCoreForkTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MutableEventBindingTests(unittest.TestCase):
+    def test_rejects_mutable_metadata_and_label_drift_at_either_read(self):
+        for field, value in (("title", "new title"), ("body", "new body"), ("labels", [{"name": "new"}])):
+            for read in (1, 2):
+                with self.subTest(field=field, read=read):
+                    responses = valid_responses()
+                    changed = valid_pr()
+                    changed[field] = value
+                    responses[PR_PATH] = changed if read == 1 else ResponseSequence(valid_pr(), changed)
+                    with self.assertRaises(MODULE.VerificationError):
+                        MODULE.verify(FakeClient(responses), valid_environment(), attempts=1, sleep=lambda _: None)
+
+    def test_rejects_metadata_revision_changed_then_reverted_text(self):
+        responses = valid_responses()
+        responses[f"metadata/{PR_NUMBER}"] = ResponseSequence(None, "2026-10-07T00:00:01Z")
+        with self.assertRaisesRegex(MODULE.VerificationError, "final metadata revision"):
+            MODULE.verify(FakeClient(responses), valid_environment(), attempts=1, sleep=lambda _: None)
+
+    def test_repeated_edited_events_cannot_reuse_older_action_or_same_action_run(self):
+        for action in ("edited",):
+            for defect in ("action", "creation"):
+                with self.subTest(action=action, defect=defect):
+                    responses = valid_responses(action=action)
+                    run = responses[f"repos/{TARGET}/actions/runs/{RUN_ID}"]
+                    if defect == "action":
+                        run["display_title"] = f"Protected current revision PR #{PR_NUMBER} opened {HEAD}"
+                    else:
+                        run["created_at"] = "2026-10-06T23:59:59Z"
+                    with self.assertRaises(MODULE.VerificationError):
+                        MODULE.verify(
+                            FakeClient(responses), valid_environment(action=action), attempts=1, sleep=lambda _: None
+                        )
+
+    def test_current_edited_event_accepts_exact_schema4_publisher(self):
+        for action in ("edited",):
+            client = FakeClient(valid_responses(action=action))
+            MODULE.verify(client, valid_environment(action=action), attempts=1, sleep=lambda _: None)
+            self.assertEqual(client.calls[PR_PATH], 2)
+            self.assertEqual(client.calls[f"metadata/{PR_NUMBER}"], 2)
+
+    def test_neutral_publisher_stale_metadata_labels_producer_or_ambiguity_rejected(self):
+        key = f"repos/{TARGET}/commits/{HEAD}/check-runs?check_name=Current%20revision%20review&filter=all&per_page=100"
+        for field, value in (
+            ("pull_request_last_edited_at", "2026-10-06T23:59:59Z"),
+            ("pull_request_labels_sha256", "0" * 64),
+            ("producer_run_id", 43),
+        ):
+            with self.subTest(field=field):
+                responses = valid_responses()
+                check = responses[key]["check_runs"][0]
+                summary = json.loads(check["output"]["summary"])
+                summary[field] = value
+                check["output"]["summary"] = json.dumps(summary)
+                with self.assertRaises(MODULE.VerificationError):
+                    MODULE.verify(FakeClient(responses), valid_environment(), attempts=1, sleep=lambda _: None)
+        responses = valid_responses()
+        responses[key]["check_runs"].append(valid_neutral())
+        responses[key]["total_count"] = 2
+        with self.assertRaisesRegex(MODULE.VerificationError, "ambiguous"):
+            MODULE.verify(FakeClient(responses), valid_environment(), attempts=1, sleep=lambda _: None)
+
+    def test_sorted_labels_use_existing_utf8_compact_contract(self):
+        self.assertEqual(
+            MODULE.labels_digest([{"name": "z"}, {"name": "ä"}]), MODULE.labels_digest([{"name": "ä"}, {"name": "z"}])
+        )
+        with self.assertRaises(MODULE.VerificationError):
+            MODULE.labels_digest([{"name": "z"}, {"name": "z"}])
