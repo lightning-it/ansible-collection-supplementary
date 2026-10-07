@@ -141,16 +141,13 @@ jobs:
           title="chore(governance): record main ancestry before ${main_short}"
           git config user.name "${BOT_LOGIN}"
           git config user.email "${BOT_EMAIL}"
-          if git merge-base --is-ancestor origin/main origin/develop; then
-            echo 'develop already contains the current main ancestry.'
-            exit 0
-          fi
-
           git switch --create "${branch}" origin/develop
-          # Bind the merge object to an existing Git timestamp so retries
-          # reproduce the exact same commit and never require a force-update.
+          # Recovery-only boundary: the previous feature PR was merged after
+          # the active main baseline without main in its immutable PR head.
+          # Materialize the same protected two-parent boundary even though
+          # main is already an ancestor of develop. Using commit-tree keeps
+          # the exact parent order and makes retries deterministic.
           merge_date="$(git show -s --format=%cI origin/main)"
-          git merge --no-ff --no-commit --strategy=ours origin/main
           mkdir -p "${evidence_path%/*}"
           jq --null-input --sort-keys \
             --arg repository "${REPOSITORY}" \
@@ -164,9 +161,14 @@ jobs:
               purpose: "Bind the reviewed main ancestry backmerge."
             }' >"${evidence_path}"
           git add -- "${evidence_path}"
-          GIT_AUTHOR_DATE="${merge_date}" GIT_COMMITTER_DATE="${merge_date}" \
-            git commit \
-            --message 'merge: preserve develop tree and main ancestry'
+          recovery_tree="$(git write-tree)"
+          recovery_head="$(
+            printf '%s\n' 'merge: preserve develop tree and main ancestry' |
+              GIT_AUTHOR_DATE="${merge_date}" GIT_COMMITTER_DATE="${merge_date}" \
+                git commit-tree "${recovery_tree}" \
+                  -p "${develop_sha}" -p "${main_sha}"
+          )"
+          git reset --hard "${recovery_head}"
           git merge-base --is-ancestor origin/main HEAD
           git merge-base --is-ancestor origin/develop HEAD
           [ "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 3 ]
