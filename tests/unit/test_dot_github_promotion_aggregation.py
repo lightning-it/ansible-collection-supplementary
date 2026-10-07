@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import unittest
 from copy import deepcopy
 from pathlib import Path
@@ -28,6 +29,8 @@ def promotion_pr() -> dict[str, Any]:
         "number": PR_NUMBER,
         "state": "open",
         "draft": False,
+        "body": None,
+        "labels": [],
         "title": MODULE.PROMOTION_TITLE,
         "user": {
             "login": MODULE.RELEASE_APP_LOGIN,
@@ -37,12 +40,12 @@ def promotion_pr() -> dict[str, Any]:
         "base": {
             "ref": "main",
             "sha": BASE,
-            "repo": {"full_name": MODULE.TARGET_REPOSITORY},
+            "repo": {"full_name": MODULE.TARGET_REPOSITORY, "owner": {"login": "lightning-it"}},
         },
         "head": {
             "ref": "develop",
             "sha": HEAD,
-            "repo": {"full_name": MODULE.TARGET_REPOSITORY},
+            "repo": {"full_name": MODULE.TARGET_REPOSITORY, "owner": {"login": "lightning-it"}},
         },
     }
 
@@ -74,6 +77,7 @@ def promotion_run(
     workflow_kind = "required_workflows" if required_workflow else "workflows"
     return {
         "id": run_id,
+        "created_at": "2026-10-07T00:00:00Z",
         "event": "pull_request_target",
         "path": MODULE.TARGET_VERIFIER_PATH,
         "status": status,
@@ -115,9 +119,20 @@ def promotion_check(
 def verification_environment(workflow_sha: str) -> dict[str, str]:
     return {
         "REPOSITORY": MODULE.TARGET_REPOSITORY,
-        "EVENT_ACTION": "opened",
+        "EVENT_ACTION": "edited",
         "EVENT_BASE": BASE,
         "EVENT_HEAD": HEAD,
+        "EVENT_UPDATED_AT": "2026-10-07T00:00:00Z",
+        "EVENT_TITLE_JSON": json.dumps(promotion_pr()["title"]),
+        "EVENT_BODY_JSON": "null",
+        "EVENT_LABELS_JSON": "[]",
+        "EVENT_HEAD_REPOSITORY": MODULE.TARGET_REPOSITORY,
+        "EVENT_HEAD_REPOSITORY_OWNER": "lightning-it",
+        "EVENT_HEAD_REF": "develop",
+        "EVENT_BASE_REF": "main",
+        "EVENT_AUTHOR": MODULE.RELEASE_APP_LOGIN,
+        "EVENT_AUTHOR_TYPE": "Bot",
+        "EVENT_SENDER": MODULE.RELEASE_APP_LOGIN,
         "PR_NUMBER": str(PR_NUMBER),
         "GITHUB_SERVER_URL": "https://github.com",
         "WORKFLOW_REF": MODULE.SOURCE_WORKFLOW_REF,
@@ -174,6 +189,9 @@ class MappingClient:
     def __init__(self, payloads: dict[str, Any]) -> None:
         self.payloads = payloads
         self.paths: list[str] = []
+
+    def metadata_revision(self, number: int):
+        return None
 
     def get(self, path: str) -> Any:
         self.paths.append(path)
@@ -271,7 +289,7 @@ class PromotionShapeTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             MODULE.VerificationError,
-            "promotion pull request title is not exactly bound",
+            "live title is not exactly bound",
         ):
             MODULE.verify(
                 client,
@@ -328,7 +346,7 @@ class PromotionShapeTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             MODULE.VerificationError,
-            "promotion pull request title is not exactly bound",
+            "live title is not exactly bound",
         ):
             MODULE.verify(
                 client,
