@@ -65,6 +65,11 @@ contract is verified against Podman 4.9.3, not a claim of live migration accepta
 Podman 4.9.3 kube play registers the YAML container name as a network alias.
 Thus a managed `postgres` container can retain a different pod/unit identity.
 This does not authorize arbitrary aliases or shared database credentials.
+Because Podman 4.9 does not reliably publish that identity between separate
+Kube pods, the Keycloak Pod uses the supported `spec.hostAliases` field to bind
+the exact managed name to PostgreSQL's already validated private static address.
+The role then verifies from the running Keycloak container that the name resolves
+exclusively to that address before accepting application readiness.
 During native cutover, `getent ahostsv4` inside the actual Keycloak container
 must return only the uniquely bound private PostgreSQL address. Missing tooling,
 failed resolution or a different/additional address causes transaction recovery.
@@ -129,7 +134,7 @@ the collection.
         keycloak_deploy_postgres_networks:
           - keycloak-access.network:ip=10.89.40.3
         # Requires verified network-local DNS without external forwarding.
-        keycloak_deploy_db_host: keycloak-postgres
+        keycloak_deploy_db_host: postgres
         keycloak_deploy_admin_user: admin
         keycloak_deploy_generate_secrets: false
         keycloak_deploy_admin_password: "{{ vault_keycloak_admin_password }}"

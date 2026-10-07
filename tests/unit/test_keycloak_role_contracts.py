@@ -613,7 +613,11 @@ exit 0
             self.assertFalse((quadlet_dir / "keycloak-pod.kube").exists())
             service_log = log.read_text(encoding="utf-8")
             self.assertIn("Native quiescence failure", output)
-            self.assertEqual((state / f"{native_state}.active").read_text(encoding="utf-8"), "active")
+            self.assertEqual(
+                (state / f"{native_state}.active").read_text(encoding="utf-8"),
+                "active",
+                output,
+            )
             self.assertIn("stop keycloak-pod.service", service_log)
             self.assertNotIn("start podman-kube@etc-podman-pods-keycloak.yml.service", service_log)
 
@@ -685,6 +689,85 @@ exit 0
                 self.assertIn("(?::ip=[0-9]{1,3}", core)
                 self.assertIn("ipaddress.ip_address", validator["ansible.builtin.command"]["argv"][2])
                 self.assertEqual(validator["when"], "':ip=' in item")
+
+    def test_ordinary_keycloak_deploy_proves_database_dns_at_runtime(self) -> None:
+        pod_template = (ROOT / "roles" / "keycloak_deploy" / "templates" / "keycloak-pod.yml.j2").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("hostAliases:", pod_template)
+        self.assertIn("keycloak_deploy_database_private_address | default({})", pod_template)
+        self.assertIn("keycloak_deploy_db_host | to_json", pod_template)
+
+        pod_tasks = yaml.safe_load(
+            (ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy_pod.yml").read_text(encoding="utf-8")
+        )
+        address = next(
+            task
+            for task in pod_tasks
+            if task["name"] == "Resolve the unique private address for the managed database name"
+        )
+        self.assertIn("ipaddress.IPv4Address", address["ansible.builtin.command"]["argv"][2])
+        self.assertEqual(address["register"], "keycloak_deploy_database_private_address")
+
+        validation_path = ROOT / "roles" / "keycloak_deploy" / "tasks" / "validate_database_dns.yml"
+        validation = yaml.safe_load(validation_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            validation[0]["ansible.builtin.command"]["argv"],
+            [
+                "podman",
+                "exec",
+                "{{ keycloak_deploy_database_dns_probe_container }}",
+                "getent",
+                "ahostsv4",
+                "{{ keycloak_deploy_db_host }}",
+            ],
+        )
+        resolution_contract = "\n".join(validation[1]["ansible.builtin.assert"]["that"])
+        self.assertIn("lit.supplementary.keycloak_database_resolution_valid", resolution_contract)
+        for binding in (
+            "keycloak_deploy_networks",
+            "keycloak_deploy_postgres_networks",
+            "keycloak_deploy_postgres_pod_name",
+            "keycloak_deploy_postgres_container_name",
+        ):
+            self.assertIn(binding, resolution_contract)
+
+        systemd = yaml.safe_load(
+            (ROOT / "roles" / "keycloak_deploy" / "tasks" / "systemd.yml").read_text(encoding="utf-8")
+        )[0]["block"]
+        transaction = next(
+            task for task in systemd if task["name"] == "Cut over to native Keycloak Quadlet with rollback"
+        )
+        transaction_names = [task["name"] for task in transaction["block"]]
+        self.assertLess(
+            transaction_names.index("Manage the native Keycloak Quadlet service"),
+            transaction_names.index("Validate managed database DNS from the native Keycloak container"),
+        )
+        self.assertLess(
+            transaction_names.index("Validate managed database DNS from the native Keycloak container"),
+            transaction_names.index("Wait until Keycloak health endpoint is reachable"),
+        )
+        rescue_names = [task["name"] for task in transaction["rescue"]]
+        self.assertIn("Capture safe native Keycloak service failure properties", rescue_names)
+
+        deploy = yaml.safe_load(
+            (ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy.yml").read_text(encoding="utf-8")
+        )[2]["block"]
+        deploy_names = [task["name"] for task in deploy]
+        self.assertLess(
+            deploy_names.index("Require the desired database endpoint in the active Keycloak pod"),
+            deploy_names.index("Validate managed database DNS from the non-systemd Keycloak container"),
+        )
+        self.assertLess(
+            deploy_names.index("Validate managed database DNS from the non-systemd Keycloak container"),
+            deploy_names.index("Wait until Keycloak health endpoint is reachable (non-systemd)"),
+        )
+        non_systemd_validation = next(
+            task
+            for task in deploy
+            if task["name"] == "Validate managed database DNS from the non-systemd Keycloak container"
+        )
+        self.assertEqual(non_systemd_validation["ansible.builtin.include_tasks"], "validate_database_dns.yml")
 
     def test_managed_bridge_database_requires_a_shared_normalized_network(self) -> None:
         assertions = (ROOT / "roles" / "keycloak_deploy" / "tasks" / "assert.yml").read_text(encoding="utf-8")

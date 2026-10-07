@@ -8,6 +8,12 @@ spec:
 {% if keycloak_deploy_host_network | bool %}
   hostNetwork: true
 {% endif %}
+{% if (keycloak_deploy_database_private_address | default({})).get('stdout', '') | trim | length > 0 %}
+  hostAliases:
+    - ip: {{ (keycloak_deploy_database_private_address | default({})).get('stdout', '') | trim | to_json }}
+      hostnames:
+        - {{ keycloak_deploy_db_host | to_json }}
+{% endif %}
   containers:
     - name: {{ keycloak_deploy_container_name }}
       image: {{ keycloak_deploy_image }}

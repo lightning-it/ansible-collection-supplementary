@@ -390,6 +390,49 @@
   tags:
     - deployment
 
+- name: Resolve the unique private address for the managed database name
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_facts.get('python', {}).get('executable', '/usr/bin/python3') }}"
+      - -c
+      - |
+        import ipaddress
+        import json
+        import sys
+
+        def parse(entries):
+            bindings = {}
+            for entry in entries:
+                network, separator, address = entry.partition(":ip=")
+                bindings[network] = str(ipaddress.IPv4Address(address)) if separator else None
+            return bindings
+
+        keycloak = parse(json.loads(sys.argv[1]))
+        postgres = parse(json.loads(sys.argv[2]))
+        candidates = [
+            (network, address)
+            for network, address in postgres.items()
+            if address is not None and network in keycloak
+        ]
+        if len(candidates) != 1:
+            sys.exit(1)
+        network, address = candidates[0]
+        if keycloak[network] == address or not ipaddress.IPv4Address(address).is_private:
+            sys.exit(1)
+        print(address)
+      - "{{ keycloak_deploy_networks | to_json }}"
+      - "{{ keycloak_deploy_postgres_networks | to_json }}"
+  register: keycloak_deploy_database_private_address
+  changed_when: false
+  check_mode: false
+  when:
+    - keycloak_deploy_manage_postgres | bool
+    - not keycloak_deploy_host_network | bool
+    - not keycloak_deploy_postgres_host_network | bool
+    - not keycloak_deploy_db_host is match('^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$')
+  tags:
+    - deployment
+
 - name: Probe existing Keycloak health before start
   ansible.builtin.uri:
     url: "{{ keycloak_deploy_health_url_effective }}"
