@@ -406,9 +406,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             "  request-protected-verifier-reevaluation-main:",
             1,
         )
-        helper_name_line = next(
-            line.strip() for line in main_guard.splitlines() if line.strip().startswith("name: ")
-        )
+        helper_name_line = next(line.strip() for line in main_guard.splitlines() if line.strip().startswith("name: "))
         self.assertEqual(
             "name: ${{ vars.LI219_EVENT_MODE == 'enabled' && "
             "github.event.pull_request.user.type == 'User' && "
