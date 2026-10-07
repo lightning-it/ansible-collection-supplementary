@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "assets": [
+    {
+      "path": ".github/workflows/copilot-review-refresh.yml",
+      "category": "local-required",
+      "sha256": "d0990effed093be2e9a64a1a2a9a0370d0683d8619297d28e22a759c9ed2f394",
+      "source": "shared-assets-lit/default/.github/workflows/copilot-review-refresh.yml",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+    },
+    {
+      "path": ".github/workflows/current-revision-rerun.yml",
+      "category": "local-required",
+      "sha256": "fe0845c8e80c77b4284fdf3f5fdcb488ff4aa0f6e94c992011e74aec4c3b67fe",
+      "source": "shared-assets-lit/default/.github/workflows/current-revision-rerun.yml",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Local Required-title label-action compatibility; authenticated labeled/unlabeled locator filters match the protected Required trigger and consumer allowlists."
+    },
+    {
+      "path": ".github/workflows/review-event-reconcile.yml",
+      "category": "local-required",
+      "sha256": "84da713ab5a5b895cd02defe18faa1e7517229264d24708e51eb8da2584e47d4",
+      "source": "shared-assets-lit/default/.github/workflows/review-event-reconcile.yml",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Local protected reconciliation wakeup: completed successful same-repository Copilot attempt-one identity and review-event provenance; scheduled fallback unchanged."
+    },
+    {
+      "path": "scripts/review-event-reconcile.py",
+      "category": "local-required",
+      "sha256": "218a5d1a045a69fb6b9013bfd34dc42f0f697ce1a311812833b7064ab3e700b1",
+      "source": "shared-assets-lit/default/scripts/review-event-reconcile.py",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+    },
+    {
+      "path": ".github/workflows/dot-github-current-revision-required.yml",
+      "category": "local-required",
+      "sha256": "bcbe9bac9e0c4d4151525853489807ccaf8da96ca20bff4d36d8a036bd524a7d",
+      "source": "shared-assets-lit/.github/workflows/dot-github-current-revision-required.yml",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+    },
+    {
+      "path": "tests/unit/test_dot_github_current_revision.py",
+      "category": "local-required",
+      "sha256": "4bc64c849028106ece888291920429518e622ce083d65832a965c71eccc20241",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Canonical verifier tests adapted to repository formatting."
+    },
+    {
+      "path": "scripts/review_content_markers.py",
+      "category": "local-required",
+      "sha256": "0f3c112d70c16211a6947e593f6f6a315b22f5e8308dd76827e5d7de1e076dd8",
+      "source": "shared-assets-lit/scripts/review_content_markers.py",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Protected PR base-ref dispatch/consumer binding and native sanity source compatibility; strict schema types and runtime Unicode content semantics retained."
+    },
+    {
+      "path": "scripts/verify-dot-github-current-revision.py",
+      "category": "local-required",
+      "sha256": "e478d450b162eefaa5bd8f65a88a73d89b01ddbcdfb9d1a753cdf173339757ba",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+    },
+    {
+      "path": ".github/workflows/copilot-review.yml",
+      "category": "local-required",
+      "sha256": "718fcc71cd4e30dc14abc4c5c73e290c9a414479f844d9662b35ac459e5a331a",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+    },
+    {
+      "path": "scripts/lit-push-ready.py",
+      "category": "local-required",
+      "sha256": "e2ffdb26feebf9e58d9e4d4d389941cd041fe72b1e3e37fb891f2b6e0b895231",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Protected PR base-ref dispatch/consumer binding and native sanity source compatibility; strict schema types and runtime Unicode content semantics retained."
+    },
+    {
+      "path": ".github/workflows/review-request-continuation.yml",
+      "category": "local-required",
+      "source": "shared-assets-lit/default/.github/workflows/review-request-continuation.yml",
+      "sha256": "d682a4d72847fbd74390a9abd8eea252218c5b89d19b1044b9b0873ab78216f9",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+    },
+    {
+      "path": "scripts/review_request_continuation.py",
+      "category": "local-required",
+      "source": "shared-assets-lit/default/scripts/review_request_continuation.py",
+      "sha256": "44f52b8205008321c1c37212562d7f1b5bb50569602424fc047a5a92fc17ecf9",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+    },
+    {
+      "path": "scripts/review_request_provenance.py",
+      "category": "local-required",
+      "source": "shared-assets-lit/default/scripts/review_request_provenance.py",
+      "sha256": "8952688c647d6960cbe6e5715cd127fe6b8121d960895d8136819745180cba50",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+    }
+  ],
+  "scope": "li219-three-pilot",
+  "repository": "lightning-it/ansible-collection-supplementary"
+}

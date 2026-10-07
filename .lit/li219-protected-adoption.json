@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "protected_source_commit": "a44cb1762aa6ae3edba91d6cf75ada2a99182af5",
+  "protected_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
+  "source_receipt": {
+    "id": "sha256:9fb53417e0bfcd0ba5be2bffad5d2825661df19b093a8b9d9fae567681a5fc0d",
+    "sha256": "9fb53417e0bfcd0ba5be2bffad5d2825661df19b093a8b9d9fae567681a5fc0d"
+  },
+  "protected_core_commit": "aff0fd056d52460a9d2191a095244ed2778599f1",
+  "protected_core_tree": "33b44346a9b1868e3d399a4147a64147e58cfb14",
+  "core_receipt_sha256": "39ae08e57e934360451c780bacf35d065db62cf475ec2fe48fcd5fafb58e50c7",
+  "extra_canonical_leaves": [
+    {
+      "source_path": "default/.github/workflows/codex-copilot-remediation.yml",
+      "target_path": ".github/workflows/codex-copilot-remediation.yml",
+      "blob": "06440e21e5a690d1c0888c7d76d9efb809f1ecc2",
+      "sha256": "7810b3a287096f84dec6e49cf555a27aa2322360fc048b2b32d6a87ef2fc946a",
+      "target_mode": "0644",
+      "target_blob": "41110ab6613891981d23af1e46d20b1fd9222668",
+      "target_sha256": "c29475d64ef5ec1960ada27709b2d3f6f6e952f8e34d8b421dcbc672ab04ed68",
+      "mode": "adapted-local",
+      "adaptation": "Local failure-content contract: normalize ASCII/curly cannot before generic not contractions and reject the two cannot-review markers; original Source blob/sha256 retained separately."
+    },
+    {
+      "source_path": "default/.github/codex/prompts/review-exact-head.md",
+      "target_path": ".github/codex/prompts/review-exact-head.md",
+      "blob": "705550ee977d39db5d2e7d2e095dfa350450e79a",
+      "sha256": "d91a565ef9d3efb34b80c4ac81c5adad7948bef832273a7fe26741df9e63496f",
+      "target_mode": "0644"
+    }
+  ],
+  "native_acceptance": false,
+  "adapter_note": "Canonical pilot and exact-review installers run unchanged and idempotently before the explicitly scoped local engine adaptation. The raw canonical pilot installer still requires its historical engine hash; it is not claimed idempotent on this new adapted engine. Source/Core were not modified.",
+  "instructions": {
+    "source_agents_sha256": "00aa090f2a662cbbe9704bf2fa94a455b4107127f850694e8ec68dd19fe4e779",
+    "target_agents_sha256": "65e33dd50e786d84b4e9f11b639051a9b2c80f8bde9082fb5cc6d2403253a307",
+    "target_copilot_sha256": "693aad497f9f2780fbf18f2735e077357b8925f02a54df74845e965458078ff3"
+  }
+}
