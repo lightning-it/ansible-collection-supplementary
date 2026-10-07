@@ -1,0 +1,37 @@
+---
+- name: Resolve the managed database name from the active application container
+  ansible.builtin.command:
+    argv:
+      - podman
+      - exec
+      - "{{ keycloak_deploy_database_dns_probe_container }}"
+      - getent
+      - ahostsv4
+      - "{{ keycloak_deploy_db_host }}"
+  register: keycloak_deploy_database_dns
+  changed_when: false
+
+- name: Require database DNS to resolve only to its bound private address
+  ansible.builtin.assert:
+    that:
+      - >-
+        keycloak_deploy_database_dns.stdout
+        | lit.supplementary.keycloak_database_resolution_valid(
+            {
+              'keycloak': {
+                'networks': keycloak_deploy_networks,
+                'pod_name': keycloak_deploy_pod_name,
+                'container_name': keycloak_deploy_container_name
+              },
+              'postgres': {
+                'networks': keycloak_deploy_postgres_networks,
+                'pod_name': keycloak_deploy_postgres_pod_name,
+                'container_name': keycloak_deploy_postgres_container_name
+              }
+            },
+            keycloak_deploy_db_host
+          )
+    quiet: true
+    fail_msg: >-
+      The managed database name did not resolve exclusively to its bound
+      private address from the active application container.

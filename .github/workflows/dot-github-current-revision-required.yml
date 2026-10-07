@@ -14,7 +14,7 @@ run-name: >-
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review, edited]
+    types: [opened, synchronize, reopened, ready_for_review, edited, labeled, unlabeled]
 
 permissions:
   contents: read
@@ -51,12 +51,24 @@ jobs:
 
       - name: Verify the independently protected current-revision result
         env:
+          EVENT_UPDATED_AT: ${{ github.event.pull_request.updated_at }}
+          EVENT_TITLE_JSON: ${{ toJson(github.event.pull_request.title) }}
+          EVENT_BODY_JSON: ${{ toJson(github.event.pull_request.body) }}
+          EVENT_LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_BASE: ${{ github.event.pull_request.base.sha }}
           EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+          EVENT_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          EVENT_HEAD_REPOSITORY_OWNER: ${{ github.event.pull_request.head.repo.owner.login }}
+          EVENT_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          EVENT_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          EVENT_AUTHOR: ${{ github.event.pull_request.user.login }}
+          EVENT_AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+          EVENT_SENDER: ${{ github.event.sender.login }}
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
+          LI219_EVENT_MODE: ${{ github.repository == 'lightning-it/.github' && vars.LI219_EVENT_MODE == 'enabled' && 'enabled' || 'disabled' }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
           WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: python3 protected-source/scripts/verify-dot-github-current-revision.py

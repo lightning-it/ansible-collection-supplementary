@@ -46,7 +46,10 @@ env:
 
 jobs:
   continue-after-push:
-    if: github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.actor == 'github-actions[bot]' &&
+      github.triggering_actor == 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -58,6 +61,8 @@ jobs:
         env:
           CONTROLLER_REF: ${{ github.workflow_ref }}
           CONTROLLER_SHA: ${{ github.workflow_sha }}
+          EVENT_ACTOR: ${{ github.actor }}
+          EVENT_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ inputs.pr_number }}
           EXPECTED_HEAD: ${{ inputs.expected_head }}
@@ -66,6 +71,8 @@ jobs:
         run: |
           set -euo pipefail
           test "${GITHUB_REPOSITORY_OWNER}" = lightning-it
+          test "${EVENT_ACTOR}" = 'github-actions[bot]'
+          test "${EVENT_TRIGGERING_ACTOR}" = 'github-actions[bot]'
           test "${ROUND}" = 1
           pr="$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
           test "$(jq -r .state <<<"${pr}")" = open
@@ -239,13 +246,26 @@ jobs:
             else error("review.body must be null or a string")
             end
             | ascii_downcase
-            | gsub("wasn[\u0027\u2019]t"; "was not")
+            | gsub("can[\u0027\u2019]t"; "cannot") | gsub("n[\u0027\u2019]t"; " not")
             | gsub("\\s"; "")
           ' "${GITHUB_EVENT_PATH}")"; then
             echo "Copilot review body is malformed; remediation is forbidden." >&2
             exit 1
           fi
-          if [[ "${review_body}" == *"unabletoreview"* || "${review_body}" == *"notabletoreview"* || "${review_body}" == *"premiumrequestquota"* || "${review_body}" == *"premiumrequestsquota"* || "${review_body}" == *"quotaexhausted"* || "${review_body}" == *"quotaexceeded"* || "${review_body}" == *"encounteredanerror"* || "${review_body}" == *"suppressedcomment"* || "${review_body}" == *"suppressedcomments"* ]]; then
+          # Shared review-content vocabulary; retain the remediation guard's
+          # broader unable/not-able rejection. Both body and inline use this gate.
+          review_content_usable() {
+            jq -e --argjson require_content "${1:-false}" '
+              def normalize_review_text:
+                ascii_downcase | gsub("can[\u0027\u2019]t"; "cannot") | gsub("n[\u0027\u2019]t"; " not") | gsub("\\s"; "");
+              ["unabletoreviewthispullrequest","cannotreviewthispullrequest","cannotreviewanyfiles","notabletoreviewthispullrequest","wasnotabletoreviewthispullrequest","nofilestoreview","nofileswerereviewed","unabletoreviewanyfiles","notabletoreviewanyfiles","wasnotabletoreviewanyfiles","quotaexhausted","quotaexceeded","premiumrequestquota","premiumrequestsquota","suppressedcomment","encounteredanerror"] as $markers |
+              all(.[]; normalize_review_text as $text |
+                ($text | contains("unabletoreview") or contains("notabletoreview") | not)
+                and all($markers[]; . as $marker | $text | contains($marker) | not))
+              and (($require_content | not) or any(.[]; normalize_review_text | length > 0))
+            ' >/dev/null
+          }
+          if ! jq -nc --arg body "${review_body}" '[$body]' | review_content_usable; then
             echo "Copilot review is unavailable or quota-blocked; automatic retry is forbidden."
             exit 0
           fi
@@ -328,12 +348,29 @@ jobs:
             echo "A review thread exceeds the bounded 100-comment inspection limit." >&2
             exit 1
           fi
-          count="$(jq --arg login "${COPILOT_LOGIN}" --arg sha "${head_sha}" '[.[] | select(.isResolved == false) | select(any(.comments.nodes[]; .author.login == $login and .pullRequestReview.commit.oid == $sha))] | length' <<<"${threads}")"
+          # A failed review is never an actionable finding, including when its
+          # terminal message appears only in a current-head Copilot comment.
+          # Require content across body plus inline, preserving inline-only reviews.
+          if ! jq -c --arg login "${COPILOT_LOGIN}" --arg sha "${head_sha}" \
+            --arg body "${review_body}" '[$body] + [.[] | .comments.nodes[] |
+              select(.author.login == $login and .pullRequestReview.commit.oid == $sha) | .body]' \
+            <<<"${threads}" | review_content_usable true; then
+            echo "Copilot review content is empty or unavailable; automatic remediation is forbidden."
+            exit 0
+          fi
+          # Count and hash exactly the same nonempty current-head finding bodies.
+          findings="$(jq -cS --arg login "${COPILOT_LOGIN}" --arg sha "${head_sha}" '
+            [.[] | select(.isResolved == false) |
+              [.comments.nodes[] |
+                select(.author.login == $login and .pullRequestReview.commit.oid == $sha) |
+                select(.body | gsub("\\s"; "") | length > 0) | .body] |
+              select(length > 0)]' <<<"${threads}")"
+          count="$(jq 'length' <<<"${findings}")"
           if [ "${count}" -gt 0 ]; then actionable=true; fi
-          finding_hash="$(jq -cS --arg login "${COPILOT_LOGIN}" --arg sha "${head_sha}" '[.[] | select(.isResolved == false) | [.comments.nodes[] | select(.author.login == $login and .pullRequestReview.commit.oid == $sha) | .body]]' <<<"${threads}" | sha256sum | cut -d' ' -f1)"
+          finding_hash="$(printf '%s\n' "${findings}" | sha256sum | cut -d' ' -f1)"
 
           comments="$(gh api --paginate --slurp "repos/${REPOSITORY}/issues/${pr_number}/comments?per_page=100")"
-          round="$(jq '[add[] | select(.user.login == "github-actions[bot]") | .body | capture("<!-- codex-remediation round=(?<round>[0-9]+) head=[0-9a-f]+")?.round // empty | tonumber] | max // 0' <<<"${comments}")"
+          round="$(jq '[add[] | select(.user.login == "github-actions[bot]") | .body | capture("<!-- codex-remediation round=(?<round>[0-9]+) head=[0-9a-f]+")? | .round // empty | tonumber] | max // 0' <<<"${comments}")"
           round="$((round + 1))"
           if jq -e --arg hash "${finding_hash}" 'any(add[]; .user.login == "github-actions[bot]" and (.body | contains("finding=" + $hash)))' <<<"${comments}" >/dev/null; then
             gh api --method POST "repos/${REPOSITORY}/issues/${pr_number}/comments" -f body="Codex remediation stopped: identical Copilot finding set repeated (${finding_hash})." >/dev/null

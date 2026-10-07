@@ -1,0 +1,225 @@
+{
+  "schema": 1,
+  "repository": "lightning-it/ansible-collection-supplementary",
+  "protected_source_commit": "a44cb1762aa6ae3edba91d6cf75ada2a99182af5",
+  "status": "protected-source-adopted-local-port-native-pending",
+  "target_base": "c983bb3c8aa26114f682d825bfaca6fa1be187e4",
+  "bindings": [
+    {
+      "source_path": "default/.github/workflows/copilot-review-refresh.yml",
+      "target_path": ".github/workflows/copilot-review-refresh.yml",
+      "source_sha256": "31e34a9ccd7f5dbfaac62bcb308ebeafb69c00d41b0a80b579f557f66980583b",
+      "source_blob": "a42cd8725cbd4fafc170bc3158631f7f09973fac",
+      "target_blob": "4bc360c4a56582f61e75a75033c3bdc0ed1741ca",
+      "target_sha256": "d0990effed093be2e9a64a1a2a9a0370d0683d8619297d28e22a759c9ed2f394",
+      "mode": "adapted-local",
+      "target_mode": "0644"
+    },
+    {
+      "source_path": "default/.github/workflows/current-revision-rerun.yml",
+      "target_path": ".github/workflows/current-revision-rerun.yml",
+      "source_sha256": "2febd480773ecbe19840c4c22bf147cd1fbe77abfe0c23b66b2f07a727e58c8f",
+      "source_blob": "86112dc304cbba9e2837e022605eff9f9ff03c97",
+      "target_blob": "d583b05f64e5b5c8422a444507f23525ad7c1eac",
+      "target_sha256": "25013246f828c79fb35486b1aa373ac537d28adeab5162fde76bc7e8208891e4",
+      "mode": "adapted-local",
+      "target_mode": "0644",
+      "adaptation": "Local LI-259 preparation; candidate provenance in li259-supplementary-port.json; protected adoption pending."
+    },
+    {
+      "source_path": "default/.github/workflows/review-event-reconcile.yml",
+      "target_path": ".github/workflows/review-event-reconcile.yml",
+      "source_sha256": "bbee309bac5c9831cd4689cb32651c94ade87d832248e21a799e2a706185af5a",
+      "source_blob": "7d292f504eb3aa4e54284a467f3307a6ac6f87e9",
+      "target_blob": "be094d83b9ab5bf9cd455f2eabd11389358591df",
+      "target_sha256": "84da713ab5a5b895cd02defe18faa1e7517229264d24708e51eb8da2584e47d4",
+      "mode": "adapted-local",
+      "target_mode": "0644"
+    },
+    {
+      "source_path": "default/scripts/review-event-reconcile.py",
+      "target_path": "scripts/review-event-reconcile.py",
+      "source_sha256": "74bf8eb90116afa0a58ebf57be3e141c95e0127d08d008b33cc28d3b3569602c",
+      "source_blob": "45a9920e640fb220f5f3db06f98f684f15d73735",
+      "target_blob": "a732d17904ec9c6262a99639bc168e8502753d03",
+      "target_sha256": "d1c98071362e576e578fdfa1a215ad7bfb6bb0dde473518ae3caaddbf2f3291a",
+      "mode": "adapted-local",
+      "target_mode": "0644"
+    },
+    {
+      "source_path": ".github/workflows/dot-github-current-revision-required.yml",
+      "target_path": ".github/workflows/dot-github-current-revision-required.yml",
+      "source_sha256": "734f922840311920ea0c78a3f2e4ded3a0a74c53381bec4671f89d5c5d8fa2a6",
+      "source_blob": "db644996d86fe14d9b9ccb4d8e8156b5180ddabf",
+      "target_blob": "50b4d232d5e6fd9c19edb2deac596924faa7dd53",
+      "target_sha256": "bcbe9bac9e0c4d4151525853489807ccaf8da96ca20bff4d36d8a036bd524a7d",
+      "mode": "adapted-local",
+      "target_mode": "0644"
+    },
+    {
+      "source_path": "default/tests/test_dot_github_current_revision.py",
+      "target_path": "tests/unit/test_dot_github_current_revision.py",
+      "source_sha256": "e956c118a4c7ead60ab352df9266570f45e7a220373c94ba2917a95698aacdf4",
+      "source_blob": "0a97dd52adb77038698bf2bd4d04f92daa475dc3",
+      "target_blob": "d177347f454591bd7f1098255279de7904ac7b82",
+      "target_sha256": "4bc64c849028106ece888291920429518e622ce083d65832a965c71eccc20241",
+      "mode": "adapted-local",
+      "target_mode": "0644"
+    },
+    {
+      "source_path": "scripts/review_content_markers.py",
+      "target_path": "scripts/review_content_markers.py",
+      "source_sha256": "00e73bad77fc2b7eaf3182f302f375a981deb6578a21f219ff410d52d62daf09",
+      "source_blob": "617ac13543c358f1abb44da7c7885907abd8ab4c",
+      "target_blob": "fe7dd1d080cdf495b590fc15b5cf73923bb7d2f6",
+      "target_sha256": "c74034b84d22704581064bdd410d7afb7012c509694da66246d19ec5db17f5db",
+      "mode": "adapted-local",
+      "target_mode": "0644",
+      "adaptation": "Content classifier AST parity with canonical LI-259 proof; no classification change."
+    },
+    {
+      "source_path": "scripts/verify-dot-github-current-revision.py",
+      "target_path": "scripts/verify-dot-github-current-revision.py",
+      "source_sha256": "4ac1573add6dd927b236966dc22ae68f23f6fbb89c4244f8e7f40d7ab1c95863",
+      "source_blob": "708db09e084a20e25ba0f980b05f076a1074119a",
+      "target_blob": "1de40c129f4ef8bd72156e90ef76801a61535ad3",
+      "target_sha256": "e478d450b162eefaa5bd8f65a88a73d89b01ddbcdfb9d1a753cdf173339757ba",
+      "mode": "adapted-local",
+      "target_mode": "0644"
+    },
+    {
+      "source_path": "default/.github/workflows/copilot-review.yml",
+      "target_path": ".github/workflows/copilot-review.yml",
+      "source_sha256": "1bdbb4bd62ebda00ef689ce063e6b74299d9b1ee067c1c972730cd1212114b98",
+      "source_blob": "9f8d54e95bccffd7de815826ea8bba1bdab66f81",
+      "target_blob": "3822d4d2fb85023ba7534ae86fd72046c0d5b24a",
+      "target_sha256": "2bce344229639df839e0558ecca129e4e47ef030bd2be37b8c9c673e9ad0fad8",
+      "mode": "adapted-local",
+      "target_mode": "0644",
+      "adaptation": "Local LI-259 final native-review corrections from Source 5128b10bef931478541985d314293d879ea317be; protected coupled adoption pending."
+    },
+    {
+      "source_path": "default/scripts/lit-push-ready.py",
+      "target_path": "scripts/lit-push-ready.py",
+      "source_sha256": "7184b923f21f4a8cca8ca5e3c856dfc0184cf702543ce718ff6352d78a581ddf",
+      "source_blob": "570b3bc8ab012c0a28473ed5129da2565b244681",
+      "target_blob": "930624d7d16d50c9e9dbcd00fd96d641f7dba32a",
+      "target_sha256": "e2ffdb26feebf9e58d9e4d4d389941cd041fe72b1e3e37fb891f2b6e0b895231",
+      "mode": "adapted-local",
+      "target_mode": "0644"
+    },
+    {
+      "source_path": "default/.github/workflows/review-request-continuation.yml",
+      "target_path": ".github/workflows/review-request-continuation.yml",
+      "source_sha256": "5d5de0d48ab51f2fb742aaed82fef9eb06f5d05aa5c5cbbbf4ee21fd27c29584",
+      "source_blob": "ae826a6b3efa7df6bec8e1b567112605a92d8815",
+      "target_blob": "c07e2f4f5e16ecdc5327e3309200bfbd3f979c53",
+      "target_sha256": "a3dc819738ad06f533edd7f4575cd11678f05b51fd20bd75f525017227e29b84",
+      "mode": "adapted-local",
+      "target_mode": "0644",
+      "adaptation": "Local LI-259 preparation; candidate provenance in li259-supplementary-port.json; protected adoption pending."
+    },
+    {
+      "source_path": "default/scripts/review_request_continuation.py",
+      "target_path": "scripts/review_request_continuation.py",
+      "source_sha256": "29014fe17a418763f294e9724354809abf56d051333e690768b5d17cce24452f",
+      "source_blob": "da7bba5c5faba9f7abfe5285f3f8a5a3c561ff17",
+      "target_blob": "3f6780a738103630f44a1fc49b904da256242a11",
+      "target_sha256": "5a89febc2ed9e381f73fdfc395f7d2bdb6f1ab8699c8ffff521d7b3013c96ae1",
+      "mode": "adapted-local",
+      "target_mode": "0644",
+      "adaptation": "Local LI-259 preparation; candidate provenance in li259-supplementary-port.json; protected adoption pending."
+    },
+    {
+      "source_path": "default/scripts/review_request_provenance.py",
+      "target_path": "scripts/review_request_provenance.py",
+      "source_sha256": "742d38d26c580c7220acb03462c27146327608ea964915efad9d0be2b0f6d8f3",
+      "source_blob": "17ae4e232221846a4865fa2fe728caa85b33b45c",
+      "target_blob": "a9ee3493cb1dfdb53b4879bece73586743a9af2a",
+      "target_sha256": "5621bdba718e5fb37ad3622dd0772b8c93ce42be82b6c091391dc05544b84185",
+      "mode": "adapted-local",
+      "target_mode": "0644",
+      "adaptation": "Content classifier AST parity with canonical LI-259 proof; no classification change."
+    },
+    {
+      "source_path": "default/scripts/native_verifier_retry.py",
+      "target_path": "scripts/native_verifier_retry.py",
+      "source_sha256": "5e1908c75b99ab195f523599d751c8f5c2384216172f3523732389871fc98573",
+      "source_blob": "0d5483278f9cc25a2a637ccd4f1bd57caf24e84b",
+      "target_blob": "0d5483278f9cc25a2a637ccd4f1bd57caf24e84b",
+      "target_sha256": "5e1908c75b99ab195f523599d751c8f5c2384216172f3523732389871fc98573",
+      "mode": "byte-identical",
+      "adaptation": "Local LI-259 final native-review corrections from Source 5128b10bef931478541985d314293d879ea317be; protected coupled adoption pending."
+    },
+    {
+      "source_path": "default/scripts/run-native-verifier-retry.sh",
+      "target_path": "scripts/run-native-verifier-retry.sh",
+      "source_sha256": "afcff9889dcffb32a101aa2bfe8f9770c0f30bcab56e1261da0b061cb5b4a987",
+      "source_blob": "1e3908021aa747a529931a8ef6741114d1f592c4",
+      "target_blob": "1e3908021aa747a529931a8ef6741114d1f592c4",
+      "target_sha256": "afcff9889dcffb32a101aa2bfe8f9770c0f30bcab56e1261da0b061cb5b4a987",
+      "mode": "byte-identical"
+    },
+    {
+      "source_path": "default/.github/workflows/review-infrastructure-retry.yml",
+      "target_path": ".github/workflows/review-infrastructure-retry.yml",
+      "source_sha256": "861f741f197c30805b9e8565fd085968657b8a3c3a4ada828196586fae81a6d6",
+      "source_blob": "21c0d4d54f06ec256fdf56c3b44b77e46556bfc2",
+      "target_blob": "21c0d4d54f06ec256fdf56c3b44b77e46556bfc2",
+      "target_sha256": "861f741f197c30805b9e8565fd085968657b8a3c3a4ada828196586fae81a6d6",
+      "mode": "byte-identical"
+    }
+  ],
+  "prior_preparation_source_commit": "3eff591b19da313ea501c4962f1452d3f35545e6",
+  "source_content_sha256": "f9704e1a1f7562b6502fdf536f3922a3d9691957cc63ca15b308c40682852c4f",
+  "prior_preparation_source_tree": "23997920b8f94f6da46608c02233d0f80ceed1b2",
+  "prior_test_sources": [
+    {
+      "path": "tests/review_event_contract_helpers.py",
+      "sha256": "58ee565b70c37a42911a25112606e77d287fe857bc1f56424f93a5846842c742",
+      "adaptation": "Local package paths and Supplementary identities; topology selector subset replaces old static assertions."
+    },
+    {
+      "path": "tests/test_review_operation_cas.py",
+      "sha256": "35219a3c3dcd3bf4685898992b8763cded42421fd80f8b32aa7eae2e0b520f7e",
+      "adaptation": "Local package paths and Supplementary identities; topology selector subset replaces old static assertions."
+    },
+    {
+      "path": "tests/test_review_event_reconcile.py",
+      "sha256": "c5403b9f499ce9c3fcb0db363611f9095ddf5d4a3cf35ced9c70833c3b9be6f5",
+      "adaptation": "Supplementary package path and identities; bind producer PR associations and live PR numbers; omit Source-only optional mirror check; repository formatting."
+    },
+    {
+      "path": "tests/test_review_event_port.py",
+      "sha256": "1bfb2a18b89a5b1a616b5be2d2c0971979b4aae315646d88c36dfd8ac5b70d1e",
+      "adaptation": "Local package paths and Supplementary identities; topology selector subset replaces old static assertions."
+    },
+    {
+      "path": "tests/test_current_revision_rerun_topology.py",
+      "sha256": "6293e6228b71efb363a79040fec9820b1eee5a6e6aaefff28dcc3637b29033e6",
+      "adaptation": "Local package paths and Supplementary identities; topology selector subset replaces old static assertions."
+    },
+    {
+      "path": "tests/test_review_request_continuation.py",
+      "sha256": "dcef0f095cdb97da34d76d6682490647a81a9d3c36e457f078144787676f6bc9",
+      "adaptation": "Actual Supplementary six-job owner and existing step names; nonempty association succeeds, absent protected fallback sender rejects empty association in original/locators/resume/read-only provenance; bounded intent conflicts and historical reference-time regression."
+    }
+  ],
+  "instructions": {
+    "source_agents_sha256": "00aa090f2a662cbbe9704bf2fa94a455b4107127f850694e8ec68dd19fe4e779",
+    "target_agents_sha256": "82a3f0df0579560aba7b3021b221f1fdc208a424d6ea667c9559117cc2888657",
+    "target_copilot_sha256": "6af201707af78aa734398c046d00b7fd2290fd9483abc2a07fb7b2a3c9eccc5b"
+  },
+  "local_preparation_source_commit": "ab6dd8bec5958508b8b4d66920d08d3dd8251e65",
+  "local_preparation_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
+  "final_protected_source_agents_sha256": "00aa090f2a662cbbe9704bf2fa94a455b4107127f850694e8ec68dd19fe4e779",
+  "final_target_agents_sha256": "165e1d43f067ea158ea6212f583c6e21b5ae1acbe233dfb471988d19e40737bb",
+  "final_target_copilot_sha256": "48fba7e3acd3124ecd88ed57ae71c44482c61ee1ecceeba0090fb123703b8284",
+  "final_acceptance_status": "PENDING_INDEPENDENT_AND_NATIVE_PORT_ACCEPTANCE",
+  "protected_source_tree": "77c0ecbb1c4b62276c4e61e7a6cc9a15cd8b8762",
+  "protected_source_receipt": {
+    "id": "sha256:9fb53417e0bfcd0ba5be2bffad5d2825661df19b093a8b9d9fae567681a5fc0d",
+    "sha256": "9fb53417e0bfcd0ba5be2bffad5d2825661df19b093a8b9d9fae567681a5fc0d"
+  },
+  "native_acceptance": false
+}

@@ -4,12 +4,15 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import tempfile
 import types
 import unittest
 from pathlib import Path
 from unittest import mock
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 MATERIALIZER_PATH = ROOT / "scripts" / "materialize-exact-revision-review.py"
@@ -300,7 +303,7 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertIn("      actions: read\n      checks: write", workflow)
         self.assertIn("checks: write", workflow)
         self.assertNotIn("actions/checkout@", workflow)
-        self.assertEqual(7, workflow.count("load_protected_asset"))
+        self.assertEqual(9, workflow.count("load_protected_asset"))
         for protected_path in (
             "scripts/materialize-exact-revision-review.py",
             ".github/codex/prompts/review-exact-head.md",
@@ -312,7 +315,12 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             self.assertIn(protected_path, workflow)
         self.assertEqual(1, workflow.count("?ref=${TRUSTED_WORKFLOW_SHA}"))
         self.assertIn("permission-profile: :read-only", workflow)
-        self.assertIn("codex-args: '[\"--ephemeral\"]'", workflow)
+        steps = yaml.safe_load(workflow)["jobs"]["exact-revision-codex-review"]["steps"]
+        args = next(step["with"]["codex-args"] for step in steps if "openai/codex-action@" in step.get("uses", ""))
+        alternatives = [json.loads(value) for value in re.findall(r"'(\[.*?\])'", args)]
+        self.assertEqual(2, len(alternatives))
+        self.assertTrue(all("--ephemeral" in values for values in alternatives))
+        self.assertIn('web_search="disabled"', alternatives[0])
         self.assertIn("name: Current revision review", workflow)
         self.assertIn("mlx90-exact-revision:v5:${input_sha256}:", workflow)
         self.assertIn("mlx90-current-revision:v4:${producer_run_id}:${input_sha256}", workflow)
@@ -380,7 +388,9 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         self.assertEqual(3, workflow_call_inputs.count("required: true"))
         self.assertEqual(0, workflow_call_inputs.count('default: ""'))
         self.assertEqual(5, dispatch_inputs.count("required: true"))
-        self.assertEqual(0, dispatch_inputs.count("required: false"))
+        self.assertEqual(1, dispatch_inputs.count("required: false"))
+        self.assertIn("producer_run_attempt:", dispatch_inputs)
+        self.assertIn("default: 0", dispatch_inputs)
         self.assertEqual(0, dispatch_inputs.count('default: ""'))
         self.assertIn('test "${GITHUB_REF}" = "refs/heads/${EVENT_BASE_REF}"', rerun)
         self.assertIn('[[ "${EVENT_BASE_REF}" =~ ^(develop|main)$ ]]', rerun)
@@ -423,59 +433,20 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
             retry,
         )
         self.assertIn("synthetic_evidence_jobs=$(jq -c", retry)
-        self.assertIn("synthetic_promotion_topology_jobs=$(jq -c", retry)
-        self.assertIn(
-            'select(.name == "Authorize exact Supplementary catch-up v5 successor" '
-            'or .name == "Verify aggregated develop-to-main promotion evidence")',
-            retry,
-        )
-        self.assertIn(
-            'test "$(jq \'length\' <<<"${synthetic_promotion_topology_jobs}")" -le 2',
-            retry,
-        )
-        self.assertIn("($promotion | length)", retry)
-        self.assertIn("runner_backed_jobs=$(jq -c", retry)
-        self.assertIn(
-            "route_jobs=$(jq -c",
-            retry,
-        )
-        self.assertIn('select(.name == "Route protected current-revision verification")', retry)
-        self.assertIn('test "$(jq \'length\' <<<"${route_jobs}")" -le 1', retry)
-        self.assertIn("legacy_jobs=$(jq -c", retry)
-        self.assertIn('select(.name == "Legacy protected current-revision verifier")', retry)
-        self.assertIn('test "$(jq \'length\' <<<"${legacy_jobs}")" -le 1', retry)
-        self.assertIn("required_jobs=$(jq -c", retry)
-        self.assertIn('select(.name == "Required current-revision workflow")', retry)
-        self.assertIn('test "$(jq \'length\' <<<"${required_jobs}")" -eq 1', retry)
-        self.assertIn('test "$(jq \'length\' <<<"${rerunnable_jobs}")" -eq 1', retry)
-        self.assertIn(
-            '--argjson legacy "${legacy_jobs}" --argjson required "${required_jobs}" --argjson route "${route_jobs}"',
-            retry,
-        )
-        self.assertIn(
-            "(($legacy | length) + ($required | length) + ($route | length))",
-            retry,
-        )
-        self.assertNotIn(
-            'test "$(jq \'length\' <<<"${runner_backed_jobs}")" -eq 1',
-            retry,
-        )
-        topology_selection = retry.split(
-            'if [ "$(jq \'length\' <<<"${legacy_jobs}")" -eq 1 ]; then',
-            1,
-        )[1].split(
-            'test "$(jq \'length\' <<<"${rerunnable_jobs}")" -eq 1',
-            1,
-        )[0]
-        legacy_branch, required_only_branch = topology_selection.split("          else\n", 1)
-        self.assertIn('rerunnable_jobs="${legacy_jobs}"', legacy_branch)
-        self.assertNotIn('rerunnable_jobs="${required_jobs}"', legacy_branch)
-        self.assertIn('rerunnable_jobs="${required_jobs}"', required_only_branch)
-        self.assertNotIn('rerunnable_jobs="${legacy_jobs}"', required_only_branch)
-        self.assertIn(
-            "repos/${REPOSITORY}/actions/jobs/${rerunnable_job_id}/rerun",
-            retry,
-        )
+        for variable, name in (
+            ("synthetic_authorization_jobs", "Authorize exact Supplementary catch-up v5 successor"),
+            ("synthetic_promotion_jobs", "Verify aggregated develop-to-main promotion evidence"),
+        ):
+            self.assertIn(f"{variable}=$(jq -c", retry)
+            self.assertIn(f'.name == "{name}"', retry)
+        self.assertIn('runner("Route protected current-revision verification"; "success")', retry)
+        self.assertIn('runner("Legacy protected current-revision verifier"; "failure")', retry)
+        self.assertIn('runner("Required current-revision workflow"; "failure")', retry)
+        self.assertIn('skipped("Reserve protected S0 feature-to-main verification")', retry)
+        self.assertIn('skipped("Verify protected S0 feature-to-main input")', retry)
+        self.assertIn('skipped("Finalize the protected S0 feature-to-main result")', retry)
+        self.assertIn("((map(.name) | unique | length) == length)", retry)
+        self.assertIn("repos/${REPOSITORY}/actions/jobs/${required_job_id}/rerun", retry)
         self.assertNotIn(
             "repos/${REPOSITORY}/actions/runs/${run_id}/rerun",
             retry,
@@ -529,15 +500,15 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                     self.assertIn("uses: ./.github/workflows/current-revision-rerun.yml", develop_job)
                     self.assertIn(
                         "uses: lightning-it/ansible-collection-supplementary/.github/workflows/"
-                        "current-revision-rerun.yml@eb1b0e7437a2a4caf50e2fec058abeddca5cf088",
+                        "current-revision-rerun.yml@64451b42ec9d03c47ba8156f0952c139c0744648",
                         main_job,
                     )
                     self.assertIn(
-                        "github.event.pull_request.base.sha == 'eb1b0e7437a2a4caf50e2fec058abeddca5cf088'",
+                        "github.event.pull_request.base.sha == '64451b42ec9d03c47ba8156f0952c139c0744648'",
                         main_job,
                     )
                     self.assertIn(
-                        "PINNED_MAIN_HELPER: eb1b0e7437a2a4caf50e2fec058abeddca5cf088",
+                        "PINNED_MAIN_HELPER: 64451b42ec9d03c47ba8156f0952c139c0744648",
                         main_guard,
                     )
                     self.assertIn('if [ "${EVENT_BASE}" != "${PINNED_MAIN_HELPER}" ]; then', main_guard)
@@ -548,8 +519,9 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
                         "needs.validate-protected-main-helper-pin.result == 'success'",
                         main_job,
                     )
-                    self.assertNotIn("current-revision-rerun.yml/dispatches", rerun_job)
-                    self.assertNotIn('-f "ref=${BASE_REF}"', rerun_job)
+                    legacy_rerun = rerun_job.split("  dispatch-event-verifier-reevaluation:", 1)[0]
+                    self.assertNotIn("current-revision-rerun.yml/dispatches", legacy_rerun)
+                    self.assertNotIn('-f "ref=${BASE_REF}"', legacy_rerun)
                     for required_input in (
                         "base_ref: ${{ github.event.pull_request.base.ref }}",
                         "pr_number: ${{ github.event.pull_request.number }}",
@@ -630,10 +602,12 @@ class ExactRevisionWorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("read_labels_sha256() {", workflow)
         self.assertIn("pull-request metadata, labels, or review state changed during result publication", workflow)
-        self.assertIn("and .external_id == $external_id", workflow)
+        self.assertIn(".external_id == $external and .output.summary == $evidence", workflow)
         self.assertIn("${GITHUB_SERVER_URL}/${REPOSITORY}/runs/${check_id}", workflow)
-        self.assertGreaterEqual(workflow.count('-f "details_url=${check_url}"'), 2)
-        self.assertIn('created="$(api_patch "repos/${REPOSITORY}/check-runs/${check_id}"', workflow)
+        self.assertIn('-f "details_url=${check_url}"', workflow)
+        self.assertIn('publication_details "${check_id}" "${external_id}" "${check_url}" || return 1', workflow)
+        self.assertIn('publication_read "${check_id}" "${external_id}" any "${url}" || return 1', workflow)
+        self.assertIn("A prior native publisher consumed every uncertain mutation", workflow)
 
     def test_release_app_is_excluded_except_bound_ancestry_backmerge(self) -> None:
         workflow = (ROOT / ".github/workflows/copilot-review.yml").read_text(encoding="utf-8")
