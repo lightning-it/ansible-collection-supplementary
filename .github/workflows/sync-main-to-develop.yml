@@ -214,6 +214,20 @@ jobs:
             )"; then
               if [ "${remote_head}" != "${desired_head}" ]; then
                 test "${remote_head}" = bc31e8c124d8cda8cf6a4ffb734652bc3b926b44
+                upload_nonce="$(openssl rand -hex 16)"
+                [[ "${upload_nonce}" =~ ^[0-9a-f]{32}$ ]]
+                upload_branch="backmerge-upload/${desired_head}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${upload_nonce}"
+                upload_encoded="$(jq -rn \
+                  --arg value "heads/${upload_branch}" '$value|@uri')"
+                git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${token_header}" \
+                  push --porcelain origin \
+                    "${desired_head}:refs/heads/${upload_branch}"
+                BACKMERGE_UPLOAD_ENCODED="${upload_encoded}"
+                BACKMERGE_UPLOAD_EXPECTED="${desired_head}"
+                trap cleanup_upload_ref_best_effort EXIT
+                test "$(gh api \
+                  "repos/${REPOSITORY}/git/ref/${upload_encoded}" \
+                  --jq .object.sha)" = "${desired_head}"
                 updated="$(gh api --method PATCH \
                   "repos/${REPOSITORY}/git/refs/${encoded_ref}" \
                   -f "sha=${desired_head}" -F force=true)"
@@ -230,6 +244,10 @@ jobs:
                     "repos/${REPOSITORY}/git/ref/${encoded_ref}" \
                     --jq .object.sha)"
                   if [ "${remote_head}" = "${desired_head}" ]; then
+                    gh api --method DELETE \
+                      "repos/${REPOSITORY}/git/refs/${upload_encoded}"
+                    trap - EXIT
+                    unset BACKMERGE_UPLOAD_ENCODED BACKMERGE_UPLOAD_EXPECTED
                     echo 'Updated the exact recovery backmerge ref to revision 2.'
                     return 0
                   fi
