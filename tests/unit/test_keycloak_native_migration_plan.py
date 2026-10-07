@@ -77,6 +77,10 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
         )
         result = NATIVE.prepare_transition(components, "postgres", 5432)
         self.assertEqual(result["components"]["postgres"]["manifest"], components["postgres"]["manifest"])
+        self.assertEqual(
+            result["components"]["keycloak"]["manifest"]["spec"]["hostAliases"],
+            [{"ip": "192.0.2.3", "hostnames": ["postgres"]}],
+        )
         for host in ("other", "postgres.example.invalid", "POSTGRES", "postgres\n", "8.8.8.8"):
             with self.subTest(host=host), self.assertRaises(AnsibleFilterError):
                 NATIVE.prepare_transition(components, host, 5432)
@@ -176,6 +180,10 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
             }
         captured = NATIVE.capture_original_runtime(components, records)
         self.assertIsNone(captured["keycloak"]["original_runtime"]["static_networks"]["proxy"])
+        plan = NATIVE.prepare_transition(components, "postgres", 5432)
+        self.assertTrue(plan["changed"])
+        for name, prepared in plan["components"].items():
+            components[name].update(prepared)
         self.assertFalse(NATIVE.prepare_transition(components, "postgres", 5432)["changed"])
         for desired in (True, False):
             changed = deepcopy(records)
@@ -202,6 +210,20 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
         result = NATIVE.prepare_transition(components, "postgres", 5432)
         environment = result["components"]["keycloak"]["manifest"]["spec"]["containers"][0]["env"]
         self.assertEqual(environment[0]["value"], "postgres")
+        expected_aliases = [{"ip": "192.0.2.3", "hostnames": ["postgres"]}]
+        self.assertEqual(result["components"]["keycloak"]["manifest"]["spec"]["hostAliases"], expected_aliases)
+        for name, prepared in result["components"].items():
+            components[name].update(prepared)
+        self.assertFalse(NATIVE.prepare_transition(components, "postgres", 5432)["changed"])
+        for aliases in (
+            [{"ip": "192.0.2.4", "hostnames": ["postgres"]}],
+            [{"ip": "192.0.2.3", "hostnames": ["other"]}],
+            expected_aliases + [{"ip": "192.0.2.4", "hostnames": ["other"]}],
+        ):
+            altered = deepcopy(components)
+            altered["keycloak"]["manifest"]["spec"]["hostAliases"] = aliases
+            with self.subTest(aliases=aliases), self.assertRaises(AnsibleFilterError):
+                NATIVE.prepare_transition(altered, "postgres", 5432)
         self.assertTrue(
             NATIVE.private_database_endpoint_valid(
                 "postgres", components["keycloak"]["networks"], components["postgres"]["networks"], "postgres"
@@ -213,6 +235,27 @@ class KeycloakNativeMigrationPlanTests(unittest.TestCase):
         components["keycloak"]["networks"] = ["other.network:ip=192.0.2.2"]
         with self.assertRaises(AnsibleFilterError):
             NATIVE.prepare_transition(components, "postgres", 5432)
+
+    def test_existing_managed_alias_is_atomically_replaced_or_removed(self):
+        components = fixtures()
+        components["postgres"]["pod_name"] = "keycloak-postgres"
+        components["postgres"]["manifest"]["metadata"]["name"] = "keycloak-postgres"
+        first = NATIVE.prepare_transition(components, "keycloak-postgres", 5432)
+        for name, prepared in first["components"].items():
+            components[name].update(prepared)
+
+        replacement = NATIVE.prepare_transition(components, "postgres", 5432)
+        self.assertEqual(
+            replacement["components"]["keycloak"]["manifest"]["spec"]["hostAliases"],
+            [{"ip": "192.0.2.3", "hostnames": ["postgres"]}],
+        )
+        for name, prepared in replacement["components"].items():
+            components[name].update(prepared)
+
+        removal = NATIVE.prepare_transition(components, "192.0.2.3", 5432)
+        self.assertNotIn("hostAliases", removal["components"]["keycloak"]["manifest"]["spec"])
+        environment = removal["components"]["keycloak"]["manifest"]["spec"]["containers"][0]["env"]
+        self.assertIn({"name": "KC_DB_URL_HOST", "value": "192.0.2.3"}, environment)
 
     def test_prepares_both_networks_and_database_endpoint_without_other_changes(self):
         components = fixtures()

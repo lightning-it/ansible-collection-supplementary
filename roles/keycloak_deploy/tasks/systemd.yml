@@ -404,6 +404,17 @@
             podman_systemd_enabled: "{{ keycloak_deploy_systemd_enabled }}"
             podman_systemd_networks: "{{ keycloak_deploy_networks }}"
 
+        - name: Validate managed database DNS from the native Keycloak container
+          ansible.builtin.include_tasks: validate_database_dns.yml
+          vars:
+            keycloak_deploy_database_dns_probe_container: >-
+              {{ keycloak_deploy_pod_name }}-{{ keycloak_deploy_container_name }}
+          when:
+            - keycloak_deploy_manage_postgres | bool
+            - not keycloak_deploy_host_network | bool
+            - not keycloak_deploy_postgres_host_network | bool
+            - not keycloak_deploy_db_host is match('^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$')
+
         - name: Wait until Keycloak health endpoint is reachable
           ansible.builtin.uri:
             url: "{{ keycloak_deploy_health_url_effective }}"
@@ -466,6 +477,18 @@
             keycloak_deploy_native_quiescence_failure_message: ""
             keycloak_deploy_legacy_restore_failure_message: ""
             keycloak_deploy_native_quiescence_proven: false
+
+        - name: Capture safe native Keycloak service failure properties
+          ansible.builtin.command:
+            argv:
+              - systemctl
+              - show
+              - "{{ keycloak_deploy_systemd_unit_name }}.service"
+              - --property=ActiveState,SubState,Result,ExecMainCode,ExecMainStatus
+              - --value
+          register: keycloak_deploy_native_failure_properties
+          changed_when: false
+          failed_when: false
 
         - name: Attempt failed native Keycloak cleanup without blocking restoration
           block:
@@ -607,6 +630,11 @@
             msg: >-
               Native Keycloak Quadlet takeover failed:
               {{ keycloak_deploy_takeover_failure_message }}.
+              Native service state:
+              {{
+                keycloak_deploy_native_failure_properties.stdout_lines
+                | default([]) | join('/') | default('unknown', true)
+              }}.
               Cleanup failure:
               {{ keycloak_deploy_cleanup_failure_message | default('') | default('none', true) }}.
               Manifest restoration failure:
