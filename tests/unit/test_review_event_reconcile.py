@@ -440,6 +440,35 @@ class ReviewEventTests(unittest.TestCase):
     def test_ambiguous_dispatch_response_is_not_retried(self):
         self.assertEqual(1, len(self.reconcile(uncertain=True)))
 
+    def test_completed_locator_cooldown_boundary_and_active_hold(self):
+        expected = [
+            (
+                "repos/lightning-it/.github/actions/workflows/copilot-review-refresh.yml/dispatches",
+                {
+                    "ref": "develop",
+                    "inputs": {
+                        "pr_number": "23",
+                        "expected_head": self.head,
+                        "expected_base": self.base,
+                        "review_id": "17",
+                    },
+                },
+            )
+        ]
+        for age in (599, 600, 601):
+            for status in ("completed", "queued", "in_progress"):
+                with self.subTest(age=age, status=status):
+                    locator = self.locator(
+                        0,
+                        pr=23,
+                        status=status,
+                        conclusion="failure" if status == "completed" else None,
+                        created_at=(self.now - dt.timedelta(seconds=1200)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        updated_at=(self.now - dt.timedelta(seconds=age)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    )
+                    calls = self.reconcile(delay=1800, history=[locator])
+                    self.assertEqual(expected if status == "completed" and age >= 600 else [], calls)
+
     def test_active_dispatch_is_deduplicated(self):
         run = {
             "path": ".github/workflows/copilot-review-refresh.yml",
