@@ -7,9 +7,9 @@ archetype: ansible-collection
 policy:
   max_age_hours: 36
   related_adrs:
-    - https://wiki.cloud.l-it.io/wiki/spaces/LIT/pages/2886566105
-    - https://wiki.cloud.l-it.io/wiki/spaces/LIT/pages/2886926524
-    - https://wiki.cloud.l-it.io/wiki/spaces/LIT/pages/2893119515
+    - docs/adr/mlx-10-distributed-test-ownership.md
+    - docs/adr/mlx-40-lifecycle-versioning-release-evidence.md
+    - docs/adr/mlx-70-prevalidated-candidate-evidence.md
   branch_aggregates:
     develop:
       - name: Collection / Fast
