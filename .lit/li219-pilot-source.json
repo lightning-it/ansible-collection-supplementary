@@ -40,8 +40,8 @@
       "target_path": "scripts/review-event-reconcile.py",
       "source_sha256": "74bf8eb90116afa0a58ebf57be3e141c95e0127d08d008b33cc28d3b3569602c",
       "source_blob": "45a9920e640fb220f5f3db06f98f684f15d73735",
-      "target_blob": "cabd318559256301d8b8b821858ac49457776833",
-      "target_sha256": "218a5d1a045a69fb6b9013bfd34dc42f0f697ce1a311812833b7064ab3e700b1",
+      "target_blob": "a732d17904ec9c6262a99639bc168e8502753d03",
+      "target_sha256": "d1c98071362e576e578fdfa1a215ad7bfb6bb0dde473518ae3caaddbf2f3291a",
       "mode": "adapted-local",
       "target_mode": "0644"
     },

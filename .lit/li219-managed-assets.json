@@ -28,7 +28,7 @@
     {
       "path": "scripts/review-event-reconcile.py",
       "category": "local-required",
-      "sha256": "218a5d1a045a69fb6b9013bfd34dc42f0f697ce1a311812833b7064ab3e700b1",
+      "sha256": "d1c98071362e576e578fdfa1a215ad7bfb6bb0dde473518ae3caaddbf2f3291a",
       "source": "shared-assets-lit/default/scripts/review-event-reconcile.py",
       "owner": "ansible-collection-supplementary",
       "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
