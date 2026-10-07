@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Keep an open pull request with ambiguous current-revision evidence blocked
+    without preventing reconciliation of later independent pull requests.
