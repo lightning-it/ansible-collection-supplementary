@@ -63,6 +63,7 @@ NEXUS_REPOSITORY_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,126}\Z")
 # below the 360-minute publish-job limit while covering the controller's full
 # 255-minute execution budget plus queue/startup allowance.
 DEFAULT_TIMEOUT_SECONDS = 16_200
+MAX_WINDOW_SECONDS = 4_800
 DEFAULT_POLL_SECONDS = 10
 COMMAND_TIMEOUT_SECONDS = 120
 
@@ -80,12 +81,16 @@ def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def reject_json_constant(value: str) -> None:
+    raise ReceiptError(f"non-JSON numeric constant: {value}")
+
+
 def load_json(path: Path, label: str) -> dict[str, Any]:
     if path.is_symlink() or not path.is_file():
         raise ReceiptError(f"{label} must be a regular non-symlink file")
     try:
         source = path.read_text(encoding="utf-8")
-        value = json.loads(source, object_pairs_hook=reject_duplicate_keys)
+        value = json.loads(source, object_pairs_hook=reject_duplicate_keys, parse_constant=reject_json_constant)
     except json.JSONDecodeError as exc:
         raise ReceiptError(f"{label} is not valid JSON") from exc
     if not isinstance(value, dict):
@@ -122,7 +127,7 @@ def file_sha256(path: Path) -> str:
 
 
 def canonical_json(value: Mapping[str, Any]) -> str:
-    return json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+    return json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True, allow_nan=False)
 
 
 def validate_nexus_manifest(path: Path) -> dict[str, Any]:
@@ -181,7 +186,7 @@ def validate_nexus_manifest(path: Path) -> dict[str, Any]:
         or parsed_artifact_url.fragment
     ):
         raise ReceiptError("Nexus artifact URL origin differs from the configured repository")
-    if readback != {"sha256": artifact_digest, "size": artifact_size, "verified": True}:
+    if canonical_json(readback) != canonical_json({"sha256": artifact_digest, "size": artifact_size, "verified": True}):
         raise ReceiptError("Nexus readback does not exactly match the staged artifact")
     return manifest
 
@@ -298,7 +303,11 @@ class GhControllerClient:
 
     def _json(self, endpoint: str) -> dict[str, Any]:
         try:
-            value = json.loads(self._command(["gh", "api", endpoint]), object_pairs_hook=reject_duplicate_keys)
+            value = json.loads(
+                self._command(["gh", "api", endpoint]),
+                object_pairs_hook=reject_duplicate_keys,
+                parse_constant=reject_json_constant,
+            )
         except json.JSONDecodeError as exc:
             raise ReceiptError("GitHub API returned invalid JSON") from exc
         if not isinstance(value, dict):
@@ -475,7 +484,7 @@ def dispatch_if_absent(
     request_json: str,
     request_id: str,
     controller_sha: str,
-) -> bool:
+) -> tuple[bool, tuple[int, int] | None]:
     if (
         REQUEST_ID_RE.fullmatch(request_id) is None
         or hashlib.sha256(request_json.encode("utf-8")).hexdigest() != request_id
@@ -485,9 +494,67 @@ def dispatch_if_absent(
     if len(matches) > 1:
         raise ReceiptError("multiple ModuLix runs already match the exact validation request")
     if matches:
-        return False
+        run = matches[0]
+        bound_run = (
+            positive_integer(run.get("id"), "controller run ID"),
+            positive_integer(run.get("run_attempt"), "controller run attempt"),
+        )
+        if bound_run[1] != 1:
+            raise ReceiptError("existing ModuLix validation run is not on attempt one")
+        return False, bound_run
     client.dispatch(request_json, request_id)
-    return True
+    return True, None
+
+
+def poll_window(
+    client: ControllerClient,
+    request_id: str,
+    controller_sha: str,
+    timeout_seconds: int,
+    *,
+    bound_run: tuple[int, int] | None = None,
+    require_initial_attempt_one: bool = False,
+    monotonic: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> tuple[dict[str, Any] | None, tuple[int, int] | None]:
+    positive_integer(timeout_seconds, "ModuLix polling window")
+    if bound_run is not None:
+        if not isinstance(bound_run, tuple) or len(bound_run) != 2:
+            raise ReceiptError("bound ModuLix run identity is malformed")
+        bound_run = (
+            positive_integer(bound_run[0], "bound controller run ID"),
+            positive_integer(bound_run[1], "bound controller run attempt"),
+        )
+    if bound_run is not None and require_initial_attempt_one:
+        raise ReceiptError("a newly dispatched ModuLix run cannot have a prior binding")
+    deadline = monotonic() + timeout_seconds
+    while monotonic() < deadline:
+        matches = [run for run in client.workflow_runs() if matching_run(run, request_id, controller_sha)]
+        if len(matches) > 1:
+            raise ReceiptError("multiple ModuLix runs match the exact validation request")
+        if bound_run is not None and not matches:
+            raise ReceiptError("bound ModuLix validation run disappeared")
+        if matches:
+            run = matches[0]
+            identity = (
+                positive_integer(run.get("id"), "controller run ID"),
+                positive_integer(run.get("run_attempt"), "controller run attempt"),
+            )
+            if bound_run is None:
+                if require_initial_attempt_one and identity[1] != 1:
+                    raise ReceiptError("new ModuLix validation run is not on attempt one")
+                bound_run = identity
+            elif identity != bound_run:
+                raise ReceiptError("bound ModuLix validation run identity changed")
+            status = run.get("status")
+            if status == "completed":
+                if run.get("conclusion") != "success":
+                    raise ReceiptError("exact ModuLix validation run did not succeed")
+                return run, bound_run
+            if status not in {"queued", "in_progress", "pending", "requested", "waiting"}:
+                raise ReceiptError("exact ModuLix validation run has an unknown status")
+        sleep(DEFAULT_POLL_SECONDS)
+    return None, bound_run
 
 
 def wait_for_run(
@@ -496,27 +563,42 @@ def wait_for_run(
     controller_sha: str,
     timeout_seconds: int,
     *,
+    bound_run: tuple[int, int] | None = None,
+    require_initial_attempt_one: bool = False,
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
-    deadline = monotonic() + timeout_seconds
-    while monotonic() < deadline:
-        matches = [run for run in client.workflow_runs() if matching_run(run, request_id, controller_sha)]
-        if len(matches) > 1:
-            raise ReceiptError("multiple ModuLix runs match the exact validation request")
-        if matches:
-            run = matches[0]
-            positive_integer(run.get("id"), "controller run ID")
-            positive_integer(run.get("run_attempt"), "controller run attempt")
-            status = run.get("status")
-            if status == "completed":
-                if run.get("conclusion") != "success":
-                    raise ReceiptError("exact ModuLix validation run did not succeed")
-                return run
-            if status not in {"queued", "in_progress", "pending", "requested", "waiting"}:
-                raise ReceiptError("exact ModuLix validation run has an unknown status")
-        sleep(DEFAULT_POLL_SECONDS)
-    raise ReceiptError("timed out waiting for the exact ModuLix validation run")
+    run, _bound_run = poll_window(
+        client,
+        request_id,
+        controller_sha,
+        timeout_seconds,
+        bound_run=bound_run,
+        require_initial_attempt_one=require_initial_attempt_one,
+        monotonic=monotonic,
+        sleep=sleep,
+    )
+    if run is None:
+        raise ReceiptError("timed out waiting for the exact ModuLix validation run")
+    return run
+
+
+def require_bound_success(
+    client: ControllerClient,
+    request_id: str,
+    controller_sha: str,
+    bound_run: tuple[int, int],
+) -> None:
+    matches = [run for run in client.workflow_runs() if matching_run(run, request_id, controller_sha)]
+    if len(matches) != 1:
+        raise ReceiptError("bound ModuLix validation run is missing or ambiguous")
+    run = matches[0]
+    identity = (
+        positive_integer(run.get("id"), "controller run ID"),
+        positive_integer(run.get("run_attempt"), "controller run attempt"),
+    )
+    if identity != bound_run or run.get("status") != "completed" or run.get("conclusion") != "success":
+        raise ReceiptError("bound ModuLix validation run changed before receipt acceptance")
 
 
 def validate_run_jobs(jobs: list[dict[str, Any]]) -> None:
@@ -546,7 +628,7 @@ def validate_receipt(
     exact_keys(receipt, {"apiVersion", "kind", "request", "requestId", "validation", "decision"}, "receipt")
     if receipt["apiVersion"] != RECEIPT_API_VERSION or receipt["kind"] != RECEIPT_KIND:
         raise ReceiptError("ModuLix validation receipt schema is unsupported")
-    if receipt["request"] != request:
+    if canonical_json(receipt["request"]) != canonical_json(request):
         raise ReceiptError("ModuLix validation receipt is not bound to the exact request")
     if receipt["requestId"] != f"sha256:{request_id}":
         raise ReceiptError("ModuLix validation receipt request ID differs")
@@ -575,7 +657,7 @@ def validate_receipt(
         "receipt.validation",
     )
     expected_artifact = f"{ARTIFACT_PREFIX}{request_id}"
-    expected_validation = {
+    expected_validation: dict[str, Any] = {
         "actor": APP_ACTOR,
         "actorId": APP_ACTOR_ID,
         "actorType": "Bot",
@@ -590,9 +672,6 @@ def validate_receipt(
         "sha": run["head_sha"],
         "workflow": CONTROLLER_WORKFLOW,
     }
-    for key, expected in expected_validation.items():
-        if validation.get(key) != expected:
-            raise ReceiptError(f"ModuLix receipt validation.{key} differs")
     expected_observations = {
         "applicationAcceptance": "passed",
         "candidateDigest": request["candidate"]["sha256"],
@@ -602,18 +681,21 @@ def validate_receipt(
             **request["source"],
         },
     }
-    if validation["observations"] != expected_observations:
-        raise ReceiptError("ModuLix receipt observations are incomplete or substituted")
+    expected_validation["observations"] = expected_observations
+    if canonical_json(validation) != canonical_json(expected_validation):
+        raise ReceiptError("ModuLix receipt validation is incomplete or substituted")
     exact_keys(
         decision,
         {"candidateUnchanged", "galaxyPublicationAuthorized", "releaseEligible"},
         "receipt.decision",
     )
-    if decision != {
-        "candidateUnchanged": True,
-        "galaxyPublicationAuthorized": True,
-        "releaseEligible": True,
-    }:
+    if canonical_json(decision) != canonical_json(
+        {
+            "candidateUnchanged": True,
+            "galaxyPublicationAuthorized": True,
+            "releaseEligible": True,
+        }
+    ):
         raise ReceiptError("ModuLix validation receipt does not authorize exact-byte publication")
 
 
@@ -650,6 +732,15 @@ def download_and_verify_receipt(
         receipt = load_json(receipt_path, "ModuLix validation receipt")
         validate_receipt(receipt, request, request_id, run)
         client.verify_signature(receipt_path, bundle_path, string(run.get("head_sha"), "controller run SHA"))
+        require_bound_success(
+            client,
+            request_id,
+            string(run.get("head_sha"), "controller run SHA"),
+            (
+                positive_integer(run.get("id"), "controller run ID"),
+                positive_integer(run.get("run_attempt"), "controller run attempt"),
+            ),
+        )
         temporary.rename(output_directory)
     except Exception:
         if temporary.exists() and not temporary.is_symlink():
@@ -660,6 +751,7 @@ def download_and_verify_receipt(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--phase", choices=("single", "dispatch", "window"), default="single")
     parser.add_argument("--nexus-manifest", type=Path, required=True)
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--source-run-id", type=int, required=True)
@@ -668,17 +760,62 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     parser.add_argument("--app-slug", required=True)
     parser.add_argument("--installation-id", type=int, required=True)
-    parser.add_argument("--output-directory", type=Path, required=True)
-    parser.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
+    parser.add_argument("--output-directory", type=Path)
+    parser.add_argument("--timeout-seconds", type=int)
+    parser.add_argument("--controller-sha")
+    parser.add_argument("--request-id")
+    parser.add_argument("--bound-run-id", type=int)
+    parser.add_argument("--bound-run-attempt", type=int)
+    parser.add_argument("--final-window", action="store_true")
     args = parser.parse_args()
 
     try:
-        if args.timeout_seconds <= 0 or args.timeout_seconds > DEFAULT_TIMEOUT_SECONDS:
-            raise ReceiptError("validation timeout is outside the bounded contract")
+        if args.phase == "dispatch":
+            if (
+                any(
+                    value is not None
+                    for value in (
+                        args.output_directory,
+                        args.timeout_seconds,
+                        args.controller_sha,
+                        args.request_id,
+                        args.bound_run_id,
+                        args.bound_run_attempt,
+                    )
+                )
+                or args.final_window
+            ):
+                raise ReceiptError("dispatch phase has unrelated continuation arguments")
+        elif args.phase == "window":
+            if (
+                args.output_directory is None
+                or args.controller_sha is None
+                or args.request_id is None
+                or args.timeout_seconds is None
+                or (args.bound_run_id is None) != (args.bound_run_attempt is None)
+            ):
+                raise ReceiptError("window phase lacks an exact continuation binding")
+            if type(args.timeout_seconds) is not int or not 0 < args.timeout_seconds <= MAX_WINDOW_SECONDS:
+                raise ReceiptError("window exceeds the bounded 80-minute contract")
+        else:
+            if args.output_directory is None:
+                raise ReceiptError("single phase requires a receipt output directory")
+            if (
+                any(
+                    value is not None
+                    for value in (args.controller_sha, args.request_id, args.bound_run_id, args.bound_run_attempt)
+                )
+                or args.final_window
+            ):
+                raise ReceiptError("single phase has unrelated continuation arguments")
+            if args.timeout_seconds is None:
+                args.timeout_seconds = DEFAULT_TIMEOUT_SECONDS
+            if type(args.timeout_seconds) is not int or not 0 < args.timeout_seconds <= DEFAULT_TIMEOUT_SECONDS:
+                raise ReceiptError("validation timeout is outside the bounded contract")
         manifest = validate_nexus_manifest(args.nexus_manifest)
         client = GhControllerClient()
         validate_installation(client, args.app_slug, args.installation_id)
-        controller_sha = client.controller_sha()
+        controller_sha = args.controller_sha if args.phase == "window" else client.controller_sha()
         validate_workflow(client.workflow(), controller_sha)
         request, request_json, request_id = build_request(
             manifest=manifest,
@@ -689,8 +826,71 @@ def main() -> int:
             version=args.version,
             controller_sha=controller_sha,
         )
-        dispatch_if_absent(client, request_json, request_id, controller_sha)
-        run = wait_for_run(client, request_id, controller_sha, args.timeout_seconds)
+        if args.phase == "dispatch":
+            dispatched, bound_run = dispatch_if_absent(client, request_json, request_id, controller_sha)
+            print(
+                canonical_json(
+                    {
+                        "controllerRunAttempt": bound_run[1] if bound_run else None,
+                        "controllerRunId": bound_run[0] if bound_run else None,
+                        "controllerSha": controller_sha,
+                        "requestId": f"sha256:{request_id}",
+                        "state": "dispatched" if dispatched else "found",
+                    }
+                )
+            )
+            return 0
+        if args.phase == "window":
+            if args.request_id != f"sha256:{request_id}":
+                raise ReceiptError("window request ID differs from the exact staged request")
+            bound_run = None
+            if args.bound_run_id is not None:
+                bound_run = (
+                    positive_integer(args.bound_run_id, "bound controller run ID"),
+                    positive_integer(args.bound_run_attempt, "bound controller run attempt"),
+                )
+            run, bound_run = poll_window(
+                client,
+                request_id,
+                controller_sha,
+                args.timeout_seconds,
+                bound_run=bound_run,
+                require_initial_attempt_one=bound_run is None,
+            )
+            if run is None:
+                if args.final_window:
+                    raise ReceiptError("final ModuLix window expired without an exact successful run")
+                print(
+                    canonical_json(
+                        {
+                            "controllerRunAttempt": bound_run[1] if bound_run else None,
+                            "controllerRunId": bound_run[0] if bound_run else None,
+                            "controllerSha": controller_sha,
+                            "requestId": f"sha256:{request_id}",
+                            "state": "pending",
+                        }
+                    )
+                )
+                return 0
+        else:
+            dispatched, bound_run = dispatch_if_absent(client, request_json, request_id, controller_sha)
+            run = wait_for_run(
+                client,
+                request_id,
+                controller_sha,
+                args.timeout_seconds,
+                bound_run=bound_run,
+                require_initial_attempt_one=dispatched,
+            )
+        require_bound_success(
+            client,
+            request_id,
+            controller_sha,
+            (
+                positive_integer(run.get("id"), "controller run ID"),
+                positive_integer(run.get("run_attempt"), "controller run attempt"),
+            ),
+        )
         validate_run_jobs(client.jobs(positive_integer(run.get("id"), "controller run ID")))
         receipt_path = download_and_verify_receipt(client, request, request_id, run, args.output_directory)[0]
     except ReceiptError as exc:
@@ -704,6 +904,9 @@ def main() -> int:
         "requestId": f"sha256:{request_id}",
         "verifiedAt": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
+    if args.phase == "window":
+        result["controllerSha"] = controller_sha
+        result["state"] = "complete"
     print(canonical_json(result))
     return 0
 

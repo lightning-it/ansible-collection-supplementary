@@ -329,6 +329,7 @@ jobs:
     name: Generate registry quality matrices
     needs: role-coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       tiny: ${{ steps.matrix.outputs.tiny }}
       heavy: ${{ steps.matrix.outputs.heavy }}
@@ -615,6 +616,7 @@ jobs:
     if: always()
     needs: [quality-matrix, tiny-cells, security-classification]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Require every Tiny matrix cell
         env:
@@ -665,6 +667,7 @@ jobs:
     if: always()
     needs: [lint-sanity, build-install, role-coverage, quality-matrix, tiny]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Require every Fast-Lane prerequisite
         env:
@@ -718,6 +721,7 @@ jobs:
       github.ref == 'refs/heads/main'
     needs: [quality-matrix, heavy-cells]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Require every Heavy matrix cell
         env:
@@ -761,6 +765,7 @@ jobs:
       github.ref == 'refs/heads/main'
     needs: [quality-matrix, acceptance-cells]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Require every Application Acceptance matrix cell
         env:
@@ -2153,6 +2158,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: lint-sanity
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.lint-sanity.result }}
@@ -2163,6 +2169,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: build-install
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.build-install.result }}
@@ -2173,6 +2180,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: [tiny, heavy, acceptance]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           TINY_RESULT: ${{ needs.tiny.result }}
@@ -2188,6 +2196,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: lint-sanity
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.lint-sanity.result }}
@@ -2198,6 +2207,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: tiny
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.tiny.result }}
@@ -2208,6 +2218,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: heavy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.heavy.result }}
@@ -2218,6 +2229,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: acceptance
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.acceptance.result }}
@@ -2228,6 +2240,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: evidence
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.evidence.result }}
@@ -2238,6 +2251,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: release-validation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.release-validation.result }}
