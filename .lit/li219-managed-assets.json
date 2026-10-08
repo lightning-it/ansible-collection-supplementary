@@ -51,10 +51,10 @@
     {
       "path": "scripts/review_content_markers.py",
       "category": "local-required",
-      "sha256": "c74034b84d22704581064bdd410d7afb7012c509694da66246d19ec5db17f5db",
+      "sha256": "aee6e43da9ee2eb4b17c79dd4d981294ae8f87cebe60aa502d2eca1c582dd622",
       "source": "shared-assets-lit/scripts/review_content_markers.py",
       "owner": "ansible-collection-supplementary",
-      "purpose": "Protected PR base-ref dispatch/consumer binding and native sanity source compatibility; strict schema types and runtime Unicode content semantics retained."
+      "purpose": "Repository-local native sanity compatibility: AST-equivalent formatting, escaped Unicode literals and documented exact schema type checks; protected donor provenance and review budgets retained."
     },
     {
       "path": "scripts/verify-dot-github-current-revision.py",
@@ -66,9 +66,9 @@
     {
       "path": ".github/workflows/copilot-review.yml",
       "category": "local-required",
-      "sha256": "2bce344229639df839e0558ecca129e4e47ef030bd2be37b8c9c673e9ad0fad8",
+      "sha256": "eaf193cda22365415ec6d43cf0611e1f5a830d97dc1f535b242af2d964cfabd6",
       "owner": "ansible-collection-supplementary",
-      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+      "purpose": "Repository-local native sanity compatibility: AST-equivalent formatting, escaped Unicode literals and documented exact schema type checks; protected donor provenance and review budgets retained."
     },
     {
       "path": "scripts/lit-push-ready.py",
@@ -81,31 +81,33 @@
       "path": ".github/workflows/review-request-continuation.yml",
       "category": "local-required",
       "source": "shared-assets-lit/default/.github/workflows/review-request-continuation.yml",
-      "sha256": "a3dc819738ad06f533edd7f4575cd11678f05b51fd20bd75f525017227e29b84",
+      "sha256": "c6bdbcfd04cefdf8fa5295add3512f9c53fadc9b18130bdc0c94564beaced5db",
       "owner": "ansible-collection-supplementary",
-      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+      "purpose": "Repository-local native sanity compatibility: AST-equivalent formatting, escaped Unicode literals and documented exact schema type checks; protected donor provenance and review budgets retained."
     },
     {
       "path": "scripts/review_request_continuation.py",
       "category": "local-required",
       "source": "shared-assets-lit/default/scripts/review_request_continuation.py",
-      "sha256": "5a89febc2ed9e381f73fdfc395f7d2bdb6f1ab8699c8ffff521d7b3013c96ae1",
+      "sha256": "650c6f59af8679531384c4ed4213e4448e466f9fb2a81096eb5689f03421c575",
       "owner": "ansible-collection-supplementary",
-      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+      "purpose": "Repository-local native sanity compatibility: AST-equivalent formatting, escaped Unicode literals and documented exact schema type checks; protected donor provenance and review budgets retained."
     },
     {
       "path": "scripts/review_request_provenance.py",
       "category": "local-required",
       "source": "shared-assets-lit/default/scripts/review_request_provenance.py",
-      "sha256": "5621bdba718e5fb37ad3622dd0772b8c93ce42be82b6c091391dc05544b84185",
+      "sha256": "d20bfebbeeb7e2f08d5bb2604da6004f1d58d31fe2cf673ee221b9e1bbd519b1",
       "owner": "ansible-collection-supplementary",
-      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+      "purpose": "Repository-local native sanity compatibility: AST-equivalent formatting, escaped Unicode literals and documented exact schema type checks; protected donor provenance and review budgets retained."
     },
     {
       "path": "scripts/native_verifier_retry.py",
-      "category": "central-managed",
+      "category": "local-required",
       "source": "shared-assets-lit/default/scripts/native_verifier_retry.py",
-      "sha256": "5e1908c75b99ab195f523599d751c8f5c2384216172f3523732389871fc98573"
+      "sha256": "66be48baeca8c45d98f7713a5a7b1ea1ebafbe5b25b06e98dd43c6e212b15150",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Repository-local native sanity compatibility: AST-equivalent formatting, escaped Unicode literals and documented exact schema type checks; protected donor provenance and review budgets retained."
     },
     {
       "path": "scripts/run-native-verifier-retry.sh",

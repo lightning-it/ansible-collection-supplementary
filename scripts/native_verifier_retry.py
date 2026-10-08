@@ -4,6 +4,8 @@ Only a prospectively sealed attempt-two contract can authorize attempts 3/4.
 The native job rerun endpoint also reruns its deterministic dependent gate.
 No caller retries a write, including a CAS with an unknown response.
 """
+# Exact JSON schema types deliberately reject bool as int and subclasses.
+# pylint: disable=unidiomatic-typecheck
 import datetime as dt
 import hashlib
 import json
@@ -130,8 +132,17 @@ def bound_run(repo, pr, run):
 
 def jobs_for(repo, run_id, attempt, head, *, allow_pre_rollout=False):
     jobs = pages(f"repos/{repo}/actions/runs/{run_id}/attempts/{attempt}/jobs?filter=all", "jobs")
-    require(jobs and all(job["run_id"] == run_id and type(job["run_attempt"]) is int
-                        and job["run_attempt"] == attempt and job["head_sha"] == head for job in jobs), "native job binding")
+    require(
+        jobs
+        and all(
+            job["run_id"] == run_id
+            and type(job["run_attempt"]) is int
+            and job["run_attempt"] == attempt
+            and job["head_sha"] == head
+            for job in jobs
+        ),
+        "native job binding",
+    )
     if (allow_pre_rollout and len(jobs) == 1 and jobs[0]["name"] == AGGREGATE
             and isinstance(jobs[0]["steps"], list)
             and not any(step.get("name", "").startswith(SOURCE_MARKER) for step in jobs[0]["steps"])):
@@ -144,10 +155,25 @@ def jobs_for(repo, run_id, attempt, head, *, allow_pre_rollout=False):
 def threads(repo, number):
     # A complete bounded inventory is mandatory, including outdated threads.
     nodes, cursor, seen = [], None, set()
-    for _ in range(10):
-        result = api("graphql", fields=["-f", "query=query($owner:String!,$name:String!,$number:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100,after:$after){nodes{id isResolved} pageInfo{hasNextPage endCursor}}}}}",
-                    "-f", f"owner={repo.split('/')[0]}", "-f", f"name={repo.split('/')[1]}",
-                    "-F", f"number={number}", *([] if cursor is None else ["-f", f"after={cursor}"])])
+    for unused_value in range(10):
+        result = api(
+            "graphql",
+            fields=[
+                "-f",
+                (
+                    "query=query($owner:String!,$name:String!,$number:Int!,$after:String){repository(owner:$own"
+                    "er,name:$name){pullRequest(number:$number){reviewThreads(first:100,after:$after){nodes{id "
+                    "isResolved} pageInfo{hasNextPage endCursor}}}}}"
+                ),
+                "-f",
+                f"owner={repo.split('/')[0]}",
+                "-f",
+                f"name={repo.split('/')[1]}",
+                "-F",
+                f"number={number}",
+                *([] if cursor is None else ["-f", f"after={cursor}"]),
+            ],
+        )
         proof.require("errors" not in result, "partial thread inventory")
         connection = result["data"]["repository"]["pullRequest"]["reviewThreads"]
         batch = connection["nodes"]
@@ -162,8 +188,10 @@ def threads(repo, number):
         if not page["hasNextPage"]:
             require(all(item["isResolved"] is True for item in nodes), "unresolved thread")
             return sorted(nodes, key=lambda item: item["id"])
-        proof.require(len(batch) == 100 and isinstance(page["endCursor"], str)
-                and page["endCursor"] and page["endCursor"] != cursor, "incomplete thread inventory")
+        proof.require(
+            len(batch) == 100 and isinstance(page["endCursor"], str) and page["endCursor"] and page["endCursor"] != cursor,
+            "incomplete thread inventory",
+        )
         cursor = page["endCursor"]
     raise ValueError("thread inventory limit")
 
@@ -171,9 +199,23 @@ def threads(repo, number):
 def metadata_revision(repo, pr):
     # A content hash cannot detect edit-and-revert. Bind the producer's native
     # metadata revision to the same live REST input, including both Git OIDs.
-    result = api("graphql", fields=["-f", "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){nameWithOwner pullRequest(number:$number){number baseRefOid headRefOid title body lastEditedAt}}}",
-                "-f", f"owner={repo.split('/')[0]}", "-f", f"name={repo.split('/')[1]}",
-                "-F", f"number={pr['number']}"])
+    result = api(
+        "graphql",
+        fields=[
+            "-f",
+            (
+                "query=query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name)"
+                "{nameWithOwner pullRequest(number:$number){number baseRefOid headRefOid title body lastEdi"
+                "tedAt}}}"
+            ),
+            "-f",
+            f"owner={repo.split('/')[0]}",
+            "-f",
+            f"name={repo.split('/')[1]}",
+            "-F",
+            f"number={pr['number']}",
+        ],
+    )
     try:
         proof.require(isinstance(result, dict) and ("errors" not in result
                       or isinstance(result["errors"], list) and not result["errors"]), "partial metadata response")
@@ -213,7 +255,7 @@ def snapshot(repo, repo_id, pr_number, run_id, writer_source):
     run = api(f"repos/{repo}/actions/runs/{run_id}")
     require(run["id"] == run_id, "target run identity")
     bound_run(repo, pr, run)
-    _, original = jobs_for(repo, run_id, 1, pr["head"]["sha"])
+    unused_value, original = jobs_for(repo, run_id, 1, pr["head"]["sha"])
     source = source_marker(original, pr)
     checks = pages(f"repos/{repo}/commits/{pr['head']['sha']}/check-runs?filter=all", "check_runs")
     neutral = [check for check in checks if check["name"] == "Current revision review"]
@@ -270,19 +312,37 @@ def snapshot(repo, repo_id, pr_number, run_id, writer_source):
     require(summary["pull_request_last_edited_at"] == edited, "neutral metadata revision")
     # Immutable Git sources bind the complete policies and controller inputs.
     # Native receiver marker establishes its actual source, not today's branch.
-    return {"repository": repo, "repository_id": repo_id, "pr": pr_number,
-            "base": pr["base"]["sha"], "head": pr["head"]["sha"], "base_ref": pr["base"]["ref"],
-            "head_ref": pr["head"]["ref"], "run_id": run_id, "workflow_id": run["workflow_id"],
-            "receiver": source, "writer_source": writer_source, "scheduler_source": scheduler["commit"]["sha"],
-            "producer_run": owner, "producer_attempt": producer["run_attempt"],
-            "producer_controller": summary["controller_sha"], "review_id": review["id"],
-            "neutral_id": check["id"], "neutral_sha256": digest(check),
-            "pull_request_last_edited_at": edited,
-            "review_sha256": digest({"review": review, "comments": comments, "threads": resolved}),
-            "input_sha256": digest({"title": pr["title"], "body": pr["body"],
-                                     "author": {key: pr["user"][key] for key in ("id", "login", "type")},
-                                     "labels": sorted(item["name"] for item in pr["labels"])}),
-            "policy_sha256": policy_hash()}
+    return {
+        "repository": repo,
+        "repository_id": repo_id,
+        "pr": pr_number,
+        "base": pr["base"]["sha"],
+        "head": pr["head"]["sha"],
+        "base_ref": pr["base"]["ref"],
+        "head_ref": pr["head"]["ref"],
+        "run_id": run_id,
+        "workflow_id": run["workflow_id"],
+        "receiver": source,
+        "writer_source": writer_source,
+        "scheduler_source": scheduler["commit"]["sha"],
+        "producer_run": owner,
+        "producer_attempt": producer["run_attempt"],
+        "producer_controller": summary["controller_sha"],
+        "review_id": review["id"],
+        "neutral_id": check["id"],
+        "neutral_sha256": digest(check),
+        "pull_request_last_edited_at": edited,
+        "review_sha256": digest({"review": review, "comments": comments, "threads": resolved}),
+        "input_sha256": digest(
+            {
+                "title": pr["title"],
+                "body": pr["body"],
+                "author": {key: pr["user"][key] for key in ("id", "login", "type")},
+                "labels": sorted(item["name"] for item in pr["labels"]),
+            }
+        ),
+        "policy_sha256": policy_hash(),
+    }
 
 
 def annotations(repo, check):
@@ -307,14 +367,20 @@ def infrastructure_cause(repo, run, head, now):
             and job["runner_name"] == "" and job["steps"] == []
             and job["labels"] == ["ubuntu-latest"]
             and job["check_run_url"] == f"https://api.github.com/repos/{repo}/check-runs/{job['id']}", "not native runner acquisition")
+
     def dependent_failure(item):
-        return (item["name"] == AGGREGATE and item["conclusion"] == "failure"
-                and proof.positive(item.get("runner_id"))
-                and isinstance(item.get("steps"), list)
-                and [step["name"] for step in item["steps"] if step["conclusion"] == "failure"]
-                    == ["Enforce exactly one terminal verification route"]
-                and all(step["status"] == "completed" and step["conclusion"] in ("success", "skipped", "failure")
-                        for step in item["steps"]))
+        return (
+            item["name"] == AGGREGATE
+            and item["conclusion"] == "failure"
+            and proof.positive(item.get("runner_id"))
+            and isinstance(item.get("steps"), list)
+            and [step["name"] for step in item["steps"] if step["conclusion"] == "failure"]
+            == ["Enforce exactly one terminal verification route"]
+            and all(
+                step["status"] == "completed" and step["conclusion"] in ("success", "skipped", "failure")
+                for step in item["steps"]
+            )
+        )
     require(all(item["status"] == "completed" and (item["id"] == job["id"]
                 or item["conclusion"] in ("success", "skipped")
                 or dependent_failure(item)) for item in jobs), "independent failed job")
@@ -398,12 +464,20 @@ def writer(repo, source, path, event):
             and os.environ["GITHUB_WORKFLOW_SHA"] == source, "protected writer environment")
     run_id = int(os.environ["GITHUB_RUN_ID"])
     run = api(f"repos/{repo}/actions/runs/{run_id}")
-    require(run["id"] == run_id and type(run["run_attempt"]) is int and run["run_attempt"] == 1
-            and run["path"] == path and run["event"] == event and run["head_sha"] == source
-            and run["repository"]["full_name"] == repo and run["head_repository"]["full_name"] == repo
-            and run["actor"]["login"] == run["triggering_actor"]["login"]
-            and run["actor"]["login"] in ({"github-actions[bot]"} if event == "workflow_dispatch"
-                                             else {"litroc", "github-actions[bot]"}), "native writer")
+    require(
+        run["id"] == run_id
+        and type(run["run_attempt"]) is int
+        and run["run_attempt"] == 1
+        and run["path"] == path
+        and run["event"] == event
+        and run["head_sha"] == source
+        and run["repository"]["full_name"] == repo
+        and run["head_repository"]["full_name"] == repo
+        and run["actor"]["login"] == run["triggering_actor"]["login"]
+        and run["actor"]["login"]
+        in ({"github-actions[bot]"} if event == "workflow_dispatch" else {"litroc", "github-actions[bot]"}),
+        "native writer",
+    )
     return run_id
 
 
@@ -441,7 +515,7 @@ def seal(repo, repo_id, pr, run_id, source, now):
         return False
     claim_run = writer(repo, source, HELPER, "workflow_dispatch")
     live = proof.live_pr(repo, pr)
-    _, original = jobs_for(repo, run_id, 1, live["head"]["sha"], allow_pre_rollout=True)
+    unused_value, original = jobs_for(repo, run_id, 1, live["head"]["sha"], allow_pre_rollout=True)
     if not any(step.get("name", "").startswith(SOURCE_MARKER) for step in original["steps"]):
         # A pre-rollout run keeps its original LI-219 attempt-two route. It
         # receives no seed and consequently no additional technical authority.
