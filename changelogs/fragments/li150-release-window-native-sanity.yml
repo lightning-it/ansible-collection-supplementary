@@ -1,0 +1,9 @@
+---
+bugfixes:
+  - >-
+    Query the final release validation interval before declaring the bounded
+    exact-revision observation window expired, retaining producer and attempt checks.
+  - >-
+    Restore native collection sanity compatibility for adopted review controllers
+    while preserving exact schema types, runtime Unicode handling, embedded helper
+    equality, source provenance and the at-most-once review budget.
