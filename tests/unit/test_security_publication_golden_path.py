@@ -186,6 +186,77 @@ print(json.dumps(result))
                     else:
                         self.assertNotEqual(0, publisher_check.returncode, publisher_check.stdout)
 
+    def test_final_window_queries_after_last_sleep_without_extending_budget(self) -> None:
+        reusable = yaml.safe_load((WORKFLOW_PATH.parent / "release-validation-window.yml").read_text())
+        wait = reusable["jobs"]["window"]["steps"][0]["run"]
+        stub = """#!/usr/bin/env python3
+import json, os, sys
+from pathlib import Path
+clock = int(Path(os.environ['FIXTURE_CLOCK']).read_text())
+case = os.environ['STUB_CASE']
+terminal = clock >= 60
+run = {'id': 123, 'run_attempt': 2 if terminal and case == 'changed-attempt' else 1,
+       'event': 'push', 'head_branch': 'main', 'head_sha': 'a' * 40,
+       'status': 'completed' if terminal and case != 'pending' else 'in_progress',
+       'conclusion': ('failure' if case == 'failed' else 'success') if terminal else None}
+path = next(arg for arg in sys.argv[1:] if arg.startswith('repos/'))
+if path.endswith('/jobs'):
+    value = [{'jobs': [{'name': 'Collection / Release Validation', 'run_attempt': 1,
+                       'status': 'completed', 'conclusion': 'success'}]}]
+elif path.endswith('/runs'):
+    runs = [run, {**run, 'id': 124}] if terminal and case == 'duplicate' else [run]
+    value = {'total_count': len(runs), 'workflow_runs': runs}
+else:
+    value = run
+print(json.dumps(value))
+"""
+        sleeper = """#!/usr/bin/env python3
+import os, sys
+from pathlib import Path
+clock = Path(os.environ['FIXTURE_CLOCK'])
+clock.write_text(str(int(clock.read_text()) + int(sys.argv[1])))
+"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name, content in (("gh", stub), ("sleep", sleeper)):
+                executable = root / name
+                executable.write_text(content, encoding="utf-8")
+                executable.chmod(0o755)
+            for case in ("success", "pending", "failed", "duplicate", "changed-attempt"):
+                with self.subTest(case=case):
+                    clock = root / "clock"
+                    clock.write_text("0", encoding="utf-8")
+                    output = root / f"{case}.output"
+                    result = subprocess.run(  # noqa: S603 -- shipped workflow and local fixture binaries.
+                        ["/bin/bash", "-e", "-c", wait],
+                        env={
+                            **os.environ,
+                            "PATH": f"{root}:{os.environ['PATH']}",
+                            "FIXTURE_CLOCK": str(clock),
+                            "STUB_CASE": case,
+                            "GITHUB_REPOSITORY": "lightning-it/ansible-collection-supplementary",
+                            "GITHUB_OUTPUT": str(output),
+                            "GH_TOKEN": "fixture",
+                            "RELEASE_SHA": "a" * 40,
+                            "PRIOR_RUN_ID": "123",
+                            "PRIOR_RUN_ATTEMPT": "1",
+                            "PRIOR_COMPLETE": "false",
+                            "ATTEMPTS": "2",
+                            "FINAL_WINDOW": "true",
+                        },
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
+                    self.assertEqual("60", clock.read_text(encoding="utf-8"))
+                    if case == "success":
+                        self.assertEqual(0, result.returncode, result.stderr)
+                        self.assertIn("complete=true", output.read_text(encoding="utf-8"))
+                    else:
+                        self.assertNotEqual(0, result.returncode)
+                        self.assertFalse(output.exists())
+
     def test_security_order_is_nexus_then_signed_modulix_then_galaxy(self) -> None:
         nexus = self.step_names.index("Stage exact Security candidate in native Nexus Galaxy v3")
         receipt = self.step_names.index("Require signed successful ModuLix validation receipt")

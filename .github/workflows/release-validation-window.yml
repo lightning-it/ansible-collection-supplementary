@@ -73,7 +73,8 @@ jobs:
           run_id="$PRIOR_RUN_ID"
           run_attempt="$PRIOR_RUN_ATTEMPT"
           complete=false
-          for attempt in $(seq 1 "$ATTEMPTS"); do
+          # ATTEMPTS counts sleep intervals; query once more at their boundary.
+          for attempt in $(seq 1 "$((ATTEMPTS + 1))"); do
             runs="$(
               gh api --method GET \
                 "repos/${GITHUB_REPOSITORY}/actions/workflows/collection-ci.yml/runs" \
@@ -117,8 +118,10 @@ jobs:
               test "$PRIOR_COMPLETE" = false
               case "$status" in queued|in_progress|pending|requested|waiting) ;; *) exit 1 ;; esac
             fi
-            echo "Waiting for exact-SHA Collection CI ($attempt/$ATTEMPTS)."
-            sleep 30
+            if [ "$attempt" -le "$ATTEMPTS" ]; then
+              echo "Waiting for exact-SHA Collection CI ($attempt/$ATTEMPTS)."
+              sleep 30
+            fi
           done
           if [ "$FINAL_WINDOW" = true ]; then
             test "$complete" = true
