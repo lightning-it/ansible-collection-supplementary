@@ -421,29 +421,56 @@ class ReviewEventTests(unittest.TestCase):
 
     def test_ambiguous_first_pr_stays_closed_and_later_pr_dispatches(self):
         prefix = "repos/lightning-it/.github"
-        pulls = [{"id": number, "number": number, "draft": False, "state": "open",
-                  "user": {"login": "litroc", "type": "User"},
-                  "head": {"sha": head, "ref": f"fix/{number}",
-                           "repo": {"full_name": "lightning-it/.github"}},
-                  "base": {"sha": self.base, "ref": "develop",
-                           "repo": {"full_name": "lightning-it/.github"}}}
-                 for number, head in ((23, self.head), (24, "c" * 40))]
+        pulls = [
+            {
+                "id": number,
+                "number": number,
+                "draft": False,
+                "state": "open",
+                "user": {"login": "litroc", "type": "User"},
+                "head": {"sha": head, "ref": f"fix/{number}", "repo": {"full_name": "lightning-it/.github"}},
+                "base": {"sha": self.base, "ref": "develop", "repo": {"full_name": "lightning-it/.github"}},
+            }
+            for number, head in ((23, self.head), (24, "c" * 40))
+        ]
         inventories = {f"{prefix}/pulls?state=open": pulls}
         for pr in pulls:
             head = pr["head"]["sha"]
             inventories[f"{prefix}/actions/runs?event=pull_request_target&head_sha={head}"] = {
-                "total_count": 1, "workflow_runs": [{
-                    "id": 77 + pr["number"], "path": EVENT.PRODUCER,
-                    "event": "pull_request_target", "repository": pr["base"]["repo"],
-                    "head_repository": pr["head"]["repo"], "head_sha": head,
-                    "head_branch": pr["head"]["ref"], "pull_requests": [],
-                    "status": "completed", "created_at": self.now.isoformat()}]}
-            checks = [{"id": check_id, "name": "Current revision review",
-                       "app": {"id": 15368, "slug": "github-actions"},
-                       "status": "completed", "conclusion": "success"}
-                      for check_id in (79, 80)] if pr["number"] == 23 else []
+                "total_count": 1,
+                "workflow_runs": [
+                    {
+                        "id": 77 + pr["number"],
+                        "path": EVENT.PRODUCER,
+                        "event": "pull_request_target",
+                        "repository": pr["base"]["repo"],
+                        "head_repository": pr["head"]["repo"],
+                        "head_sha": head,
+                        "head_branch": pr["head"]["ref"],
+                        "pull_requests": [],
+                        "status": "completed",
+                        "created_at": self.now.isoformat(),
+                    }
+                ],
+            }
+            checks = (
+                [
+                    {
+                        "id": check_id,
+                        "name": "Current revision review",
+                        "app": {"id": 15368, "slug": "github-actions"},
+                        "status": "completed",
+                        "conclusion": "success",
+                    }
+                    for check_id in (79, 80)
+                ]
+                if pr["number"] == 23
+                else []
+            )
             inventories[f"{prefix}/commits/{head}/check-runs?filter=all"] = {
-                "total_count": len(checks), "check_runs": checks}
+                "total_count": len(checks),
+                "check_runs": checks,
+            }
         inventories[f"{prefix}/pulls/24/reviews"] = [self.review(commit_id="c" * 40)]
         inventories[f"{prefix}/pulls/24/reviews/17/comments"] = []
         mutations = []
@@ -461,13 +488,31 @@ class ReviewEventTests(unittest.TestCase):
             inventory_route = re.sub(r"[?&]per_page=100&page=1$", "", route)
             return inventories[inventory_route]
 
-        with patch.object(EVENT, "api", side_effect=api), \
-                patch.dict(os.environ, LI219_EVENT_MODE="enabled", GITHUB_REF="refs/heads/develop",
-                           GITHUB_REF_PROTECTED="true"), patch("builtins.print") as log:
+        with (
+            patch.object(EVENT, "api", side_effect=api),
+            patch.dict(
+                os.environ, LI219_EVENT_MODE="enabled", GITHUB_REF="refs/heads/develop", GITHUB_REF_PROTECTED="true"
+            ),
+            patch("builtins.print") as log,
+        ):
             EVENT.reconcile("lightning-it/.github", self.now)
-        self.assertEqual([(f"{prefix}/actions/workflows/{EVENT.REFRESH}/dispatches", {
-            "ref": "develop", "inputs": {"pr_number": "24", "expected_head": "c" * 40,
-                                           "expected_base": self.base, "review_id": "17"}})], mutations)
+        self.assertEqual(
+            [
+                (
+                    f"{prefix}/actions/workflows/{EVENT.REFRESH}/dispatches",
+                    {
+                        "ref": "develop",
+                        "inputs": {
+                            "pr_number": "24",
+                            "expected_head": "c" * 40,
+                            "expected_base": self.base,
+                            "review_id": "17",
+                        },
+                    },
+                )
+            ],
+            mutations,
+        )
         log.assert_any_call("PR 23: ambiguous neutral evidence; required failure remains blocking")
 
     def test_late_review_after_ten_minutes_dispatches_same_pr_without_review_request(self):
