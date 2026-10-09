@@ -97,6 +97,28 @@ class PromotionWaiterInventoryTests(unittest.TestCase):
         with self.assertRaises(IncompleteInventory):
             collect_waiting_runs(changed_middle, WORKFLOW_ID)
 
+    def test_same_run_id_with_changed_attempt_fails_closed(self) -> None:
+        calls = 0
+
+        def changed_attempt(_page: int) -> dict:
+            nonlocal calls
+            calls += 1
+            value = run(1)
+            if calls == 2:
+                value["run_attempt"] = 2
+            return {"total_count": 1, "workflow_runs": [value]}
+
+        with self.assertRaises(IncompleteInventory):
+            collect_waiting_runs(changed_attempt, WORKFLOW_ID)
+
+    def test_missing_or_nonpositive_run_attempt_fails_closed_without_jobs(self) -> None:
+        for attempt in (None, 0, -1, "1", True):
+            with self.subTest(attempt=attempt):
+                value = run(1)
+                value["run_attempt"] = attempt
+                with self.assertRaises(IncompleteInventory):
+                    collect_waiting_runs(pages([value]), WORKFLOW_ID)
+
     def test_foreign_workflow_and_missing_identity_fail_closed(self) -> None:
         foreign = run(1)
         foreign["workflow_id"] = WORKFLOW_ID + 1
@@ -122,6 +144,17 @@ class PromotionWaiterInventoryTests(unittest.TestCase):
         self.assertEqual([entry["run_id"] for entry in result], [1, 2])
         self.assertEqual([entry["jobs"][0]["step_count"] for entry in result], [0, 0])
         self.assertEqual({entry["disposition"] for entry in inventory["runs"]}, {"unclassified"})
+
+    def test_requested_job_status_is_inventoryable_without_disposition(self) -> None:
+        inventory = collect_waiting_runs(pages([run(1)]), WORKFLOW_ID)
+        requested = job(101, 1)
+        requested["status"] = "requested"
+        result = collect_waiting_jobs(
+            inventory,
+            lambda _run_id, _page: {"total_count": 1, "jobs": [requested]},
+        )
+        self.assertEqual(result[0]["jobs"][0]["status"], "requested")
+        self.assertEqual(inventory["runs"][0]["disposition"], "unclassified")
 
     def test_foreign_or_duplicate_job_fails_closed(self) -> None:
         inventory = collect_waiting_runs(pages([run(1), run(2)]), WORKFLOW_ID)

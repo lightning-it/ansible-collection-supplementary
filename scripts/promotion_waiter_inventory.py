@@ -42,6 +42,11 @@ def _unique_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def _is_json_int(value: Any) -> bool:
+    """Reject booleans, which Python otherwise treats as integers."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def _read_page(repository: str, workflow_id: int, page: int) -> dict[str, Any]:
     endpoint = (
         f"repos/{repository}/actions/workflows/{workflow_id}/runs?status=waiting&per_page={PAGE_SIZE}&page={page}"
@@ -88,18 +93,17 @@ def _read_job_page(repository: str, run_id: int, page: int) -> dict[str, Any]:
 
 
 def collect_waiting_runs(fetch_page: Callable[[int], dict[str, Any]], workflow_id: int) -> dict[str, Any]:
-    if type(workflow_id) is not int or workflow_id <= 0:
+    if not _is_json_int(workflow_id) or workflow_id <= 0:
         raise ValueError("workflow_id must be a positive integer")
 
     first_page = fetch_page(1)
     total = first_page.get("total_count")
-    if type(total) is not int or not 0 <= total <= MAX_PROVABLE_TOTAL:
+    if not _is_json_int(total) or not 0 <= total <= MAX_PROVABLE_TOTAL:
         raise IncompleteInventory("unprovable total_count")
     page_count = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
     pages = [first_page] + [fetch_page(page) for page in range(2, page_count + 1)]
     seen: set[int] = set()
     runs: list[dict[str, Any]] = []
-    page_ids: list[list[int]] = []
 
     for number, page in enumerate(pages, 1):
         if page.get("total_count") != total:
@@ -108,12 +112,11 @@ def collect_waiting_runs(fetch_page: Callable[[int], dict[str, Any]], workflow_i
         expected = min(PAGE_SIZE, max(0, total - (number - 1) * PAGE_SIZE))
         if not isinstance(batch, list) or len(batch) != expected:
             raise IncompleteInventory("missing or oversized result page")
-        current_ids: list[int] = []
         for run in batch:
             if not isinstance(run, dict):
                 raise IncompleteInventory("invalid run shape")
             run_id = run.get("id")
-            if type(run_id) is not int or run_id <= 0 or run_id in seen:
+            if not _is_json_int(run_id) or run_id <= 0 or run_id in seen:
                 raise IncompleteInventory("invalid or duplicate run ID")
             if run.get("workflow_id") != workflow_id or run.get("status") != "waiting":
                 raise IncompleteInventory("foreign workflow or non-waiting run")
@@ -131,11 +134,13 @@ def collect_waiting_runs(fetch_page: Callable[[int], dict[str, Any]], workflow_i
                 raise IncompleteInventory("missing PR association inventory")
             pr_numbers = []
             for pr in prs:
-                if not isinstance(pr, dict) or type(pr.get("number")) is not int:
+                if not isinstance(pr, dict) or not _is_json_int(pr.get("number")):
                     raise IncompleteInventory("invalid PR association")
                 pr_numbers.append(pr["number"])
+            attempt = run.get("run_attempt")
+            if not _is_json_int(attempt) or attempt <= 0:
+                raise IncompleteInventory("invalid run attempt")
             seen.add(run_id)
-            current_ids.append(run_id)
             runs.append(
                 {
                     "id": run_id,
@@ -145,28 +150,20 @@ def collect_waiting_runs(fetch_page: Callable[[int], dict[str, Any]], workflow_i
                     "head_sha": head_sha,
                     "created_at": run["created_at"],
                     "updated_at": run["updated_at"],
-                    "run_attempt": run.get("run_attempt"),
+                    "run_attempt": attempt,
                     "actor": actor["login"],
                     "pull_request_numbers": pr_numbers,
                     "disposition": "unclassified",
                 }
             )
-        page_ids.append(current_ids)
 
     if len(runs) != total:
         raise IncompleteInventory("result count does not match total")
     # A concurrent insertion/removal can move runs between pages without
     # changing total_count. Check every page again before trusting the snapshot.
-    for number, expected_ids in enumerate(page_ids, 1):
+    for number, expected_page in enumerate(pages, 1):
         again = fetch_page(number)
-        again_runs = again.get("workflow_runs")
-        if (
-            again.get("total_count") != total
-            or not isinstance(again_runs, list)
-            or len(again_runs) != len(expected_ids)
-            or any(not isinstance(run, dict) for run in again_runs)
-            or [run.get("id") for run in again_runs] != expected_ids
-        ):
+        if again != expected_page:
             raise IncompleteInventory("result page changed during inventory")
 
     return {
@@ -186,7 +183,7 @@ def collect_waiting_jobs(
     runs = run_inventory.get("runs")
     if (
         not isinstance(runs, list)
-        or type(run_inventory.get("total_count")) is not int
+        or not _is_json_int(run_inventory.get("total_count"))
         or run_inventory["total_count"] != len(runs)
     ):
         raise IncompleteInventory("invalid parent run inventory")
@@ -199,9 +196,9 @@ def collect_waiting_jobs(
         attempt = run.get("run_attempt")
         head_sha = run.get("head_sha")
         if (
-            type(run_id) is not int
+            not _is_json_int(run_id)
             or run_id <= 0
-            or type(attempt) is not int
+            or not _is_json_int(attempt)
             or attempt <= 0
             or not isinstance(head_sha, str)
             or not SHA.fullmatch(head_sha)
@@ -209,7 +206,7 @@ def collect_waiting_jobs(
             raise IncompleteInventory("invalid parent run identity")
         first_page = fetch_page(run_id, 1)
         total = first_page.get("total_count")
-        if type(total) is not int or not 1 <= total <= MAX_JOBS_PER_RUN:
+        if not _is_json_int(total) or not 1 <= total <= MAX_JOBS_PER_RUN:
             raise IncompleteInventory("unprovable job count")
         page_count = (total + PAGE_SIZE - 1) // PAGE_SIZE
         pages = [first_page] + [fetch_page(run_id, page) for page in range(2, page_count + 1)]
@@ -226,9 +223,9 @@ def collect_waiting_jobs(
                 if not isinstance(job, dict):
                     raise IncompleteInventory("invalid job shape")
                 job_id = job.get("id")
-                if type(job_id) is not int or job_id <= 0 or job_id in seen_jobs:
+                if not _is_json_int(job_id) or job_id <= 0 or job_id in seen_jobs:
                     raise IncompleteInventory("invalid or duplicate job ID")
-                if type(job.get("run_id")) is not int or type(job.get("run_attempt")) is not int:
+                if not _is_json_int(job.get("run_id")) or not _is_json_int(job.get("run_attempt")):
                     raise IncompleteInventory("invalid job run identity")
                 if job.get("run_id") != run_id or job.get("run_attempt") != attempt or job.get("head_sha") != head_sha:
                     raise IncompleteInventory("job belongs to another run or revision")
@@ -236,6 +233,7 @@ def collect_waiting_jobs(
                     raise IncompleteInventory("missing job name")
                 if not isinstance(job.get("status"), str) or job["status"] not in {
                     "waiting",
+                    "requested",
                     "queued",
                     "pending",
                     "in_progress",
