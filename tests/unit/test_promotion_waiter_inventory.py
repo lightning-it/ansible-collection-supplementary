@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import unittest
 
-from scripts.promotion_waiter_inventory import IncompleteInventory, collect_waiting_runs
+from scripts.promotion_waiter_inventory import (
+    IncompleteInventory,
+    collect_waiting_jobs,
+    collect_waiting_runs,
+)
 
 WORKFLOW_ID = 298614219
 
@@ -28,6 +32,19 @@ def run(number: int) -> dict:
 def pages(*batches: list[dict], total: int | None = None):
     count = sum(len(batch) for batch in batches) if total is None else total
     return lambda page: {"total_count": count, "workflow_runs": batches[page - 1]}
+
+
+def job(number: int, run_id: int, *, head_sha: str | None = None) -> dict:
+    return {
+        "id": number,
+        "run_id": run_id,
+        "run_attempt": 1,
+        "head_sha": head_sha or f"{run_id:040x}",
+        "name": "Open develop-to-main promotion PR",
+        "status": "waiting",
+        "conclusion": None,
+        "steps": [],
+    }
 
 
 class PromotionWaiterInventoryTests(unittest.TestCase):
@@ -93,6 +110,63 @@ class PromotionWaiterInventoryTests(unittest.TestCase):
     def test_filtered_api_limit_is_not_treated_as_complete(self) -> None:
         with self.assertRaises(IncompleteInventory):
             collect_waiting_runs(lambda _: {"total_count": 1000, "workflow_runs": []}, WORKFLOW_ID)
+
+    def test_complete_job_pages_bind_each_waiting_run_without_disposition(self) -> None:
+        inventory = collect_waiting_runs(pages([run(1), run(2)]), WORKFLOW_ID)
+
+        def fetch_jobs(run_id: int, page: int) -> dict:
+            self.assertEqual(page, 1)
+            return {"total_count": 1, "jobs": [job(100 + run_id, run_id)]}
+
+        result = collect_waiting_jobs(inventory, fetch_jobs)
+        self.assertEqual([entry["run_id"] for entry in result], [1, 2])
+        self.assertEqual([entry["jobs"][0]["step_count"] for entry in result], [0, 0])
+        self.assertEqual({entry["disposition"] for entry in inventory["runs"]}, {"unclassified"})
+
+    def test_foreign_or_duplicate_job_fails_closed(self) -> None:
+        inventory = collect_waiting_runs(pages([run(1), run(2)]), WORKFLOW_ID)
+
+        with self.assertRaises(IncompleteInventory):
+            collect_waiting_jobs(
+                inventory,
+                lambda run_id, _: {"total_count": 1, "jobs": [job(101, run_id)]},
+            )
+        with self.assertRaises(IncompleteInventory):
+            collect_waiting_jobs(
+                inventory,
+                lambda run_id, _: {"total_count": 1, "jobs": [job(100 + run_id, 99)]},
+            )
+
+    def test_changed_job_page_or_missing_steps_fails_closed(self) -> None:
+        inventory = collect_waiting_runs(pages([run(1)]), WORKFLOW_ID)
+        calls = 0
+
+        def changed(run_id: int, page: int) -> dict:
+            nonlocal calls
+            calls += 1
+            return {"total_count": 1, "jobs": [job(101 if calls == 1 else 102, run_id)]}
+
+        with self.assertRaises(IncompleteInventory):
+            collect_waiting_jobs(inventory, changed)
+        calls = 0
+
+        def changed_status(run_id: int, page: int) -> dict:
+            nonlocal calls
+            calls += 1
+            value = job(101, run_id)
+            if calls == 2:
+                value["status"] = "in_progress"
+            return {"total_count": 1, "jobs": [value]}
+
+        with self.assertRaises(IncompleteInventory):
+            collect_waiting_jobs(inventory, changed_status)
+        without_steps = job(101, 1)
+        del without_steps["steps"]
+        with self.assertRaises(IncompleteInventory):
+            collect_waiting_jobs(
+                inventory,
+                lambda _run_id, _page: {"total_count": 1, "jobs": [without_steps]},
+            )
 
 
 if __name__ == "__main__":

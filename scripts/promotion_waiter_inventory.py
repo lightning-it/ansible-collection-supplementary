@@ -23,6 +23,8 @@ PAGE_SIZE = 100
 # GitHub's filtered workflow-run inventory can stop at 1,000 results. Treat a
 # boundary-sized result as incomplete rather than guessing whether more exist.
 MAX_PROVABLE_TOTAL = 999
+# Bound the per-run read independently of the filtered workflow-run API cap.
+MAX_JOBS_PER_RUN = 999
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 
@@ -61,6 +63,27 @@ def _read_page(repository: str, workflow_id: int, page: int) -> dict[str, Any]:
         raise IncompleteInventory("invalid API JSON") from exc
     if not isinstance(value, dict):
         raise IncompleteInventory("invalid page shape")
+    return value
+
+
+def _read_job_page(repository: str, run_id: int, page: int) -> dict[str, Any]:
+    endpoint = f"repos/{repository}/actions/runs/{run_id}/jobs?per_page={PAGE_SIZE}&page={page}"
+    gh_binary = shutil.which("gh")
+    if gh_binary is None:
+        raise IncompleteInventory("GitHub CLI is unavailable")
+    completed = subprocess.run(  # noqa: S603
+        [gh_binary, "api", endpoint],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    try:
+        value = json.loads(completed.stdout, object_pairs_hook=_unique_json_pairs)
+    except (json.JSONDecodeError, UnicodeError) as exc:
+        raise IncompleteInventory("invalid jobs API JSON") from exc
+    if not isinstance(value, dict):
+        raise IncompleteInventory("invalid jobs page shape")
     return value
 
 
@@ -155,11 +178,101 @@ def collect_waiting_runs(fetch_page: Callable[[int], dict[str, Any]], workflow_i
     }
 
 
+def collect_waiting_jobs(
+    run_inventory: dict[str, Any],
+    fetch_page: Callable[[int, int], dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Bind complete native job pages to each run without inferring disposition."""
+    runs = run_inventory.get("runs")
+    if (
+        not isinstance(runs, list)
+        or type(run_inventory.get("total_count")) is not int
+        or run_inventory["total_count"] != len(runs)
+    ):
+        raise IncompleteInventory("invalid parent run inventory")
+    seen_jobs: set[int] = set()
+    result: list[dict[str, Any]] = []
+    for run in runs:
+        if not isinstance(run, dict):
+            raise IncompleteInventory("invalid parent run")
+        run_id = run.get("id")
+        attempt = run.get("run_attempt")
+        head_sha = run.get("head_sha")
+        if (
+            type(run_id) is not int
+            or run_id <= 0
+            or type(attempt) is not int
+            or attempt <= 0
+            or not isinstance(head_sha, str)
+            or not SHA.fullmatch(head_sha)
+        ):
+            raise IncompleteInventory("invalid parent run identity")
+        first_page = fetch_page(run_id, 1)
+        total = first_page.get("total_count")
+        if type(total) is not int or not 1 <= total <= MAX_JOBS_PER_RUN:
+            raise IncompleteInventory("unprovable job count")
+        page_count = (total + PAGE_SIZE - 1) // PAGE_SIZE
+        pages = [first_page] + [fetch_page(run_id, page) for page in range(2, page_count + 1)]
+        page_jobs: list[list[dict[str, Any]]] = []
+        jobs: list[dict[str, Any]] = []
+        for number, page in enumerate(pages, 1):
+            if page.get("total_count") != total:
+                raise IncompleteInventory("job count changed between pages")
+            batch = page.get("jobs")
+            expected = min(PAGE_SIZE, total - (number - 1) * PAGE_SIZE)
+            if not isinstance(batch, list) or len(batch) != expected:
+                raise IncompleteInventory("missing or oversized jobs page")
+            for job in batch:
+                if not isinstance(job, dict):
+                    raise IncompleteInventory("invalid job shape")
+                job_id = job.get("id")
+                if type(job_id) is not int or job_id <= 0 or job_id in seen_jobs:
+                    raise IncompleteInventory("invalid or duplicate job ID")
+                if type(job.get("run_id")) is not int or type(job.get("run_attempt")) is not int:
+                    raise IncompleteInventory("invalid job run identity")
+                if job.get("run_id") != run_id or job.get("run_attempt") != attempt or job.get("head_sha") != head_sha:
+                    raise IncompleteInventory("job belongs to another run or revision")
+                if not isinstance(job.get("name"), str) or not job["name"]:
+                    raise IncompleteInventory("missing job name")
+                if not isinstance(job.get("status"), str) or job["status"] not in {
+                    "waiting",
+                    "queued",
+                    "pending",
+                    "in_progress",
+                    "completed",
+                }:
+                    raise IncompleteInventory("invalid job status")
+                if job.get("conclusion") is not None and not isinstance(job["conclusion"], str):
+                    raise IncompleteInventory("invalid job conclusion")
+                steps = job.get("steps")
+                if not isinstance(steps, list):
+                    raise IncompleteInventory("missing job steps inventory")
+                seen_jobs.add(job_id)
+                jobs.append(
+                    {
+                        "id": job_id,
+                        "name": job["name"],
+                        "status": job["status"],
+                        "conclusion": job["conclusion"],
+                        "step_count": len(steps),
+                    }
+                )
+            page_jobs.append(batch)
+        for number, expected_jobs in enumerate(page_jobs, 1):
+            again = fetch_page(run_id, number)
+            again_jobs = again.get("jobs")
+            if again.get("total_count") != total or not isinstance(again_jobs, list) or again_jobs != expected_jobs:
+                raise IncompleteInventory("jobs page changed during inventory")
+        result.append({"run_id": run_id, "total_jobs": total, "jobs": jobs})
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--workflow-id", required=True, type=int)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--include-jobs", action="store_true")
     arguments = parser.parse_args()
     if not REPOSITORY.fullmatch(arguments.repository):
         parser.error("invalid repository")
@@ -167,6 +280,20 @@ def main() -> int:
         lambda page: _read_page(arguments.repository, arguments.workflow_id, page),
         arguments.workflow_id,
     )
+    if arguments.include_jobs:
+        jobs = collect_waiting_jobs(
+            inventory,
+            lambda run_id, page: _read_job_page(arguments.repository, run_id, page),
+        )
+        if (
+            collect_waiting_runs(
+                lambda page: _read_page(arguments.repository, arguments.workflow_id, page),
+                arguments.workflow_id,
+            )
+            != inventory
+        ):
+            raise IncompleteInventory("parent run inventory changed during jobs inventory")
+        inventory["job_inventory"] = jobs
     inventory["repository"] = arguments.repository
     inventory["observed_at"] = datetime.now(UTC).isoformat()
     serialized = json.dumps(inventory, sort_keys=True, indent=2) + "\n"

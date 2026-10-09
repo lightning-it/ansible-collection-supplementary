@@ -2,5 +2,5 @@
 bugfixes:
   - >-
     Add a fail-closed, read-only inventory of waiting promotion runs with
-    complete pagination, stable totals, unique run IDs, and no cancellation
-    authority.
+    complete pagination, stable totals, unique run and job IDs, optional
+    exact-run job readback, and no cancellation authority.
