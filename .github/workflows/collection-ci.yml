@@ -300,7 +300,10 @@ jobs:
       - name: Install the metadata-declared executable unit-fixture dependency
         run: |
           set -euo pipefail
-          crypto_spec="$(python -c 'import yaml; print("community.crypto:" + yaml.safe_load(open("galaxy.yml"))["dependencies"]["community.crypto"])')"
+          crypto_spec="$(python -c '
+          import yaml
+          print("community.crypto:" + yaml.safe_load(open("galaxy.yml"))["dependencies"]["community.crypto"])
+          ')"
           ansible-galaxy collection install \
             --no-deps \
             --collections-path "$RUNNER_TEMP/unit-collections" \
