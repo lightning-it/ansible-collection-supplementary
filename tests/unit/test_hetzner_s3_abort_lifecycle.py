@@ -4,7 +4,7 @@ import importlib.util
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 MODULE_PATH = Path(__file__).resolve().parents[2] / "plugins/modules/hetzner_s3_abort_lifecycle.py"
 SPEC = importlib.util.spec_from_file_location("hetzner_s3_abort_lifecycle", MODULE_PATH)
@@ -70,7 +70,10 @@ class HetznerAbortLifecycleTests(unittest.TestCase):
     def test_insecure_tls_is_rejected_before_creating_a_client(self):
         module = FakeModule()
         module.params = {**module.params, "validate_certs": False}
-        with patch.object(MODULE, "AnsibleModule", return_value=module), patch.object(MODULE.boto3, "client") as client:
+        client = Mock()
+        with patch.object(MODULE, "AnsibleModule", return_value=module), patch.object(
+            MODULE, "boto3", SimpleNamespace(client=client)
+        ):
             with self.assertRaises(Rejected):
                 MODULE.main()
             client.assert_not_called()
