@@ -129,6 +129,14 @@ class PromotionWaiterInventoryTests(unittest.TestCase):
         with self.assertRaises(IncompleteInventory):
             collect_waiting_runs(pages([missing_pr_inventory]), WORKFLOW_ID)
 
+    def test_invalid_or_duplicate_pr_associations_fail_closed(self) -> None:
+        for associations in ([{"number": 0}], [{"number": -2}], [{"number": 7}, {"number": 7}]):
+            with self.subTest(associations=associations):
+                value = run(1)
+                value["pull_requests"] = associations
+                with self.assertRaises(IncompleteInventory):
+                    collect_waiting_runs(pages([value]), WORKFLOW_ID)
+
     def test_filtered_api_limit_is_not_treated_as_complete(self) -> None:
         with self.assertRaises(IncompleteInventory):
             collect_waiting_runs(lambda _: {"total_count": 1000, "workflow_runs": []}, WORKFLOW_ID)
@@ -200,6 +208,23 @@ class PromotionWaiterInventoryTests(unittest.TestCase):
                 inventory,
                 lambda _run_id, _page: {"total_count": 1, "jobs": [without_steps]},
             )
+
+    def test_missing_or_inconsistent_job_conclusion_fails_closed(self) -> None:
+        inventory = collect_waiting_runs(pages([run(1)]), WORKFLOW_ID)
+        for status, conclusion in (("completed", None), ("waiting", "success"), ("requested", "success")):
+            with self.subTest(status=status, conclusion=conclusion):
+                value = job(101, 1)
+                value["status"] = status
+                value["conclusion"] = conclusion
+                with self.assertRaises(IncompleteInventory):
+                    collect_waiting_jobs(
+                        inventory,
+                        lambda _run_id, _page, current=value: {"total_count": 1, "jobs": [current]},
+                    )
+        missing = job(101, 1)
+        del missing["conclusion"]
+        with self.assertRaises(IncompleteInventory):
+            collect_waiting_jobs(inventory, lambda _run_id, _page: {"total_count": 1, "jobs": [missing]})
 
 
 if __name__ == "__main__":

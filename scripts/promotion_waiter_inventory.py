@@ -124,7 +124,7 @@ def collect_waiting_runs(fetch_page: Callable[[int], dict[str, Any]], workflow_i
             if not isinstance(head_sha, str) or not SHA.fullmatch(head_sha):
                 raise IncompleteInventory("invalid head SHA")
             actor = run.get("actor")
-            if not isinstance(actor, dict) or not isinstance(actor.get("login"), str):
+            if not isinstance(actor, dict) or not isinstance(actor.get("login"), str) or not actor["login"]:
                 raise IncompleteInventory("missing actor")
             for field in ("event", "head_branch", "created_at", "updated_at"):
                 if not isinstance(run.get(field), str) or not run[field]:
@@ -132,11 +132,18 @@ def collect_waiting_runs(fetch_page: Callable[[int], dict[str, Any]], workflow_i
             prs = run.get("pull_requests")
             if not isinstance(prs, list):
                 raise IncompleteInventory("missing PR association inventory")
-            pr_numbers = []
+            pr_numbers: list[int] = []
+            seen_pr_numbers: set[int] = set()
             for pr in prs:
-                if not isinstance(pr, dict) or not _is_json_int(pr.get("number")):
+                if (
+                    not isinstance(pr, dict)
+                    or not _is_json_int(pr.get("number"))
+                    or pr["number"] <= 0
+                    or pr["number"] in seen_pr_numbers
+                ):
                     raise IncompleteInventory("invalid PR association")
                 pr_numbers.append(pr["number"])
+                seen_pr_numbers.add(pr["number"])
             attempt = run.get("run_attempt")
             if not _is_json_int(attempt) or attempt <= 0:
                 raise IncompleteInventory("invalid run attempt")
@@ -240,8 +247,14 @@ def collect_waiting_jobs(
                     "completed",
                 }:
                     raise IncompleteInventory("invalid job status")
-                if job.get("conclusion") is not None and not isinstance(job["conclusion"], str):
-                    raise IncompleteInventory("invalid job conclusion")
+                if "conclusion" not in job:
+                    raise IncompleteInventory("missing job conclusion")
+                conclusion = job["conclusion"]
+                if job["status"] == "completed":
+                    if not isinstance(conclusion, str) or not conclusion:
+                        raise IncompleteInventory("completed job lacks conclusion")
+                elif conclusion is not None:
+                    raise IncompleteInventory("nonterminal job has conclusion")
                 steps = job.get("steps")
                 if not isinstance(steps, list):
                     raise IncompleteInventory("missing job steps inventory")
@@ -251,7 +264,7 @@ def collect_waiting_jobs(
                         "id": job_id,
                         "name": job["name"],
                         "status": job["status"],
-                        "conclusion": job["conclusion"],
+                        "conclusion": conclusion,
                         "step_count": len(steps),
                     }
                 )
