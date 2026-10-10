@@ -71,8 +71,9 @@ class HetznerAbortLifecycleTests(unittest.TestCase):
         module = FakeModule()
         module.params = {**module.params, "validate_certs": False}
         client = Mock()
-        with patch.object(MODULE, "AnsibleModule", return_value=module), patch.object(
-            MODULE, "boto3", SimpleNamespace(client=client)
+        with (
+            patch.object(MODULE, "AnsibleModule", return_value=module),
+            patch.object(MODULE, "boto3", SimpleNamespace(client=client)),
         ):
             with self.assertRaises(Rejected):
                 MODULE.main()
