@@ -13,7 +13,7 @@ aap_host_prepare_setup_dir_effective: >-
 
 aap_host_prepare_selinux_manage: true
 aap_host_prepare_selinux_podman_setype: >-
-  {{ 'container_file_t' if ansible_distribution_major_version | int == 9 else 'container_var_lib_t' }}
+  {{ 'container_file_t' if ansible_distribution_major_version | default('10') | int == 9 else 'container_var_lib_t' }}
 aap_host_prepare_selinux_fcontexts:
   - target: /appl
     setype: var_t

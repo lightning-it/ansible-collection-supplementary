@@ -11,8 +11,6 @@
       - aap_host_prepare_setup_dir_effective is string
       - aap_host_prepare_setup_dir_effective is match('^/.+')
       - aap_host_prepare_selinux_manage is boolean
-      - aap_host_prepare_selinux_podman_setype is string
-      - aap_host_prepare_selinux_podman_setype | trim | length > 0
       - aap_host_prepare_selinux_fcontexts is sequence
       - aap_host_prepare_selinux_fcontexts is not string
       - aap_host_prepare_selinux_restore_paths is sequence
