@@ -28,6 +28,10 @@
       tags:
         - install
 
+    - name: Prepare explicitly pinned Keycloak outbound certificate trust
+      ansible.builtin.include_tasks: certificate_trust.yml
+      when: keycloak_deploy_trust_ca_certificate | length > 0
+
     - name: Deploy Keycloak Pod
       ansible.builtin.include_tasks: deploy_pod.yml
       tags:

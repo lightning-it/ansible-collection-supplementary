@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: vault_pki_leaf_role
+  namespace: lit
+  author: Lightning IT
+  description: Reconcile one narrowly scoped leaf issuance role against an existing Vault PKI issuer.
+  company: Lightning IT
+  license: MIT
+  min_ansible_version: "2.18"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+  galaxy_tags: [vault, automation, security]
+dependencies: []

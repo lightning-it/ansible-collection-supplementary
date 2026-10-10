@@ -1,0 +1,57 @@
+---
+- name: Validate the declared connection credential source
+  ansible.builtin.assert:
+    that:
+      - vault_connection_credentials_source.vault_path is match('^[A-Za-z0-9_./-]+$')
+      - vault_connection_credentials_source.destination is match('^[A-Za-z][A-Za-z0-9_]*$')
+      - vault_connection_credentials_source.username | length > 0
+      - vault_connection_credentials_source.subject | length > 0
+    quiet: true
+  no_log: true
+
+- name: Read the existing connection credential document from Vault
+  community.hashi_vault.vault_kv2_get:
+    url: "{{ vault_connection_credentials_auth.url }}"
+    engine_mount_point: "{{ vault_connection_credentials_kv_mount }}"
+    path: "{{ vault_connection_credentials_source.vault_path }}"
+    validate_certs: true
+    ca_cert: "{{ vault_connection_credentials_auth.ca_cert }}"
+    namespace: "{{ vault_connection_credentials_auth.namespace }}"
+    mount_point: "{{ vault_connection_credentials_auth.auth_mount_point }}"
+    auth_method: approle
+    role_id: "{{ vault_connection_credentials_auth.role_id }}"
+    secret_id: "{{ vault_connection_credentials_auth.secret_id }}"
+  delegate_to: localhost
+  become: false
+  register: vault_connection_credentials_document
+  no_log: true
+
+- name: Select only the declared local desktop account
+  ansible.builtin.set_fact:
+    vault_connection_credentials_matches: >-
+      {{ vault_connection_credentials_document.secret.accounts
+         | selectattr('username', 'equalto', vault_connection_credentials_source.username) | list }}
+  no_log: true
+  changed_when: false
+
+- name: Verify the subject and exact desktop credential selection
+  ansible.builtin.assert:
+    that:
+      - vault_connection_credentials_document.secret.schema_version == 1
+      - vault_connection_credentials_document.secret.subject == vault_connection_credentials_source.subject
+      - vault_connection_credentials_document.secret.purpose == vault_connection_credentials_source.purpose
+      - vault_connection_credentials_matches | length == 1
+      - vault_connection_credentials_matches[0].tier == vault_connection_credentials_source.tier
+      - vault_connection_credentials_matches[0].password | length >= 32
+    quiet: true
+  no_log: true
+
+- name: Merge the selected credential into the RAM-only Guacamole bundle
+  ansible.builtin.set_fact:
+    vault_connection_credentials_result: >-
+      {{ vault_connection_credentials_result | combine({
+          vault_connection_credentials_source.destination: vault_connection_credentials_matches[0].password}) }}
+    vault_connection_credentials_document: {}
+    vault_connection_credentials_matches: []
+  changed_when: false
+  no_log: true

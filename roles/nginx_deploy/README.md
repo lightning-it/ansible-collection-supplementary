@@ -66,3 +66,5 @@ MIT
 ## Author
 
 Lightning IT
+
+`nginx_deploy_host_network: true` permits a host-network Pod only with empty port bindings and empty attached networks. Its NGINX server configuration must declare explicit listen addresses. The default remains false with the existing port publication contract.

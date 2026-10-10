@@ -41,20 +41,21 @@ class KeycloakBrokerCatalogTests(unittest.TestCase):
         ]
         with tempfile.TemporaryDirectory(prefix="keycloak-broker-contract-") as temporary:
             if binding_probe:
-                # Keep the actual include, include vars and realm-task loop expression.
-                # Replace only the API call with an offline assertion on its loop input.
+                # Keep the binding loop while replacing API tasks with an
+                # assertion. Extra-var realm catalogs must not shadow bindings.
                 binding_file = Path(temporary) / "binding.yml"
-                binding_file.write_text((ROLE / "tasks/cac_21_realm_flow_bindings.yml").read_text())
-                realm_task = yaml.safe_load((ROLE / "tasks/cac_11_realms.yml").read_text())[0]
+                binding = yaml.safe_load((ROLE / "tasks/cac_21_realm_flow_bindings.yml").read_text())[0]
+                realm_task = binding["block"][1]
+                binding_file.write_text(yaml.safe_dump([realm_task]))
                 probe = {
                     "name": "Verify the exact deferred realm input without an API call",
                     "ansible.builtin.assert": {
-                        "that": ["keycloak_cac_realm_definition == keycloak_cac_realm_flow_bindings[0]"]
+                        "that": ["keycloak_cac_flow_binding == keycloak_cac_realm_flow_bindings[0]"]
                     },
                     "loop": realm_task["loop"],
                     "loop_control": realm_task["loop_control"],
                 }
-                (Path(temporary) / "cac_11_realms.yml").write_text(yaml.safe_dump([probe]))
+                (Path(temporary) / "realm_flow_binding.yml").write_text(yaml.safe_dump([probe]))
                 play[0]["tasks"].append({"ansible.builtin.include_tasks": str(binding_file)})
             path = Path(temporary) / "precheck.yml"
             path.write_text(yaml.safe_dump(play), encoding="utf-8")
@@ -212,11 +213,23 @@ class KeycloakBrokerCatalogTests(unittest.TestCase):
         self.assertLess(tasks.index("cac_17_authentication_flows.yml"), tasks.index("cac_18_identity_providers.yml"))
         self.assertLess(tasks.index("cac_18_identity_providers.yml"), tasks.index("cac_19_required_actions.yml"))
         self.assertLess(tasks.index("cac_19_required_actions.yml"), tasks.index("cac_21_realm_flow_bindings.yml"))
-        binding = yaml.safe_load((ROLE / "tasks/cac_21_realm_flow_bindings.yml").read_text())[0]
-        self.assertEqual(binding["ansible.builtin.include_tasks"], "cac_11_realms.yml")
+        realm_tasks = yaml.safe_load((ROLE / "tasks/cac_11_realms.yml").read_text())
+        self.assertEqual(len(realm_tasks), 1)
+        realm_task = realm_tasks[0]
+        self.assertEqual(realm_task["name"], "Reconcile Keycloak realms")
+        self.assertNotIn("check_mode", realm_task)
+        self.assertNotIn("register", realm_task)
+        self.assertNotIn("changed_when", realm_task)
         self.assertEqual(
-            binding["vars"]["keycloak_cac_realm_reconciliation_catalog"], "{{ keycloak_cac_realm_flow_bindings }}"
+            realm_task["loop"],
+            "{{ keycloak_cac_realm_reconciliation_catalog | default(keycloak_cac_realms) }}",
         )
+        readme = (ROLE / "README.md").read_text()
+        self.assertIn("browser-flow", readme)
+        self.assertNotIn("plan/reconciliation path", readme)
+        binding = yaml.safe_load((ROLE / "tasks/cac_21_realm_flow_bindings.yml").read_text())[0]
+        self.assertEqual(binding["block"][1]["ansible.builtin.include_tasks"], "realm_flow_binding.yml")
+        self.assertEqual(binding["block"][1]["loop"], "{{ keycloak_cac_realm_flow_bindings }}")
 
     def test_deferred_binding_survives_public_realm_catalog_from_extra_vars(self) -> None:
         self.precheck(

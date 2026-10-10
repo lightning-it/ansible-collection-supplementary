@@ -1,0 +1,99 @@
+---
+- name: Validate distinct protected keypair fields and complete existing pairs
+  ansible.builtin.assert:
+    that:
+      - vault_secret_bundle_keypair is mapping
+      - vault_secret_bundle_keypair.keys() | list | sort == ['private_field', 'public_field']
+      - vault_secret_bundle_keypair.private_field is match('^[A-Za-z][A-Za-z0-9_]*$')
+      - vault_secret_bundle_keypair.public_field is match('^[A-Za-z][A-Za-z0-9_]*$')
+      - vault_secret_bundle_keypair.private_field != vault_secret_bundle_keypair.public_field
+      - >-
+        (vault_secret_bundle_effective.get(vault_secret_bundle_keypair.private_field, '') | length > 0)
+        == (vault_secret_bundle_effective.get(vault_secret_bundle_keypair.public_field, '') | length > 0)
+      - >-
+        vault_secret_bundle_generate_missing | bool
+        or vault_secret_bundle_effective.get(vault_secret_bundle_keypair.private_field, '') | length > 0
+    quiet: true
+  no_log: true
+
+- name: Generate or verify a keypair only on controller tmpfs
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  no_log: true
+  block:
+    - name: Verify controller shared memory is a tmpfs filesystem
+      ansible.builtin.command:
+        argv: [findmnt, -n, -o, FSTYPE, -T, /dev/shm]
+      register: vault_secret_bundle_tmpfs
+      changed_when: false
+      check_mode: false
+
+    - name: Require volatile controller key custody
+      ansible.builtin.assert:
+        that:
+          - vault_secret_bundle_tmpfs.stdout | trim == 'tmpfs'
+        quiet: true
+
+    - name: Create a private volatile keypair directory
+      ansible.builtin.tempfile:
+        state: directory
+        path: /dev/shm
+        prefix: vault-ssh-keypair-
+      register: vault_secret_bundle_keypair_directory
+
+    - name: Stage an existing private key only for correspondence verification
+      ansible.builtin.copy:
+        content: "{{ vault_secret_bundle_effective[vault_secret_bundle_keypair.private_field] }}"
+        dest: "{{ vault_secret_bundle_keypair_directory.path }}/key"
+        mode: '0600'
+      when: vault_secret_bundle_keypair.private_field in vault_secret_bundle_effective
+
+    - name: Generate missing RSA key or verify the existing key without rotation
+      community.crypto.openssh_keypair:
+        path: "{{ vault_secret_bundle_keypair_directory.path }}/key"
+        type: rsa
+        size: 4096
+        backend: cryptography
+        private_key_format: pkcs1
+        regenerate: never
+        mode: '0600'
+      register: vault_secret_bundle_keypair_generated
+
+    - name: Verify an existing public key corresponds to its private key
+      ansible.builtin.assert:
+        that:
+          - >-
+            vault_secret_bundle_effective[vault_secret_bundle_keypair.public_field].split()[0:2]
+            == vault_secret_bundle_keypair_generated.public_key.split()[0:2]
+        quiet: true
+      when: vault_secret_bundle_keypair.public_field in vault_secret_bundle_effective
+
+    - name: Read only the generated key into memory
+      ansible.builtin.slurp:
+        src: "{{ vault_secret_bundle_keypair_directory.path }}/key"
+      register: vault_secret_bundle_keypair_private
+      when: vault_secret_bundle_keypair.private_field not in vault_secret_bundle_effective
+
+    - name: Append only a missing pair to the existing Vault bundle
+      ansible.builtin.set_fact:
+        vault_secret_bundle_effective: >-
+          {{ vault_secret_bundle_effective | combine({
+              vault_secret_bundle_keypair.private_field: vault_secret_bundle_keypair_private.content | b64decode,
+              vault_secret_bundle_keypair.public_field: vault_secret_bundle_keypair_generated.public_key
+          }) }}
+      when: vault_secret_bundle_keypair.private_field not in vault_secret_bundle_effective
+
+  always:
+    - name: Remove all temporary keypair files
+      ansible.builtin.file:
+        path: "{{ vault_secret_bundle_keypair_directory.path }}"
+        state: absent
+      when: vault_secret_bundle_keypair_directory.path is defined
+
+    - name: Forget temporary keypair material
+      ansible.builtin.set_fact:
+        vault_secret_bundle_keypair_generated: {}
+        vault_secret_bundle_keypair_private: {}
+        vault_secret_bundle_keypair_directory: {}

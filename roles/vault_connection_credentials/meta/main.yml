@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: vault_connection_credentials
+  namespace: lit
+  author: Lightning IT
+  description: Read explicitly selected existing desktop connection credentials from Vault KV v2.
+  company: Lightning IT
+  license: MIT
+  min_ansible_version: "2.18"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+  galaxy_tags: [vault, automation, security]
+dependencies: []

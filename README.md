@@ -577,9 +577,12 @@ synthesized as passes.
 | vault_backup_restore | experimental | — | experimental | experimental | experimental |
 | vault_bootstrap | experimental | — | experimental | experimental | experimental |
 | vault_config | experimental | — | experimental | experimental | experimental |
+| vault_connection_credentials | experimental | — | experimental | blocked-external-infrastructure | blocked-external-infrastructure |
 | vault_deploy | experimental | — | experimental | experimental | experimental |
 | vault_foundational | experimental | — | experimental | experimental | not-applicable |
 | vault_ops | experimental | — | experimental | experimental | experimental |
+| vault_pki_certificate | experimental | — | experimental | blocked-external-infrastructure | blocked-external-infrastructure |
+| vault_pki_leaf_role | experimental | — | experimental | blocked-external-infrastructure | blocked-external-infrastructure |
 | vault_raft_snapshot | experimental | — | experimental | experimental | experimental |
 | vault_scoped_approle | experimental | — | experimental | experimental | experimental |
 | vault_secret_bundle | experimental | — | experimental | experimental | experimental |

@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: vault_pki_certificate
+  namespace: lit
+  author: Lightning IT
+  description: Issue and reuse service certificates exclusively through a declared Vault PKI issuer.
+  company: Lightning IT
+  license: MIT
+  min_ansible_version: "2.18"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+  galaxy_tags: [vault, automation, security]
+dependencies: []

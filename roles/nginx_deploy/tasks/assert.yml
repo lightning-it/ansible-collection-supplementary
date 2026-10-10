@@ -47,7 +47,11 @@
       - nginx_deploy_skip_validate is boolean
       - nginx_deploy_validate_certs is boolean
       - nginx_deploy_port_bindings is sequence
-      - nginx_deploy_port_bindings | length > 0
+      - nginx_deploy_host_network is boolean
+      - >-
+        (nginx_deploy_host_network and nginx_deploy_port_bindings | length == 0)
+        or (not nginx_deploy_host_network and nginx_deploy_port_bindings | length > 0)
+      - not nginx_deploy_host_network or nginx_deploy_networks | length == 0
       - nginx_deploy_networks is sequence
       - nginx_deploy_networks is not string
       - >-

@@ -1,0 +1,13 @@
+---
+- name: Initialize the RAM-only credential result
+  ansible.builtin.set_fact:
+    vault_connection_credentials_result: {}
+  no_log: true
+  changed_when: false
+
+- name: Resolve only declared existing Vault credential sources
+  ansible.builtin.include_tasks: read_source.yml
+  loop: "{{ vault_connection_credentials_sources }}"
+  loop_control:
+    loop_var: vault_connection_credentials_source
+  no_log: true

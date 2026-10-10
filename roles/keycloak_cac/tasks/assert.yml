@@ -29,11 +29,53 @@
       - keycloak_cac_realm_flow_bindings is sequence
       - keycloak_cac_realm_flow_bindings is not string
       - keycloak_cac_realm_flow_bindings is not mapping
+      - keycloak_cac_default_role_cleanup_enabled is boolean
+      - keycloak_cac_default_role_cleanup is sequence
+      - keycloak_cac_default_role_cleanup is not string
+      - keycloak_cac_default_role_cleanup is not mapping
       - keycloak_cac_samba_ldap_enabled is boolean
       - keycloak_cac_samba_ldap_provider is mapping
       - keycloak_cac_ldap_providers is sequence
       - keycloak_cac_ldap_providers is not string
     fail_msg: "Keycloak CaC variables are missing or invalid."
+  tags: always
+
+- name: Validate bounded default-role cleanup targets
+  ansible.builtin.assert:
+    that:
+      - keycloak_cac_default_cleanup_definition is mapping
+      - >-
+        keycloak_cac_default_cleanup_definition.keys()
+        | difference(['realm', 'allowed_removals', 'require_empty_realm'])
+        | length == 0
+      - keycloak_cac_default_cleanup_definition.realm is string
+      - keycloak_cac_default_cleanup_definition.realm | length > 0
+      - keycloak_cac_default_cleanup_definition.allowed_removals is sequence
+      - keycloak_cac_default_cleanup_definition.allowed_removals is not string
+      - keycloak_cac_default_cleanup_definition.allowed_removals is not mapping
+      - >-
+        keycloak_cac_default_cleanup_definition
+        .get('require_empty_realm', false) is boolean
+      - >-
+        keycloak_cac_realms | selectattr('realm', 'defined')
+        | selectattr('realm', 'equalto', keycloak_cac_default_cleanup_definition.realm)
+        | list | length == 1
+    fail_msg: Default-role cleanup needs one declared realm and an explicit removal allowlist.
+  loop: "{{ keycloak_cac_default_role_cleanup }}"
+  loop_control:
+    loop_var: keycloak_cac_default_cleanup_definition
+  no_log: true
+  tags: always
+
+- name: Validate unique default-role cleanup realms
+  ansible.builtin.assert:
+    that:
+      - >-
+        keycloak_cac_default_role_cleanup | map(attribute='realm')
+        | list | unique(case_sensitive=true) | length
+        == keycloak_cac_default_role_cleanup | length
+    fail_msg: Each realm may appear only once in keycloak_cac_default_role_cleanup.
+  no_log: true
   tags: always
 
 - name: Validate explicit authentication flow targets and object-only options

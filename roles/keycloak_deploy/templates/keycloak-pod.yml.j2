@@ -75,11 +75,26 @@ spec:
           value: "{{ value }}"
 {% endfor %}
 {% endif %}
+{% if keycloak_deploy_trust_ca_certificate | length > 0 %}
+        - name: KC_TRUSTSTORE_PATHS
+          value: /opt/keycloak/extra-trust/issuer-ca.pem
+{% endif %}
       volumeMounts:
+{% if keycloak_deploy_trust_ca_certificate | length > 0 %}
+        - name: keycloak-trust
+          mountPath: /opt/keycloak/extra-trust
+          readOnly: true
+{% endif %}
         - name: keycloak-data
           mountPath: {{ keycloak_deploy_container_data_dir }}
 
   volumes:
+{% if keycloak_deploy_trust_ca_certificate | length > 0 %}
+    - name: keycloak-trust
+      hostPath:
+        path: {{ ((keycloak_deploy_host_data_dir | dirname) ~ '/java-trust') | to_json }}
+        type: Directory
+{% endif %}
     - name: keycloak-data
       hostPath:
         path: {{ keycloak_deploy_host_data_dir }}

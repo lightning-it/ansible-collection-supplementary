@@ -802,6 +802,12 @@ roles:
       - "Keycloak OIDC provider"
       - "RDP destination reachable through the management VLAN"
     known_limitations:
+      - >-
+        Optional pinned public Java CA trust extends the image's stock truststore;
+        consumer runtime positive and negative TLS acceptance remains required.
+      - >-
+        Explicit OIDC request scopes preserve the upstream default; minimal
+        subject/group-only requests require real consumer token and browser acceptance.
       - "Goal 07 production acceptance is maintained in the consumer automation repository."
       - >-
         OIDC username-claim selection has offline assertion and rendering tests;
@@ -1019,6 +1025,9 @@ roles:
       - "lit.foundational.podman_systemd"
     external_dependencies: []
     known_limitations:
+      - >-
+        Optional pinned public CA trust uses KC_TRUSTSTORE_PATHS; its new exact
+        candidate needs consumer positive and negative Java TLS evidence.
       - >-
         Default-off coupled native network migration remains experimental until
         live paired rollback, DNS isolation and restart acceptance pass on the
@@ -1431,6 +1440,9 @@ roles:
     external_dependencies:
       - "Keycloak OIDC provider"
     known_limitations:
+      - >-
+        Explicit OIDC request scopes preserve the upstream default; minimal
+        subject/group-only requests require real consumer token and browser acceptance.
       - "Goal 07 production acceptance is maintained in the consumer automation repository."
     deprecation_state: "active"
     scenario_support:
@@ -2447,6 +2459,67 @@ roles:
         - "vault-bootstrap-basic"
         - "vault-scoped-approle-basic"
         - "vault-security-lifecycle-basic"
+      heavy: []
+      application_acceptance: []
+  vault_connection_credentials:
+    component: "vault"
+    classification: "secret_management"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets: ["ubuntu-24.04"]
+    tiny: "experimental"
+    heavy: "blocked-external-infrastructure"
+    application_acceptance: "blocked-external-infrastructure"
+    acceptance_surface: "read_selected_connection_secret"
+    dependencies:
+      - "community.hashi_vault"
+    external_dependencies:
+      - "Reachable certificate-validated Vault with scoped authentication and declared existing paths"
+    known_limitations:
+      - "No standalone protected Molecule application acceptance scenario exists yet."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  vault_pki_certificate:
+    component: "vault"
+    classification: "secret_management"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets: ["ubuntu-24.04"]
+    tiny: "experimental"
+    heavy: "blocked-external-infrastructure"
+    application_acceptance: "blocked-external-infrastructure"
+    acceptance_surface: "issue_reuse_and_verify_service_certificate"
+    dependencies: []
+    external_dependencies:
+      - "Reachable certificate-validated Vault with scoped authentication and declared existing paths"
+    known_limitations:
+      - "No standalone protected Molecule application acceptance scenario exists yet."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
+      heavy: []
+      application_acceptance: []
+  vault_pki_leaf_role:
+    component: "vault"
+    classification: "secret_management"
+    maturity: "experimental"
+    supported_targets: []
+    candidate_targets: ["ubuntu-24.04"]
+    tiny: "experimental"
+    heavy: "blocked-external-infrastructure"
+    application_acceptance: "blocked-external-infrastructure"
+    acceptance_surface: "reconcile_and_readback_leaf_issuer_role"
+    dependencies: []
+    external_dependencies:
+      - "Reachable certificate-validated Vault with scoped authentication and declared existing paths"
+    known_limitations:
+      - "No standalone protected Molecule application acceptance scenario exists yet."
+    deprecation_state: "active"
+    scenario_support:
+      tiny: []
       heavy: []
       application_acceptance: []
   vault_secret_bundle:

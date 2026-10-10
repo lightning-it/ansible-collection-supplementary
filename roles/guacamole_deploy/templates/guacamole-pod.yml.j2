@@ -6,7 +6,40 @@ metadata:
     app: {{ guacamole_deploy_pod_name }}
 spec:
   restartPolicy: Always
+{% if guacamole_deploy_host_aliases | length > 0 %}
+  hostAliases:
+{{ guacamole_deploy_host_aliases | to_nice_yaml(indent=2) | indent(4, true) }}
+{% endif %}
   initContainers:
+{% if guacamole_deploy_guacd_ca_certificate | length > 0 %}
+    - name: guacd-trust
+      image: {{ guacamole_deploy_guacd_image }}
+      command: ["/bin/sh", "-ec"]
+      args:
+        - >-
+          test -s "$GUACD_STOCK_CA_BUNDLE";
+          cp "$GUACD_STOCK_CA_BUNDLE" /trust/ca-certificates.crt;
+          printf '\n' >> /trust/ca-certificates.crt;
+          cat /trust/issuer-ca.pem >> /trust/ca-certificates.crt;
+          chmod 0644 /trust/ca-certificates.crt
+      env:
+        - {name: GUACD_STOCK_CA_BUNDLE, value: {{ guacamole_deploy_guacd_stock_ca_bundle | to_json }}}
+      volumeMounts:
+        - {name: guacd-trust, mountPath: /trust}
+{% endif %}
+{% if guacamole_deploy_java_ca_certificate | length > 0 %}
+    - name: java-trust
+      image: {{ guacamole_deploy_image }}
+      command: ["/bin/sh", "-ec"]
+      args:
+        - >-
+          cp "$JAVA_HOME/lib/security/cacerts" /trust/cacerts;
+          keytool -importcert -noprompt -trustcacerts -alias guacamole-reviewed-ca
+          -file /trust/issuer-ca.pem -keystore /trust/cacerts -storepass changeit;
+          chmod 0644 /trust/cacerts
+      volumeMounts:
+        - {name: java-trust, mountPath: /trust}
+{% endif %}
     - name: schema
       image: {{ guacamole_deploy_image }}
       command: ["/bin/sh", "-ec"]
@@ -46,6 +79,13 @@ spec:
         - {name: postgres-init, mountPath: /docker-entrypoint-initdb.d}
     - name: guacd
       image: {{ guacamole_deploy_guacd_image }}
+{% if guacamole_deploy_guacd_ca_certificate | length > 0 %}
+      volumeMounts:
+        - name: guacd-trust
+          mountPath: {{ guacamole_deploy_guacd_stock_ca_bundle | to_json }}
+          subPath: ca-certificates.crt
+          readOnly: true
+{% endif %}
       env:
         - {name: http_proxy, value: ""}
         - {name: HTTP_PROXY, value: ""}
@@ -81,6 +121,7 @@ spec:
         - {name: FTP_PROXY, value: ""}
         - {name: no_proxy, value: {{ guacamole_deploy_no_proxy | join(',') | to_json }}}
         - {name: NO_PROXY, value: {{ guacamole_deploy_no_proxy | join(',') | to_json }}}
+{% set guacamole_java_proxy_options = [] %}
 {% if guacamole_deploy_proxy_url | length > 0 %}
 {% set guacamole_proxy_host = guacamole_deploy_proxy_url | regex_replace('^http://([^:]+):[0-9]+$', '\\1') %}
 {% set guacamole_proxy_port = guacamole_deploy_proxy_url | regex_replace('^.*:([0-9]+)$', '\\1') %}
@@ -95,6 +136,14 @@ spec:
   '-Dhttp.nonProxyHosts=' ~ (guacamole_deploy_no_proxy | join('|'))
 ] %}
 {% endif %}
+{% endif %}
+{% if guacamole_deploy_java_ca_certificate | length > 0 %}
+{% set guacamole_java_proxy_options = guacamole_java_proxy_options + [
+  '-Djavax.net.ssl.trustStore=/etc/guacamole-trust/cacerts',
+  '-Djavax.net.ssl.trustStorePassword=changeit'
+] %}
+{% endif %}
+{% if guacamole_java_proxy_options | length > 0 %}
         - {name: JAVA_TOOL_OPTIONS, value: {{ guacamole_java_proxy_options | join(' ') | to_json }}}
 {% endif %}
 {% if guacamole_deploy_oidc_enabled | bool %}
@@ -102,12 +151,23 @@ spec:
         - {name: OPENID_AUTHORIZATION_ENDPOINT, value: {{ guacamole_deploy_oidc_authorization_endpoint | to_json }}}
         - {name: OPENID_JWKS_ENDPOINT, value: {{ guacamole_deploy_oidc_jwks_endpoint | to_json }}}
         - {name: OPENID_ISSUER, value: {{ guacamole_deploy_oidc_issuer | to_json }}}
+        - {name: OPENID_SCOPE, value: {{ guacamole_deploy_oidc_scope | to_json }}}
         - {name: OPENID_CLIENT_ID, value: {{ guacamole_deploy_oidc_client_id | to_json }}}
         - {name: OPENID_REDIRECT_URI, value: {{ guacamole_deploy_oidc_redirect_uri | to_json }}}
         - {name: OPENID_USERNAME_CLAIM_TYPE, value: {{ guacamole_deploy_oidc_username_claim_type | to_json }}}
         - {name: OPENID_GROUPS_CLAIM_TYPE, value: {{ guacamole_deploy_oidc_groups_claim_type | to_json }}}
         - {name: EXTENSION_PRIORITY, value: "*, openid"}
 {% endif %}
+{% if guacamole_deploy_java_ca_certificate | length > 0 %}
+      volumeMounts:
+        - {name: java-trust, mountPath: /etc/guacamole-trust, readOnly: true}
+{% endif %}
   volumes:
+{% if guacamole_deploy_guacd_ca_certificate | length > 0 %}
+    - {name: guacd-trust, hostPath: {path: {{ guacamole_deploy_base_dir }}/guacd-trust, type: Directory}}
+{% endif %}
+{% if guacamole_deploy_java_ca_certificate | length > 0 %}
+    - {name: java-trust, hostPath: {path: {{ guacamole_deploy_base_dir }}/java-trust, type: Directory}}
+{% endif %}
     - {name: postgres, hostPath: {path: {{ guacamole_deploy_base_dir }}/postgres, type: Directory}}
     - {name: postgres-init, hostPath: {path: {{ guacamole_deploy_base_dir }}/postgres-init, type: Directory}}

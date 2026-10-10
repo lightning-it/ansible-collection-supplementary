@@ -1,0 +1,13 @@
+---
+vault_pki_certificate_api_url: ""
+vault_pki_certificate_ca_path: ""
+vault_pki_certificate_kv_token: ""
+vault_pki_certificate_kv_path: ""
+vault_pki_certificate_issuing_identity: {}
+vault_pki_certificate_issue_path: ""
+vault_pki_certificate_common_name: ""
+vault_pki_certificate_ttl: 720h
+vault_pki_certificate_cert_path: ""
+vault_pki_certificate_key_path: ""
+vault_pki_certificate_key_group: root
+vault_pki_certificate_key_mode: "0600"

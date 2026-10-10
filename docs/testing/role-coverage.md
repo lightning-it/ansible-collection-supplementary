@@ -6,10 +6,10 @@ Authoritative source: [`meta/role-coverage.yml`](../../meta/role-coverage.yml).
 
 ## Summary
 
-- Roles: 101
+- Roles: 104
 - Root Molecule scenarios: 60
 - Production roles: 2
-- Experimental roles: 98
+- Experimental roles: 101
 - Deprecated roles: 1
 - Runtime-container application policies: 6
 - Declared-evidence application policies: 5
@@ -53,7 +53,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | forward_proxy | forward_proxy | network_service | experimental | — | rhel-8, rhel-9, rhel-10, ubuntu-22.04, ubuntu-24.04 | experimental | blocked-external-infrastructure | blocked-external-infrastructure | proxy_allowed_destinations_and_deny_direct_or_disallowed_traffic | lit.foundational.podman_systemd | A prepared rootful Podman and systemd host with governed outbound access | Tiny renders and validates the exact service contract, preserves fail-closed JUnit before contract evaluation, directly exercises the descriptor-safe managed-file restore primitive, and statically checks that enabled-state rescue is authorized only at the first mutation boundary after read-only preflight. Contract tests also bind complete check-mode reporting for runtime removal, activation, and restart, and require a resumable runtime-absent ownership checkpoint before file deletion. Tiny does not inject a live post-runtime-removal unlink failure, drive the full enabled-state rescue, or start Podman; live proxy traffic and host-firewall enforcement require the protected Wunderbox acceptance target. | forward-proxy-tiny |
 | gitlab_runner | gitlab_runner | runner | deprecated | — | — | deprecated | deprecated | deprecated | register_runner_and_execute_a_real_workload | — | GitLab service and runner registration token | Role is intentionally fail-closed and retained only to report its deprecated contract. | gitlab-runner-basic |
 | grafana_deploy | observability | web_application | experimental | — | ubuntu-22.04, ubuntu-24.04, rhel-9 | experimental | experimental | experimental | browser_and_authenticated_api | lit.foundational.kubeplay, lit.foundational.podman_systemd, loki_deploy | — | Current Incus scenario has no browser or authenticated API workflow. | atlas-observability-incus_heavy, wunderbox-monitoring-logging-basic |
-| guacamole_deploy | guacamole | web_application | experimental | — | ubuntu-24.04 | experimental | experimental | experimental | browser_oidc_breakglass_and_rdp_session | lit.foundational.podman_systemd | Keycloak OIDC provider, RDP destination reachable through the management VLAN | Goal 07 production acceptance is maintained in the consumer automation repository., OIDC username-claim selection has offline assertion and rendering tests; identity migration, cross-tier isolation and revocation require consumer acceptance., OIDC groups receive only explicitly declared connection READ permissions; the role never grants system administration or connection mutation rights., Absolute RDP session duration remains a consumer or backend policy; the role controls the inactive Guacamole web/API session timeout., Persistent lifecycle uses native Quadlet; the role no longer executes podman kube play directly. | — |
+| guacamole_deploy | guacamole | web_application | experimental | — | ubuntu-24.04 | experimental | experimental | experimental | browser_oidc_breakglass_and_rdp_session | lit.foundational.podman_systemd | Keycloak OIDC provider, RDP destination reachable through the management VLAN | Optional pinned public Java CA trust extends the image's stock truststore; consumer runtime positive and negative TLS acceptance remains required., Explicit OIDC request scopes preserve the upstream default; minimal subject/group-only requests require real consumer token and browser acceptance., Goal 07 production acceptance is maintained in the consumer automation repository., OIDC username-claim selection has offline assertion and rendering tests; identity migration, cross-tier isolation and revocation require consumer acceptance., OIDC groups receive only explicitly declared connection READ permissions; the role never grants system administration or connection mutation rights., Absolute RDP session duration remains a consumer or backend policy; the role controls the inactive Guacamole web/API session timeout., Persistent lifecycle uses native Quadlet; the role no longer executes podman kube play directly. | — |
 | hetzner_object_storage_cac | hetzner_object_storage | configuration_as_code | experimental | — | ubuntu-24.04, rhel-9 | experimental | blocked-external-service | blocked-external-service | create_query_reconcile_and_remove_protected_s3_objects | amazon.aws, community.aws, community.hashi_vault | Paid Hetzner Object Storage project and protected S3 credentials | Tiny validates the real plan and negative safety contracts without calling the paid external API., Bucket deletion and S3 credential creation are deliberately outside the role. | hetzner-object-storage-tiny |
 | incus_esxi_image | esxi | infrastructure | experimental | — | ubuntu-24.04, rhel-9 | experimental | blocked-external-license | blocked-external-license | import_publish_use_and_cleanup_a_real_image | — | Privately licensed VMware ESXi image artifacts | Current scenario uses a fake Incus CLI and fake artifacts. | incus-esxi-image-basic |
 | incus_nested_esxi | esxi | infrastructure | experimental | — | ubuntu-24.04, rhel-9 | experimental | blocked-external-infrastructure | blocked-external-infrastructure | launch_query_and_destroy_a_real_nested_esxi_vm | — | Nested-virtualization-capable Incus host, Privately licensed VMware ESXi image | No root Molecule scenario exists. | — |
@@ -61,7 +61,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | keycloak_backup_restore | keycloak | backup_component | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | create_backup_modify_state_restore_and_verify | — | — | Canonical Heavy creates a PostgreSQL backup but does not execute this realm backup/restore role. | — |
 | keycloak_cac | keycloak | configuration_as_code | production | ubuntu-24.04 | rhel-9, rhel-10 | supported | supported | supported | apply_query_and_idempotently_reconcile_api_objects | keycloak_deploy, community.general | — | Tiny exercises real flow, provider, required-action and deferred-binding API lifecycle and idempotency; a complete upstream broker login remains unproven., Current scenarios do not prove deletion reconciliation for every managed object type., RHEL 9 and RHEL 10 remain candidate targets until the complete exact-commit matrix passes on approved images. | keycloak-application-acceptance, keycloak-heavy, keycloak-tiny |
 | keycloak_config | keycloak | configuration_as_code | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | apply_query_and_reconcile_runtime_configuration | keycloak_deploy | — | No direct scenario coverage. | — |
-| keycloak_deploy | keycloak | web_application | production | ubuntu-24.04 | rhel-9, rhel-10 | supported | supported | supported | browser_and_authenticated_oidc_api | postgres_deploy, lit.foundational.kubeplay, lit.foundational.podman_systemd | — | Default-off coupled native network migration remains experimental until live paired rollback, DNS isolation and restart acceptance pass on the exact candidate. Fault-injected unit control-flow tests do not establish Podman readiness or whole-role migration idempotence., Managed pod/container DNS names have strict offline binding and cutover-resolution rollback coverage. Tiny proves that the managed PostgreSQL container name is pinned through the portable Pod hostAliases contract and resolves exclusively to its exact private address from the running Keycloak container., Native manifest semantic reconciliation has offline actual-Ansible regression coverage; live no-second-restart acceptance remains pending on the exact migration candidate., Heavy scopes its destructive PostgreSQL restore drill to an isolated probe table; whole-database disaster recovery is not claimed., No supported-version upgrade path is currently claimed by this deployment role., Heavy proves LDAP CA and hostname validation with an independent client; Keycloak JVM truststore enforcement is not separately claimed., RHEL 9 and RHEL 10 remain candidate targets until the complete exact-commit matrix passes on approved images. | keycloak-application-acceptance, keycloak-heavy, keycloak-tiny |
+| keycloak_deploy | keycloak | web_application | production | ubuntu-24.04 | rhel-9, rhel-10 | supported | supported | supported | browser_and_authenticated_oidc_api | postgres_deploy, lit.foundational.kubeplay, lit.foundational.podman_systemd | — | Optional pinned public CA trust uses KC_TRUSTSTORE_PATHS; its new exact candidate needs consumer positive and negative Java TLS evidence., Default-off coupled native network migration remains experimental until live paired rollback, DNS isolation and restart acceptance pass on the exact candidate. Fault-injected unit control-flow tests do not establish Podman readiness or whole-role migration idempotence., Managed pod/container DNS names have strict offline binding and cutover-resolution rollback coverage. Tiny proves that the managed PostgreSQL container name is pinned through the portable Pod hostAliases contract and resolves exclusively to its exact private address from the running Keycloak container., Native manifest semantic reconciliation has offline actual-Ansible regression coverage; live no-second-restart acceptance remains pending on the exact migration candidate., Heavy scopes its destructive PostgreSQL restore drill to an isolated probe table; whole-database disaster recovery is not claimed., No supported-version upgrade path is currently claimed by this deployment role., Heavy proves LDAP CA and hostname validation with an independent client; Keycloak JVM truststore enforcement is not separately claimed., RHEL 9 and RHEL 10 remain candidate targets until the complete exact-commit matrix passes on approved images. | keycloak-application-acceptance, keycloak-heavy, keycloak-tiny |
 | keycloak_destroy | keycloak | infrastructure | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | safe_teardown_and_absence | lit.foundational.kubeplay | — | No direct scenario coverage., Quadlet teardown is unsupported. | — |
 | keycloak_ops | keycloak | infrastructure | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | experimental | restart_recovery_and_health | — | — | Canonical Heavy restarts the container directly rather than through this role. | — |
 | keycloak_preflight | keycloak | validator | experimental | — | ubuntu-24.04, rhel-9, rhel-10 | experimental | experimental | not-applicable | parent_component_validation | — | — | No direct scenario coverage. | — |
@@ -78,7 +78,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | minio_validate | minio | validator | experimental | — | rhel-9 | experimental | experimental | not-applicable | parent_component_validation | — | — | Current root scenario is a syntax stub. | minio-validate-basic |
 | nessus_cac | nessus | configuration_as_code | experimental | — | rhel-9 | experimental | blocked-external-license | blocked-external-license | apply_query_reconcile_and_delete_api_objects | — | Tenable Nessus activation and license | Current scenario is a syntax stub. | nessus-cac-basic |
 | nessus_deploy | nessus | web_application | experimental | — | rhel-9 | experimental | blocked-external-license | blocked-external-license | browser_and_authenticated_api | lit.foundational.kubeplay | Tenable Nessus activation and license | Current scenario is a syntax stub. | nessus-deploy-basic |
-| netbox_deploy | netbox | web_application | experimental | — | ubuntu-24.04 | experimental | experimental | experimental | browser_oidc_authenticated_api_backup_and_restore | lit.foundational.kubeplay | Keycloak OIDC provider | Goal 07 production acceptance is maintained in the consumer automation repository. | — |
+| netbox_deploy | netbox | web_application | experimental | — | ubuntu-24.04 | experimental | experimental | experimental | browser_oidc_authenticated_api_backup_and_restore | lit.foundational.kubeplay | Keycloak OIDC provider | Explicit OIDC request scopes preserve the upstream default; minimal subject/group-only requests require real consumer token and browser acceptance., Goal 07 production acceptance is maintained in the consumer automation repository. | — |
 | nexus | nexus | web_application | experimental | — | rhel-9 | experimental | experimental | experimental | browser_and_authenticated_repository_api | lit.foundational.kubeplay | HashiCorp Vault when Vault PKI integration is enabled | Current root scenario is a syntax stub; README calls the role a template. | nexus-basic |
 | nginx_config | nginx | configuration_as_code | experimental | — | rhel-9 | experimental | experimental | experimental | apply_reconcile_and_verify_http | nginx_deploy | — | Current root scenario is a syntax stub. | nginx-config-basic |
 | nginx_deploy | nginx | web_service | experimental | — | rhel-9 | experimental | experimental | experimental | real_http_and_tls_workflow | lit.foundational.kubeplay, lit.foundational.podman_systemd | — | Current root scenario is a syntax stub. | nginx-deploy-basic |
@@ -118,9 +118,12 @@ promotion input only and never satisfy the release-required supported-target mat
 | vault_backup_restore | vault | backup_component | experimental | — | rhel-9 | experimental | experimental | experimental | create_backup_modify_state_restore_and_verify | vault_deploy, vault_ops, vault_validate | — | Current scenario uses a fake runtime rather than real Vault. | vault-backup-restore-basic |
 | vault_bootstrap | vault | secret_management | experimental | — | rhel-9 | experimental | experimental | experimental | initialize_authenticate_and_use_real_test_identity | vault_foundational, vault_ops | — | Current scenarios focus on local escrow contracts and a fake Vault API., Tiny proves numeric ownership; root-owned production target escrow requires a privileged target. | vault-bootstrap-basic, vault-ops-basic |
 | vault_config | vault | configuration_as_code | experimental | — | rhel-9 | experimental | experimental | experimental | apply_query_reconcile_and_delete_secret_configuration | vault_bootstrap, lit.foundational.terragrunt | — | Current scenario only validates token normalization. | vault-config-basic |
+| vault_connection_credentials | vault | secret_management | experimental | — | ubuntu-24.04 | experimental | blocked-external-infrastructure | blocked-external-infrastructure | read_selected_connection_secret | community.hashi_vault | Reachable certificate-validated Vault with scoped authentication and declared existing paths | No standalone protected Molecule application acceptance scenario exists yet. | — |
 | vault_deploy | vault | secret_management | experimental | — | rhel-9 | experimental | experimental | experimental | authenticate_write_read_deny_audit_and_persist | — | — | Current scenario is a syntax stub. | vault-deploy-basic |
 | vault_foundational | vault | helper | experimental | — | rhel-9 | experimental | experimental | not-applicable | parent_component_helper | — | — | Current scenario is a syntax stub. | vault-foundational-basic |
 | vault_ops | vault | infrastructure | experimental | — | rhel-9 | experimental | experimental | experimental | restart_unseal_recovery_and_authenticated_read | vault_deploy, vault_validate, lit.foundational.kubeplay | — | Current scenario uses fake Podman and a fake Vault API. | vault-ops-basic |
+| vault_pki_certificate | vault | secret_management | experimental | — | ubuntu-24.04 | experimental | blocked-external-infrastructure | blocked-external-infrastructure | issue_reuse_and_verify_service_certificate | — | Reachable certificate-validated Vault with scoped authentication and declared existing paths | No standalone protected Molecule application acceptance scenario exists yet. | — |
+| vault_pki_leaf_role | vault | secret_management | experimental | — | ubuntu-24.04 | experimental | blocked-external-infrastructure | blocked-external-infrastructure | reconcile_and_readback_leaf_issuer_role | — | Reachable certificate-validated Vault with scoped authentication and declared existing paths | No standalone protected Molecule application acceptance scenario exists yet. | — |
 | vault_raft_snapshot | vault | backup_component | experimental | — | rhel-9 | experimental | experimental | experimental | snapshot_modify_restore_and_verify_exact_state | — | — | Current scenario uses a fake Vault API rather than an integrated-Raft cluster., Tiny explicitly proves numeric ownership in a canonical owner-only local test root; production retains /run with root ownership. | vault-raft-snapshot-basic, vault-security-lifecycle-basic |
 | vault_scoped_approle | vault | secret_management | experimental | — | rhel-9 | experimental | experimental | experimental | authenticate_positive_and_negative_policy_workflows | — | — | Current scenario uses a fake Vault API. | vault-bootstrap-basic, vault-scoped-approle-basic, vault-security-lifecycle-basic |
 | vault_secret_bundle | vault | secret_management | experimental | — | ubuntu-24.04, rhel-9 | experimental | experimental | experimental | read_before_generate_persist_and_reuse_secret_fields | community.hashi_vault | Reachable HashiCorp Vault KV v2 service and scoped authentication | No standalone Molecule scenario exists yet. | — |
@@ -606,7 +609,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Candidate-target execution: no runnable candidate matrix is currently declared.
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
-- Known limitations: Goal 07 production acceptance is maintained in the consumer automation repository., OIDC username-claim selection has offline assertion and rendering tests; identity migration, cross-tier isolation and revocation require consumer acceptance., OIDC groups receive only explicitly declared connection READ permissions; the role never grants system administration or connection mutation rights., Absolute RDP session duration remains a consumer or backend policy; the role controls the inactive Guacamole web/API session timeout., Persistent lifecycle uses native Quadlet; the role no longer executes podman kube play directly.
+- Known limitations: Optional pinned public Java CA trust extends the image's stock truststore; consumer runtime positive and negative TLS acceptance remains required., Explicit OIDC request scopes preserve the upstream default; minimal subject/group-only requests require real consumer token and browser acceptance., Goal 07 production acceptance is maintained in the consumer automation repository., OIDC username-claim selection has offline assertion and rendering tests; identity migration, cross-tier isolation and revocation require consumer acceptance., OIDC groups receive only explicitly declared connection READ permissions; the role never grants system administration or connection mutation rights., Absolute RDP session duration remains a consumer or backend policy; the role controls the inactive Guacamole web/API session timeout., Persistent lifecycle uses native Quadlet; the role no longer executes podman kube play directly.
 
 ### `hetzner_object_storage_cac`
 
@@ -734,7 +737,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Candidate-target execution: scheduled protected-develop or manual protected-main validation; a reviewed registry change is required to promote a passing candidate into supported targets.
 - Reports/evidence: Allure, JUnit, structured evidence. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
-- Known limitations: Default-off coupled native network migration remains experimental until live paired rollback, DNS isolation and restart acceptance pass on the exact candidate. Fault-injected unit control-flow tests do not establish Podman readiness or whole-role migration idempotence., Managed pod/container DNS names have strict offline binding and cutover-resolution rollback coverage. Tiny proves that the managed PostgreSQL container name is pinned through the portable Pod hostAliases contract and resolves exclusively to its exact private address from the running Keycloak container., Native manifest semantic reconciliation has offline actual-Ansible regression coverage; live no-second-restart acceptance remains pending on the exact migration candidate., Heavy scopes its destructive PostgreSQL restore drill to an isolated probe table; whole-database disaster recovery is not claimed., No supported-version upgrade path is currently claimed by this deployment role., Heavy proves LDAP CA and hostname validation with an independent client; Keycloak JVM truststore enforcement is not separately claimed., RHEL 9 and RHEL 10 remain candidate targets until the complete exact-commit matrix passes on approved images.
+- Known limitations: Optional pinned public CA trust uses KC_TRUSTSTORE_PATHS; its new exact candidate needs consumer positive and negative Java TLS evidence., Default-off coupled native network migration remains experimental until live paired rollback, DNS isolation and restart acceptance pass on the exact candidate. Fault-injected unit control-flow tests do not establish Podman readiness or whole-role migration idempotence., Managed pod/container DNS names have strict offline binding and cutover-resolution rollback coverage. Tiny proves that the managed PostgreSQL container name is pinned through the portable Pod hostAliases contract and resolves exclusively to its exact private address from the running Keycloak container., Native manifest semantic reconciliation has offline actual-Ansible regression coverage; live no-second-restart acceptance remains pending on the exact migration candidate., Heavy scopes its destructive PostgreSQL restore drill to an isolated probe table; whole-database disaster recovery is not claimed., No supported-version upgrade path is currently claimed by this deployment role., Heavy proves LDAP CA and hostname validation with an independent client; Keycloak JVM truststore enforcement is not separately claimed., RHEL 9 and RHEL 10 remain candidate targets until the complete exact-commit matrix passes on approved images.
 
 ### `keycloak_destroy`
 
@@ -1006,7 +1009,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Candidate-target execution: no runnable candidate matrix is currently declared.
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
-- Known limitations: Goal 07 production acceptance is maintained in the consumer automation repository.
+- Known limitations: Explicit OIDC request scopes preserve the upstream default; minimal subject/group-only requests require real consumer token and browser acceptance., Goal 07 production acceptance is maintained in the consumer automation repository.
 
 ### `nexus`
 
@@ -1632,6 +1635,22 @@ promotion input only and never satisfy the release-required supported-target mat
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
 - Known limitations: Current scenario only validates token normalization.
 
+### `vault_connection_credentials`
+
+- Purpose/classification: `secret_management` in component `vault`.
+- Maturity/deprecation: `experimental` / `active`.
+- Supported targets: —; candidate targets: ubuntu-24.04.
+- Profiles: Tiny `experimental`, Heavy `blocked-external-infrastructure`, Application Acceptance `blocked-external-infrastructure`.
+- Acceptance surface: `read_selected_connection_secret`.
+- Role dependencies: community.hashi_vault; exercised scenario dependencies: —.
+- External dependencies/blockers: Reachable certificate-validated Vault with scoped authentication and declared existing paths.
+- Required-secret policy: Protected non-production credentials or licensed inputs are required for the declared external dependencies.
+- Local execution: —; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
+- Candidate-target execution: no runnable candidate matrix is currently declared.
+- Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
+- Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
+- Known limitations: No standalone protected Molecule application acceptance scenario exists yet.
+
 ### `vault_deploy`
 
 - Purpose/classification: `secret_management` in component `vault`.
@@ -1679,6 +1698,38 @@ promotion input only and never satisfy the release-required supported-target mat
 - Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
 - Known limitations: Current scenario uses fake Podman and a fake Vault API.
+
+### `vault_pki_certificate`
+
+- Purpose/classification: `secret_management` in component `vault`.
+- Maturity/deprecation: `experimental` / `active`.
+- Supported targets: —; candidate targets: ubuntu-24.04.
+- Profiles: Tiny `experimental`, Heavy `blocked-external-infrastructure`, Application Acceptance `blocked-external-infrastructure`.
+- Acceptance surface: `issue_reuse_and_verify_service_certificate`.
+- Role dependencies: —; exercised scenario dependencies: —.
+- External dependencies/blockers: Reachable certificate-validated Vault with scoped authentication and declared existing paths.
+- Required-secret policy: Protected non-production credentials or licensed inputs are required for the declared external dependencies.
+- Local execution: —; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
+- Candidate-target execution: no runnable candidate matrix is currently declared.
+- Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
+- Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
+- Known limitations: No standalone protected Molecule application acceptance scenario exists yet.
+
+### `vault_pki_leaf_role`
+
+- Purpose/classification: `secret_management` in component `vault`.
+- Maturity/deprecation: `experimental` / `active`.
+- Supported targets: —; candidate targets: ubuntu-24.04.
+- Profiles: Tiny `experimental`, Heavy `blocked-external-infrastructure`, Application Acceptance `blocked-external-infrastructure`.
+- Acceptance surface: `reconcile_and_readback_leaf_issuer_role`.
+- Role dependencies: —; exercised scenario dependencies: —.
+- External dependencies/blockers: Reachable certificate-validated Vault with scoped authentication and declared existing paths.
+- Required-secret policy: Protected non-production credentials or licensed inputs are required for the declared external dependencies.
+- Local execution: —; CI matrix execution: not mandatory until a profile is supported, real, and production-eligible.
+- Candidate-target execution: no runnable candidate matrix is currently declared.
+- Reports/evidence: —. Failed mandatory runs remain failures or infrastructure errors.
+- Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
+- Known limitations: No standalone protected Molecule application acceptance scenario exists yet.
 
 ### `vault_raft_snapshot`
 

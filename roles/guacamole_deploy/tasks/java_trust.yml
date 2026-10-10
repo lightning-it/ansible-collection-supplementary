@@ -1,0 +1,30 @@
+---
+- name: Inspect the supplied Guacamole public CA
+  community.crypto.x509_certificate_info:
+    content: "{{ guacamole_deploy_java_ca_certificate }}"
+  register: guacamole_deploy_java_ca_info
+
+- name: Require the exact reviewed Guacamole CA fingerprint
+  ansible.builtin.assert:
+    that:
+      - guacamole_deploy_java_ca_info.fingerprints.sha256 == guacamole_deploy_java_ca_sha256
+      - "'CA:TRUE' in guacamole_deploy_java_ca_info.basic_constraints"
+      - not guacamole_deploy_java_ca_info.expired
+    fail_msg: Guacamole Java trust requires the exact unexpired reviewed CA certificate.
+    quiet: true
+
+- name: Prepare the Guacamole Java trust directory
+  ansible.builtin.file:
+    path: "{{ guacamole_deploy_base_dir }}/java-trust"
+    state: directory
+    owner: "1001"
+    group: "1001"
+    mode: "0755"
+
+- name: Materialize only the reviewed public Guacamole CA
+  ansible.builtin.copy:
+    content: "{{ guacamole_deploy_java_ca_certificate }}"
+    dest: "{{ guacamole_deploy_base_dir }}/java-trust/issuer-ca.pem"
+    owner: root
+    group: root
+    mode: "0644"

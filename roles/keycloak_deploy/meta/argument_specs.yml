@@ -3,6 +3,12 @@ argument_specs:
   main:
     short_description: Deploy Keycloak with a PostgreSQL backend
     options:
+      keycloak_deploy_trust_ca_certificate:
+        description: Optional public PEM CA added to the application truststore, never a private key.
+        type: str
+      keycloak_deploy_trust_ca_sha256:
+        description: Exact colon-separated DER SHA-256 fingerprint of the supplied public CA.
+        type: str
       keycloak_deploy_pod_name:
         description: Name assigned to the Keycloak Podman pod.
         type: str

@@ -18,6 +18,17 @@ Key variables:
 - `keycloak_cac_skip_apply`
 - `keycloak_cac_url`
 - `keycloak_cac_realm`
+- `keycloak_cac_default_role_cleanup_enabled` defaults to `false`. A populated
+  cleanup catalog never authorizes removal. Set this flag only for a separately
+  approved cleanup operation; the normal Wunderbox management runbook forces it
+  to `false` and preserves existing default-role assignments.
+- `keycloak_cac_default_role_cleanup` (optional): for each declared realm,
+  list the exact existing default-role children that may be removed. The role
+  fails if Keycloak returns any other child and verifies an empty composite
+  after deletion. The default is an empty list, so existing deployments do not
+  change their default-role assignments. An entry may set
+  `require_empty_realm: true` to refuse removal when any user or active client
+  session exists. This additional guard does not authorize cleanup.
 - `keycloak_cac_admin_user`
 - `keycloak_cac_admin_password`
 - `keycloak_cac_samba_ldap_enabled`
@@ -51,8 +62,10 @@ it does not by itself disable other account-linking routes.
 
 `keycloak_cac_realm_flow_bindings` contains only `realm` and `browser_flow`.
 Each realm must appear once as present in `keycloak_cac_realms`. Bindings run
-after flows, providers and required actions, reusing the existing realm
-plan/reconciliation path. Do not set a not-yet-created browser flow in the
+after flows, providers and required actions. A browser-flow binding reads the
+current realm and available top-level flows, skips an already matching binding,
+and writes only `browserFlow` when necessary. It never resubmits the full realm
+readback. Do not set a not-yet-created browser flow in the
 initial realm definition. Removing a binding does not restore a default flow.
 Keep consumers disabled until the entire configuration is reconciled and
 verified; task ordering is not an atomic activation transaction.

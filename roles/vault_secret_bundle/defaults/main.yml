@@ -12,3 +12,4 @@ vault_secret_bundle_secret_id: "{{ ansible_hashi_vault_secret_id | default('', t
 vault_secret_bundle_items: []
 vault_secret_bundle_static_data: {}
 vault_secret_bundle_generate_missing: true
+vault_secret_bundle_ssh_keypairs: []

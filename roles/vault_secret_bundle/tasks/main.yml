@@ -8,6 +8,8 @@
       - vault_secret_bundle_items is sequence
       - vault_secret_bundle_items is not string
       - vault_secret_bundle_static_data is mapping
+      - vault_secret_bundle_ssh_keypairs is sequence
+      - vault_secret_bundle_ssh_keypairs is not string
       - >-
         (vault_secret_bundle_token | trim | length > 0) or
         ((vault_secret_bundle_role_id | trim | length > 0) and
@@ -104,6 +106,14 @@
   no_log: true
   run_once: true
   when: not vault_secret_bundle_generate_missing | bool
+
+- name: Resolve declared SSH keypairs without a persistent plaintext fallback
+  ansible.builtin.include_tasks: ssh_keypair.yml
+  loop: "{{ vault_secret_bundle_ssh_keypairs }}"
+  loop_control:
+    loop_var: vault_secret_bundle_keypair
+  run_once: true
+  no_log: true
 
 - name: Persist the complete secret bundle in Vault
   delegate_to: localhost
