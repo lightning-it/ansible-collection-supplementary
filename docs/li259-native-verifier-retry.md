@@ -1,11 +1,13 @@
 # LI-259 Supplementary preparation
 
-This is a local candidate on Supplementary develop, based on Core
-`aa45941e2d24194f29f480306bff39d27d7b4824` and Source
-`5128b10bef931478541985d314293d879ea317be`. Source is not yet protected-adopted.
-`.lit/li259-supplementary-port.json` binds the candidate bytes and leaves
-`protected_source_commit` null. Historical LI-219 adoption receipts do not
-attest this preparation. No flag is enabled and no native acceptance is claimed.
+This is a Supplementary PR #1205 candidate, based on Core
+`aa45941e2d24194f29f480306bff39d27d7b4824` and protected Source main
+`5b70bdaa4eaa9b0121545cb842eca8b3256e9cc3`. The earlier Source candidate
+was `5128b10bef931478541985d314293d879ea317be`.
+`.lit/li259-supplementary-port.json` binds the protected Source commit and
+records byte-identical and adapted-local assets separately. Historical LI-219
+adoption receipts do not attest native acceptance for this preparation. No flag
+is enabled and no native acceptance is claimed.
 
 The protected helper seals the original review, repository, PR, base, head,
 controller, policy and input tuple before the existing attempt-two event claim,
@@ -26,12 +28,12 @@ failures are terminal. Unknown CAS/POST outcomes allow only readback; recovery
 cannot create an AI request, push, PR or reviewed revision. The cross-repository
 receiver remains restricted to attempts 1 and 2.
 
-Publication must wait for the reviewed Source candidate to merge and for exact
-protected Core/Source adoption to be verified. Then recheck the live Supplementary
-base, prepare one ordinary reviewed PR, and bind the actual protected Source
-commit without fabricating a receipt. Activation additionally requires the
-approved policy amendment and prospective native acceptance. Genuine failures
-must supply the acceptance opportunity; never manufacture a rerun or new review
+The Source candidate is protected-adopted and this PR binds its actual commit.
+PR publication does not establish protected Core adoption, hosted native
+acceptance, or activation. Before activation, verify exact protected Core
+adoption and the approved policy amendment, then obtain prospective native
+acceptance on this repository. Genuine failures must supply the acceptance
+opportunity; never manufacture a rerun or new review
 for a canary. Disable the flag and preserve consumed records for rollback.
 
 The Source correction inventories active journal seeds independently of current

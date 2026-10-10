@@ -392,7 +392,7 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         )
         self.assertIn('test -z "${BOUND_REVIEW_ID}"', publisher)
         self.assertIn('review_id:(if $review_id == "" then null else $review_id end)', publisher)
-        self.assertEqual(3, publisher.count("validate_bound_review"))
+        self.assertEqual(4, publisher.count("validate_bound_review"))
 
     def test_main_review_controller_is_exact_and_calls_same_revision_helper(self) -> None:
         copilot = (WORKFLOWS / "copilot-review.yml").read_text(encoding="utf-8")
