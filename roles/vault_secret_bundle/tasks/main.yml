@@ -1,38 +1,7 @@
 ---
-- name: Validate Vault secret bundle contract
-  ansible.builtin.assert:
-    that:
-      - vault_secret_bundle_address | trim | length > 0
-      - vault_secret_bundle_kv_mount | trim | length > 0
-      - vault_secret_bundle_kv_path | trim | length > 0
-      - vault_secret_bundle_items is sequence
-      - vault_secret_bundle_items is not string
-      - vault_secret_bundle_static_data is mapping
-      - vault_secret_bundle_ssh_keypairs is sequence
-      - vault_secret_bundle_ssh_keypairs is not string
-      - >-
-        (vault_secret_bundle_token | trim | length > 0) or
-        ((vault_secret_bundle_role_id | trim | length > 0) and
-         (vault_secret_bundle_secret_id | trim | length > 0))
-    fail_msg: "The Vault secret bundle requires a KV path and complete token or AppRole authentication."
-  no_log: true
-  run_once: true
-
-- name: Validate requested Vault secret fields
-  ansible.builtin.assert:
-    that:
-      - item is mapping
-      - item.name | default('', true) is match('^[A-Za-z][A-Za-z0-9_]*$')
-      - item.length | default(40) | int >= 16
-      - item.chars | default('ascii_letters,digits') | string | length > 0
-    fail_msg: >-
-      Each Vault secret item requires a safe name, a minimum length of 16,
-      and a non-empty password character contract.
-    quiet: true
-  loop: "{{ vault_secret_bundle_items }}"
-  loop_control:
-    label: "{{ item.name | default('invalid') }}"
-  no_log: true
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
   run_once: true
 
 - name: Read the existing secret bundle before generation
@@ -71,6 +40,14 @@
   changed_when: false
   no_log: true
   run_once: true
+
+- name: Preflight all observed keypairs before generating any bundle material
+  ansible.builtin.include_tasks: keypair_preflight.yml
+  loop: "{{ vault_secret_bundle_ssh_keypairs }}"
+  loop_control:
+    loop_var: vault_secret_bundle_keypair
+  run_once: true
+  no_log: true
 
 - name: Generate only missing secret bundle values
   ansible.builtin.set_fact:

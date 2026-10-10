@@ -1,0 +1,17 @@
+---
+- name: Validate distinct protected keypair fields and complete existing pairs
+  ansible.builtin.assert:
+    that:
+      - vault_secret_bundle_keypair is mapping
+      - vault_secret_bundle_keypair.keys() | list | sort == ['private_field', 'public_field']
+      - vault_secret_bundle_keypair.private_field is match('^[A-Za-z][A-Za-z0-9_]*$')
+      - vault_secret_bundle_keypair.public_field is match('^[A-Za-z][A-Za-z0-9_]*$')
+      - vault_secret_bundle_keypair.private_field != vault_secret_bundle_keypair.public_field
+      - >-
+        (vault_secret_bundle_effective.get(vault_secret_bundle_keypair.private_field, '') | length > 0)
+        == (vault_secret_bundle_effective.get(vault_secret_bundle_keypair.public_field, '') | length > 0)
+      - >-
+        vault_secret_bundle_generate_missing | bool
+        or vault_secret_bundle_effective.get(vault_secret_bundle_keypair.private_field, '') | length > 0
+    quiet: true
+  no_log: true

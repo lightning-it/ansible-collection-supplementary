@@ -139,6 +139,12 @@
               ca_chain: "{{ vault_pki_certificate_issued.json.data.ca_chain }}"
               serial_number: "{{ vault_pki_certificate_issued.json.data.serial_number }}"
 
+        - name: Validate issuance entirely in memory before advancing custody
+          ansible.builtin.include_tasks: validate_document.yml
+          vars:
+            vault_pki_certificate_candidate: "{{ vault_pki_certificate_issued_document }}"
+          no_log: true
+
         - name: Store the issued certificate with version-bound CAS
           ansible.builtin.uri:
             url: "{{ vault_pki_certificate_api_url }}/v1/{{ vault_pki_certificate_kv_path }}"
@@ -187,44 +193,10 @@
           when: vault_pki_certificate_needs_issue | bool
           no_log: true
 
-        - name: Inspect the final server certificate
-          community.crypto.x509_certificate_info:
-            content: "{{ vault_pki_certificate_readback.json.data.data.certificate }}"
-            valid_at:
-              now: "+0s"
-          register: vault_pki_certificate_info
-          delegate_to: localhost
-          become: false
-          no_log: true
-
-        - name: Inspect final protected server private key
-          community.crypto.openssl_privatekey_info:
-            content: "{{ vault_pki_certificate_readback.json.data.data.private_key }}"
-          register: vault_pki_certificate_key_info
-          delegate_to: localhost
-          become: false
-          no_log: true
-
-        - name: Require the valid exact public DNS server identity
-          ansible.builtin.assert:
-            that:
-              - vault_pki_certificate_info.valid_at.now
-              - >-
-                vault_pki_certificate_readback.json.data.data.certificate
-                | lit.supplementary.vault_pki_direct_issuer_matches(vault_pki_certificate_issuer.content)
-              - vault_pki_certificate_info.subject.commonName == vault_pki_certificate_common_name
-              - vault_pki_certificate_info.subject_alt_name == ['DNS:' ~ vault_pki_certificate_common_name]
-              - >-
-                vault_pki_certificate_info.basic_constraints is none
-                or 'CA:FALSE' in vault_pki_certificate_info.basic_constraints
-              - "'TLS Web Server Authentication' in vault_pki_certificate_info.extended_key_usage"
-            quiet: true
-
-        - name: Require the protected matching server key pair
-          ansible.builtin.assert:
-            that:
-              - vault_pki_certificate_info.public_key == vault_pki_certificate_key_info.public_key
-            quiet: true
+        - name: Validate final custody independently before materialization
+          ansible.builtin.include_tasks: validate_document.yml
+          vars:
+            vault_pki_certificate_candidate: "{{ vault_pki_certificate_readback.json.data.data }}"
           no_log: true
 
         - name: Materialize the Vault-issued service certificate chain

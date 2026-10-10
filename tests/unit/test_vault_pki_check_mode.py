@@ -37,12 +37,21 @@ class VaultPkiCheckModeTests(unittest.TestCase):
         forged=False,
         omitted=None,
         failing_path=None,
+        bad_issuance=None,
     ):
         ca, certificate, key = certificate_fixture()
         pem = certificate.public_bytes(serialization.Encoding.PEM).decode()
         protected = key.private_bytes(
             serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
         ).decode()
+        issued_pem, issued_key = pem, protected
+        if bad_issuance:
+            _foreign_ca, foreign_leaf, foreign_key = certificate_fixture()
+            issued_key = foreign_key.private_bytes(
+                serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+            ).decode()
+            if bad_issuance == "foreign_issuer":
+                issued_pem = foreign_leaf.public_bytes(serialization.Encoding.PEM).decode()
         requests = []
         original_existing = existing
         payload = {
@@ -95,11 +104,15 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                         return
                     if self.path == "/v1/auth/approle/login":
                         response = {"auth": {"client_token": CANARY}}
+                    elif self.path == "/v1/fixture/data/server":
+                        payload = {"data": {"data": incoming["data"], "metadata": {"version": 2}}}
+                        existing = True
+                        response = {"data": {"version": 2}}
                     else:
                         response = {
                             "data": {
-                                "certificate": pem,
-                                "private_key": protected,
+                                "certificate": issued_pem,
+                                "private_key": issued_key,
                                 "ca_chain": [ca.public_bytes(serialization.Encoding.PEM).decode()],
                                 "serial_number": "fixture",
                             }
@@ -244,16 +257,23 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 server.server_close()
                 thread.join()
             self.assertNotIn("OFFLINE_PKI_CANARY", result.stdout + result.stderr)
-            if foreign_issuer or not bare_domains or expansion or forged or omitted or failing_path:
+            if foreign_issuer or not bare_domains or expansion or forged or omitted or failing_path or bad_issuance:
                 self.assertNotEqual(result.returncode, 0)
             else:
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertRegex(result.stdout, r"changed=1(?:\s|$)")
             if not bare_domains or expansion or omitted:
                 self.assertEqual(requests, [])
+            elif bad_issuance:
+                self.assertIn(("POST", "/v1/pki/issuer/existing/issue/server"), requests)
+                self.assertNotIn(("POST", "/v1/fixture/data/server"), requests)
             elif failing_path:
                 self.assertIn(("POST", failing_path), requests)
                 self.assertNotIn("Readback cleanup failed", result.stdout)
+            elif apply and role == "vault_pki_certificate":
+                self.assertEqual([method for method, _path in requests], ["GET", "GET", "POST", "POST", "POST", "GET"])
+                self.assertEqual(payload["data"]["metadata"]["version"], 2)
+                self.assertEqual((directory / "materialized.key").read_text(), protected)
             elif apply:
                 self.assertEqual(
                     [method for method, _path in requests], ["GET", "PATCH" if original_existing else "POST", "GET"]
@@ -266,8 +286,9 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                     [method for method, _path in requests],
                     ["GET", "GET"] if role == "vault_pki_certificate" else ["GET"],
                 )
-            self.assertFalse((directory / "materialized.pem").exists())
-            self.assertFalse((directory / "materialized.key").exists())
+            if not (apply and role == "vault_pki_certificate" and not failing_path and not bad_issuance):
+                self.assertFalse((directory / "materialized.pem").exists())
+                self.assertFalse((directory / "materialized.key").exists())
 
     def test_missing_and_expiring_certificate_previews_are_read_only(self):
         for existing in (False, True):
@@ -296,6 +317,11 @@ class VaultPkiCheckModeTests(unittest.TestCase):
         for path in ("/v1/pki/issuer/existing/issue/server", "/v1/fixture/data/server"):
             with self.subTest(path=path):
                 self.exercise("vault_pki_certificate", False, apply=True, failing_path=path)
+
+    def test_invalid_issuance_never_advances_kv_custody(self):
+        for fault in ("foreign_issuer", "key_mismatch"):
+            with self.subTest(fault=fault):
+                self.exercise("vault_pki_certificate", False, apply=True, bad_issuance=fault)
 
     def test_every_expansion_flag_must_be_explicit_boolean_false(self):
         for field in (

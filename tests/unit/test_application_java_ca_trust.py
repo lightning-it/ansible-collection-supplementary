@@ -15,7 +15,7 @@ from ansible.plugins.filter.core import FilterModule
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.x509.oid import NameOID
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 from jinja2 import Environment, StrictUndefined
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -46,6 +46,7 @@ def certificate_fixture(hostname="localhost"):
         .serial_number(x509.random_serial_number())
         .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
         .add_extension(x509.SubjectAlternativeName([x509.DNSName(hostname)]), critical=False)
+        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
         .sign(key, hashes.SHA256())
     )
     return ca, leaf, leaf_key

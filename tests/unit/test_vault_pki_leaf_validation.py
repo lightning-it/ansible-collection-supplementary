@@ -22,18 +22,8 @@ if ANSIBLE_PLAYBOOK is None:
 class LeafValidationTest(unittest.TestCase):
     def exercise(self, ca):
         root = Path(__file__).resolve().parents[2]
-        tasks = yaml.safe_load((root / "roles/vault_pki_certificate/tasks/main.yml").read_text())
-        tasks = tasks[1]["block"]
-        predicates = [
-            t
-            for t in next(
-                task["block"]
-                for task in tasks
-                if task["name"] == "Validate and materialize an available final certificate"
-            )
-            if t["name"]
-            in ("Require the valid exact public DNS server identity", "Require the protected matching server key pair")
-        ]
+        tasks = yaml.safe_load((root / "roles/vault_pki_certificate/tasks/validate_document.yml").read_text())
+        predicates = [t for t in tasks if "ansible.builtin.assert" in t]
         self.assertEqual(len(predicates), 2)
         with tempfile.TemporaryDirectory(dir=os.environ["HOME"]) as directory:
             directory = Path(directory)
@@ -85,9 +75,7 @@ class LeafValidationTest(unittest.TestCase):
                         "vault_pki_certificate_issuer": {
                             "content": issuer.public_bytes(serialization.Encoding.PEM).decode()
                         },
-                        "vault_pki_certificate_readback": {
-                            "json": {"data": {"data": {"certificate": (directory / "certificate.pem").read_text()}}}
-                        },
+                        "vault_pki_certificate_candidate": {"certificate": (directory / "certificate.pem").read_text()},
                     },
                     "tasks": [
                         {

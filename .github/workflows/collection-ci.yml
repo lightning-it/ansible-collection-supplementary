@@ -297,13 +297,14 @@ jobs:
             "$GITHUB_WORKSPACE/" "$collection_root/"
           cd "$collection_root"
           ansible-test sanity --requirements --python "$PYTHON_VERSION"
-      - name: Install the exact executable unit-fixture collection dependency
+      - name: Install the metadata-declared executable unit-fixture dependency
         run: |
           set -euo pipefail
+          crypto_spec="$(python -c 'import yaml; print("community.crypto:" + yaml.safe_load(open("galaxy.yml"))["dependencies"]["community.crypto"])')"
           ansible-galaxy collection install \
             --no-deps \
             --collections-path "$RUNNER_TEMP/unit-collections" \
-            -r tests/requirements.yml
+            "$crypto_spec"
       - name: Run policy and evidence unit tests
         env:
           ANSIBLE_COLLECTIONS_PATH: ${{ runner.temp }}/unit-collections
