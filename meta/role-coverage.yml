@@ -797,6 +797,7 @@ roles:
     application_acceptance: "experimental"
     acceptance_surface: "browser_oidc_breakglass_and_rdp_session"
     dependencies:
+      - "community.crypto"
       - "lit.foundational.podman_systemd"
     external_dependencies:
       - "Keycloak OIDC provider"
@@ -1020,6 +1021,7 @@ roles:
     application_acceptance: "supported"
     acceptance_surface: "browser_and_authenticated_oidc_api"
     dependencies:
+      - "community.crypto"
       - "postgres_deploy"
       - "lit.foundational.kubeplay"
       - "lit.foundational.podman_systemd"
@@ -2492,7 +2494,8 @@ roles:
     heavy: "blocked-external-infrastructure"
     application_acceptance: "blocked-external-infrastructure"
     acceptance_surface: "issue_reuse_and_verify_service_certificate"
-    dependencies: []
+    dependencies:
+      - "community.crypto"
     external_dependencies:
       - "Reachable certificate-validated Vault with scoped authentication and declared existing paths"
     known_limitations:
@@ -2535,6 +2538,7 @@ roles:
     application_acceptance: "experimental"
     acceptance_surface: "read_before_generate_persist_and_reuse_secret_fields"
     dependencies:
+      - "community.crypto"
       - "community.hashi_vault"
     external_dependencies:
       - "Reachable HashiCorp Vault KV v2 service and scoped authentication"

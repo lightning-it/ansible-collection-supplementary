@@ -16,12 +16,36 @@
     quiet: true
   no_log: true
 
+- name: Verify an existing keypair entirely in memory during check mode
+  ansible.builtin.assert:
+    that:
+      - >-
+        vault_secret_bundle_effective[vault_secret_bundle_keypair.private_field]
+        | lit.supplementary.vault_ssh_keypair_matches(
+            vault_secret_bundle_effective[vault_secret_bundle_keypair.public_field]
+          )
+    quiet: true
+  when:
+    - ansible_check_mode
+    - vault_secret_bundle_keypair.private_field in vault_secret_bundle_effective
+  no_log: true
+
+- name: Preview missing keypair custody without generating or writing keys
+  ansible.builtin.debug:
+    msg: Missing declared SSH keypair requires generation and Vault custody
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - vault_secret_bundle_keypair.private_field not in vault_secret_bundle_effective
+  no_log: true
+
 - name: Generate or verify a keypair only on controller tmpfs
   delegate_to: localhost
   become: false
   vars:
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   no_log: true
+  when: not ansible_check_mode
   block:
     - name: Verify controller shared memory is a tmpfs filesystem
       ansible.builtin.command:

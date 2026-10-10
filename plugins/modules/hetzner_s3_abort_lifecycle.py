@@ -130,6 +130,8 @@ def main():
         supports_check_mode=True,
     )
     p = module.params
+    if p["validate_certs"] is not True:
+        module.fail_json(msg="TLS certificate validation is required")
     if boto3 is None:
         module.fail_json(msg="boto3 and botocore are required in the controller runtime")
     if p["abort_days"] < 1 or not p["endpoint_url"].startswith("https://"):

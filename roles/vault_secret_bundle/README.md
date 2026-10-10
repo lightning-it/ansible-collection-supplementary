@@ -24,3 +24,7 @@ Missing RSA-4096 PEM pairs are generated only when generation is enabled, in
 controller `/dev/shm` verified as tmpfs; temporary files are removed in an
 `always` block. The complete bundle is persisted using the existing KV v2 CAS.
 No key is rotated implicitly, and all key-bearing tasks suppress logging.
+
+Check mode verifies complete existing pairs in RAM using the controller's
+`cryptography` library. Missing pairs report a predicted change without generating
+keys, writing temporary files or updating Vault.

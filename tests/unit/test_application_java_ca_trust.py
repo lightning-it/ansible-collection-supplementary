@@ -121,6 +121,24 @@ class ApplicationJavaTrustTests(unittest.TestCase):
             "keycloak_deploy_db_password_effective": "offline-fixture-only",
             "keycloak_deploy_admin_password_effective": "offline-fixture-only",
         }
+        before = self.render(
+            "keycloak_deploy",
+            {
+                **base,
+                "keycloak_deploy_trust_ca_certificate": "PUBLIC_CA_FIXTURE",
+                "keycloak_deploy_trust_ca_sha256": ":".join(["11"] * 32),
+            },
+        )
+        after = self.render(
+            "keycloak_deploy",
+            {
+                **base,
+                "keycloak_deploy_trust_ca_certificate": "PUBLIC_CA_FIXTURE",
+                "keycloak_deploy_trust_ca_sha256": ":".join(["22"] * 32),
+            },
+        )
+        self.assertNotEqual(before, after)
+        self.assertEqual(after["metadata"]["annotations"]["lit.io/issuer-ca-sha256"], ":".join(["22"] * 32))
         for certificate in ("", "PUBLIC_CA_FIXTURE"):
             pod = self.render(
                 "keycloak_deploy",

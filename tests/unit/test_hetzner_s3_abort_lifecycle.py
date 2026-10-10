@@ -67,6 +67,14 @@ class FakeS3:
 
 
 class HetznerAbortLifecycleTests(unittest.TestCase):
+    def test_insecure_tls_is_rejected_before_creating_a_client(self):
+        module = FakeModule()
+        module.params = {**module.params, "validate_certs": False}
+        with patch.object(MODULE, "AnsibleModule", return_value=module), patch.object(MODULE.boto3, "client") as client:
+            with self.assertRaises(Rejected):
+                MODULE.main()
+            client.assert_not_called()
+
     def run_module(self, rules, *, check_mode=False, abort_days=7):
         client = FakeS3(rules)
         module = FakeModule()

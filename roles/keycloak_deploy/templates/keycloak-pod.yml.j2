@@ -4,6 +4,10 @@ metadata:
   name: {{ keycloak_deploy_pod_name }}
   labels:
     app: {{ keycloak_deploy_pod_name }}
+{% if keycloak_deploy_trust_ca_certificate | trim | length > 0 %}
+  annotations:
+    lit.io/issuer-ca-sha256: {{ keycloak_deploy_trust_ca_sha256 | to_json }}
+{% endif %}
 spec:
 {% if keycloak_deploy_host_network | bool %}
   hostNetwork: true
