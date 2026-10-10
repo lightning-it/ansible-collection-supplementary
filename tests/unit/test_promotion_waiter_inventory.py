@@ -211,7 +211,12 @@ class PromotionWaiterInventoryTests(unittest.TestCase):
 
     def test_missing_or_inconsistent_job_conclusion_fails_closed(self) -> None:
         inventory = collect_waiting_runs(pages([run(1)]), WORKFLOW_ID)
-        for status, conclusion in (("completed", None), ("waiting", "success"), ("requested", "success")):
+        for status, conclusion in (
+            ("completed", None),
+            ("completed", "unknown"),
+            ("waiting", "success"),
+            ("requested", "success"),
+        ):
             with self.subTest(status=status, conclusion=conclusion):
                 value = job(101, 1)
                 value["status"] = status

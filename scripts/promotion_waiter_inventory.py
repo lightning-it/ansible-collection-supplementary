@@ -25,6 +25,19 @@ PAGE_SIZE = 100
 MAX_PROVABLE_TOTAL = 999
 # Bound the per-run read independently of the filtered workflow-run API cap.
 MAX_JOBS_PER_RUN = 999
+COMPLETED_JOB_CONCLUSIONS = frozenset(
+    {
+        "success",
+        "failure",
+        "neutral",
+        "cancelled",
+        "timed_out",
+        "action_required",
+        "stale",
+        "startup_failure",
+        "skipped",
+    }
+)
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 
@@ -251,8 +264,8 @@ def collect_waiting_jobs(
                     raise IncompleteInventory("missing job conclusion")
                 conclusion = job["conclusion"]
                 if job["status"] == "completed":
-                    if not isinstance(conclusion, str) or not conclusion:
-                        raise IncompleteInventory("completed job lacks conclusion")
+                    if not isinstance(conclusion, str) or conclusion not in COMPLETED_JOB_CONCLUSIONS:
+                        raise IncompleteInventory("completed job has invalid conclusion")
                 elif conclusion is not None:
                     raise IncompleteInventory("nonterminal job has conclusion")
                 steps = job.get("steps")
