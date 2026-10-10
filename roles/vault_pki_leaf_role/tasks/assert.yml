@@ -17,11 +17,11 @@
       - vault_pki_leaf_role_definition.allowed_domains | length > 0
       - vault_pki_leaf_role_definition.allow_wildcard_certificates | default(true) is sameas false
       - vault_pki_leaf_role_definition.allow_bare_domains | default(false) is sameas true
-      - not vault_pki_leaf_role_definition.allow_any_name | bool
-      - not vault_pki_leaf_role_definition.allow_subdomains | bool
-      - not vault_pki_leaf_role_definition.allow_glob_domains | bool
-      - not vault_pki_leaf_role_definition.allow_ip_sans | bool
-      - not vault_pki_leaf_role_definition.allow_localhost | bool
+      - vault_pki_leaf_role_definition.allow_any_name | default(true) is sameas false
+      - vault_pki_leaf_role_definition.allow_subdomains | default(true) is sameas false
+      - vault_pki_leaf_role_definition.allow_glob_domains | default(true) is sameas false
+      - vault_pki_leaf_role_definition.allow_ip_sans | default(true) is sameas false
+      - vault_pki_leaf_role_definition.allow_localhost | default(true) is sameas false
       - vault_pki_leaf_role_definition.issuer_ref | length > 0
     quiet: true
 

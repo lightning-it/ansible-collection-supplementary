@@ -1,6 +1,7 @@
 """The default-role cleanup must be bounded, idempotent and fail closed."""
 
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -135,6 +136,16 @@ class KeycloakDefaultRoleTests(unittest.TestCase):
             MODULE.canonical_allowed([{"name": "offline_access"}] * 2)
         with self.assertRaisesRegex(ValueError, "ambiguous"):
             MODULE.plan_removal([{"name": "offline_access"}], ALLOWED, lambda _: "")
+
+    def test_unloadable_ca_is_a_sanitized_validation_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "PRIVATE-PATH-CANARY.pem"
+            for contents in (None, "malformed CA"):
+                if contents is not None:
+                    path.write_text(contents)
+                with self.assertRaisesRegex(ValueError, "CA trust configuration") as error:
+                    MODULE.KeycloakAPI("https://keycloak.example", True, str(path))
+                self.assertNotIn("PRIVATE-PATH-CANARY", str(error.exception))
 
     def test_remote_api_must_use_loopback_or_validated_tls(self):
         with self.assertRaisesRegex(ValueError, "loopback"):

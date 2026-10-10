@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: MIT
 """Bind a leaf cryptographically to an independently fetched Vault issuer in RAM."""
 
+from datetime import datetime, timezone
+
 from ansible.errors import AnsibleFilterError
 
 
@@ -13,6 +15,13 @@ def vault_pki_direct_issuer_matches(certificate, issuer):
     try:
         leaf = x509.load_pem_x509_certificate(certificate.encode())
         authority = x509.load_pem_x509_certificate(issuer.encode())
+        now = datetime.now(timezone.utc)  # noqa: UP017 - Ansible controllers before Python 3.11 remain supported
+        if not (
+            authority.not_valid_before.replace(tzinfo=timezone.utc)  # noqa: UP017
+            <= now
+            <= authority.not_valid_after.replace(tzinfo=timezone.utc)  # noqa: UP017
+        ):
+            return False
         constraints = authority.extensions.get_extension_for_class(x509.BasicConstraints).value
         if not constraints.ca:
             return False

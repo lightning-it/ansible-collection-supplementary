@@ -8,8 +8,7 @@ An existing issuer/mount, Vault 1.11 or newer, verified TLS and narrowly authori
 
 ## Variables
 
-Supply `vault_pki_leaf_role_api_url`, `vault_pki_leaf_role_ca_path`, `vault_pki_leaf_role_admin_token`, mount, role name and exact definition. The definition requires `allow_bare_domains: true
-        allow_wildcard_certificates: false` for the exact allowed domains and excludes arbitrary names, subdomains, glob domains, IP SANs and localhost. Set `vault_pki_leaf_role_allow_change` explicitly to permit a delta. Existing roles use JSON merge PATCH, preserving omitted fields; creation uses POST. Independent readback checks declared fields and preservation of undeclared existing settings. Check mode performs only safe reads and reports drift without writes or a nonexistent post-write readback.
+Supply `vault_pki_leaf_role_api_url`, `vault_pki_leaf_role_ca_path`, `vault_pki_leaf_role_admin_token`, mount, role name and exact definition. The definition requires `allow_bare_domains: true` and `allow_wildcard_certificates: false` for the exact allowed domains and excludes arbitrary names, subdomains, glob domains, IP SANs and localhost. Set `vault_pki_leaf_role_allow_change` explicitly to permit a delta. Existing roles use JSON merge PATCH, preserving omitted fields; creation uses POST. Independent readback checks declared fields and preservation of undeclared existing settings. Check mode performs only safe reads and reports drift without writes or a nonexistent post-write readback.
 
 ## Dependencies
 

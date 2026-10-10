@@ -163,7 +163,10 @@ class KeycloakAPI:
         if parsed.scheme == "https" and not validate_certs:
             raise ValueError("Keycloak TLS validation cannot be disabled")
         self.base = api_url.rstrip("/")
-        self.context = ssl.create_default_context(cafile=ca_cert) if parsed.scheme == "https" else None
+        try:
+            self.context = ssl.create_default_context(cafile=ca_cert) if parsed.scheme == "https" else None
+        except (OSError, ssl.SSLError):
+            raise ValueError("Keycloak CA trust configuration could not be loaded") from None
         transport = HTTPSHandler(context=self.context) if self.context else HTTPHandler()
         self.opener = build_opener(ProxyHandler({}), transport, NoRedirect())
 

@@ -45,6 +45,7 @@
           - vault_connection_credentials_document.secret.purpose == vault_connection_credentials_source.purpose
           - vault_connection_credentials_matches | length == 1
           - vault_connection_credentials_matches[0].tier == vault_connection_credentials_source.tier
+          - vault_connection_credentials_matches[0].password is string
           - vault_connection_credentials_matches[0].password | length >= 32
         quiet: true
       no_log: true

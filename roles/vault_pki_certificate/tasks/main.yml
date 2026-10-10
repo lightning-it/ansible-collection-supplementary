@@ -1,166 +1,28 @@
 ---
-- name: Prechecks
-  ansible.builtin.import_tasks: assert.yml
-  tags: always
-
-- name: Independently fetch the exact declared public Vault issuer
-  ansible.builtin.uri:
-    url: >-
-      {{ vault_pki_certificate_api_url ~ '/v1/'
-      ~ vault_pki_certificate_issue_path.split('/issue/')[0] ~ '/pem' }}
-    validate_certs: true
-    ca_path: "{{ vault_pki_certificate_ca_path }}"
-    use_netrc: false
-    status_code: 200
-    return_content: true
-    timeout: 30
-  register: vault_pki_certificate_issuer
-  check_mode: false
-  delegate_to: localhost
-  become: false
-  changed_when: false
-
-- name: Read existing server certificate custody
-  ansible.builtin.uri:
-    url: "{{ vault_pki_certificate_api_url }}/v1/{{ vault_pki_certificate_kv_path }}"
-    headers:
-      X-Vault-Token: "{{ vault_pki_certificate_kv_token }}"
-    validate_certs: true
-    ca_path: "{{ vault_pki_certificate_ca_path }}"
-    use_netrc: false
-    status_code: [200, 404]
-    timeout: 30
-  register: vault_pki_certificate_existing
-  check_mode: false
-  delegate_to: localhost
-  become: false
-  changed_when: false
-  no_log: true
-
-- name: Require exact existing server certificate subject
-  ansible.builtin.assert:
-    that:
-      - vault_pki_certificate_existing.json.data.data.schema_version == 1
-      - vault_pki_certificate_existing.json.data.data.subject == vault_pki_certificate_common_name
-      - vault_pki_certificate_existing.json.data.data.issue_path == vault_pki_certificate_issue_path
-    quiet: true
-  when: vault_pki_certificate_existing.status == 200
-  no_log: true
-
-- name: Verify existing custody against the independently authenticated issuer
-  ansible.builtin.assert:
-    that:
-      - >-
-        vault_pki_certificate_existing.json.data.data.certificate
-        | lit.supplementary.vault_pki_direct_issuer_matches(vault_pki_certificate_issuer.content)
-    quiet: true
-  when: vault_pki_certificate_existing.status == 200
-  no_log: true
-
-- name: Inspect existing public server certificate lifetime
-  community.crypto.x509_certificate_info:
-    content: "{{ vault_pki_certificate_existing.json.data.data.certificate }}"
-    valid_at:
-      renewal_check: "+7d"
-  register: vault_pki_certificate_existing_info
-  when: vault_pki_certificate_existing.status == 200
-  delegate_to: localhost
-  become: false
-  no_log: true
-
-- name: Calculate required issuance
-  ansible.builtin.set_fact:
-    vault_pki_certificate_needs_issue: >-
-      {{ vault_pki_certificate_existing.status == 404
-      or not (vault_pki_certificate_existing_info.valid_at.renewal_check | default(false)) }}
-  no_log: true
-
-- name: Report required certificate issuance without writing in check mode
-  ansible.builtin.set_fact:
-    vault_pki_certificate_changed: "{{ vault_pki_certificate_needs_issue | bool }}"
-  changed_when: vault_pki_certificate_needs_issue | bool
-  when: ansible_check_mode
-  no_log: true
-
-- name: Issue an absent or expiring certificate from the declared Vault issuer
-  when:
-    - vault_pki_certificate_needs_issue | bool
-    - not ansible_check_mode
-  no_log: true
+- name: Resolve certificate custody with unconditional RAM cleanup
   block:
-    - name: Authenticate the dedicated certificate issuing identity
+    - name: Prechecks
+      ansible.builtin.import_tasks: assert.yml
+      tags: always
+
+    - name: Independently fetch the exact declared public Vault issuer
       ansible.builtin.uri:
-        url: "{{ vault_pki_certificate_api_url }}/v1/auth/approle/login"
-        method: POST
-        body_format: json
-        body:
-          role_id: "{{ vault_pki_certificate_issuing_identity.role_id }}"
-          secret_id: "{{ vault_pki_certificate_issuing_identity.secret_id }}"
+        url: >-
+          {{ vault_pki_certificate_api_url ~ '/v1/'
+          ~ vault_pki_certificate_issue_path.split('/issue/')[0] ~ '/pem' }}
         validate_certs: true
         ca_path: "{{ vault_pki_certificate_ca_path }}"
         use_netrc: false
         status_code: 200
+        return_content: true
         timeout: 30
-      register: vault_pki_certificate_login
+      register: vault_pki_certificate_issuer
+      check_mode: false
       delegate_to: localhost
       become: false
       changed_when: false
 
-    - name: Request exactly the declared server DNS identity
-      ansible.builtin.uri:
-        url: "{{ vault_pki_certificate_api_url }}/v1/{{ vault_pki_certificate_issue_path }}"
-        method: POST
-        headers:
-          X-Vault-Token: "{{ vault_pki_certificate_login.json.auth.client_token }}"
-        body_format: json
-        body:
-          common_name: "{{ vault_pki_certificate_common_name }}"
-          ttl: "{{ vault_pki_certificate_ttl }}"
-        validate_certs: true
-        ca_path: "{{ vault_pki_certificate_ca_path }}"
-        use_netrc: false
-        status_code: 200
-        timeout: 30
-      register: vault_pki_certificate_issued
-      delegate_to: localhost
-      become: false
-      changed_when: true
-
-    - name: Build the protected issued certificate document
-      ansible.builtin.set_fact:
-        vault_pki_certificate_issued_document:
-          schema_version: 1
-          subject: "{{ vault_pki_certificate_common_name }}"
-          issue_path: "{{ vault_pki_certificate_issue_path }}"
-          certificate: "{{ vault_pki_certificate_issued.json.data.certificate }}"
-          private_key: "{{ vault_pki_certificate_issued.json.data.private_key }}"
-          ca_chain: "{{ vault_pki_certificate_issued.json.data.ca_chain }}"
-          serial_number: "{{ vault_pki_certificate_issued.json.data.serial_number }}"
-
-    - name: Store the issued certificate with version-bound CAS
-      ansible.builtin.uri:
-        url: "{{ vault_pki_certificate_api_url }}/v1/{{ vault_pki_certificate_kv_path }}"
-        method: POST
-        headers:
-          X-Vault-Token: "{{ vault_pki_certificate_kv_token }}"
-        body_format: json
-        body:
-          options:
-            cas: "{{ vault_pki_certificate_existing.json.data.metadata.version | default(0) | int }}"
-          data: "{{ vault_pki_certificate_issued_document }}"
-        validate_certs: true
-        ca_path: "{{ vault_pki_certificate_ca_path }}"
-        use_netrc: false
-        status_code: 200
-        timeout: 30
-      delegate_to: localhost
-      become: false
-      changed_when: true
-
-- name: Validate and materialize an available final certificate
-  when: not ansible_check_mode or not (vault_pki_certificate_needs_issue | bool)
-  block:
-    - name: Independently read final certificate custody
+    - name: Read existing server certificate custody
       ansible.builtin.uri:
         url: "{{ vault_pki_certificate_api_url }}/v1/{{ vault_pki_certificate_kv_path }}"
         headers:
@@ -168,88 +30,243 @@
         validate_certs: true
         ca_path: "{{ vault_pki_certificate_ca_path }}"
         use_netrc: false
-        status_code: 200
+        status_code: [200, 404]
         timeout: 30
-      register: vault_pki_certificate_readback
+      register: vault_pki_certificate_existing
       check_mode: false
       delegate_to: localhost
       become: false
       changed_when: false
       no_log: true
 
-    - name: Require exact new certificate custody readback
+    - name: Require exact existing server certificate subject
       ansible.builtin.assert:
         that:
-          - vault_pki_certificate_readback.json.data.data == vault_pki_certificate_issued_document
+          - vault_pki_certificate_existing.json.data.data.schema_version == 1
+          - vault_pki_certificate_existing.json.data.data.subject == vault_pki_certificate_common_name
+          - vault_pki_certificate_existing.json.data.data.issue_path == vault_pki_certificate_issue_path
         quiet: true
-      when: vault_pki_certificate_needs_issue | bool
+      when: vault_pki_certificate_existing.status == 200
       no_log: true
 
-    - name: Inspect the final server certificate
-      community.crypto.x509_certificate_info:
-        content: "{{ vault_pki_certificate_readback.json.data.data.certificate }}"
-        valid_at:
-          now: "+0s"
-      register: vault_pki_certificate_info
-      delegate_to: localhost
-      become: false
-      no_log: true
-
-    - name: Inspect final protected server private key
-      community.crypto.openssl_privatekey_info:
-        content: "{{ vault_pki_certificate_readback.json.data.data.private_key }}"
-      register: vault_pki_certificate_key_info
-      delegate_to: localhost
-      become: false
-      no_log: true
-
-    - name: Require the valid exact public DNS server identity
+    - name: Verify existing custody against the independently authenticated issuer
       ansible.builtin.assert:
         that:
-          - vault_pki_certificate_info.valid_at.now
           - >-
-            vault_pki_certificate_readback.json.data.data.certificate
+            vault_pki_certificate_existing.json.data.data.certificate
             | lit.supplementary.vault_pki_direct_issuer_matches(vault_pki_certificate_issuer.content)
-          - vault_pki_certificate_info.subject.commonName == vault_pki_certificate_common_name
-          - vault_pki_certificate_info.subject_alt_name == ['DNS:' ~ vault_pki_certificate_common_name]
-          - >-
-            vault_pki_certificate_info.basic_constraints is none
-            or 'CA:FALSE' in vault_pki_certificate_info.basic_constraints
-          - "'TLS Web Server Authentication' in vault_pki_certificate_info.extended_key_usage"
         quiet: true
-
-    - name: Require the protected matching server key pair
-      ansible.builtin.assert:
-        that:
-          - vault_pki_certificate_info.public_key == vault_pki_certificate_key_info.public_key
-        quiet: true
+      when: vault_pki_certificate_existing.status == 200
       no_log: true
 
-    - name: Materialize the Vault-issued service certificate chain
-      ansible.builtin.copy:
-        content: >-
-          {{ vault_pki_certificate_readback.json.data.data.certificate | trim }}
-
-          {{ vault_pki_certificate_issuer.content | trim }}
-        dest: "{{ vault_pki_certificate_cert_path }}"
-        owner: root
-        group: root
-        mode: "0644"
-      register: vault_pki_certificate_cert_copy
+    - name: Inspect existing public server certificate lifetime
+      community.crypto.x509_certificate_info:
+        content: "{{ vault_pki_certificate_existing.json.data.data.certificate }}"
+        valid_at:
+          renewal_check: "+7d"
+      register: vault_pki_certificate_existing_info
+      when: vault_pki_certificate_existing.status == 200
+      delegate_to: localhost
+      become: false
       no_log: true
 
-    - name: Materialize only the required protected service private key
-      ansible.builtin.copy:
-        content: "{{ vault_pki_certificate_readback.json.data.data.private_key }}"
-        dest: "{{ vault_pki_certificate_key_path }}"
-        owner: root
-        group: "{{ vault_pki_certificate_key_group }}"
-        mode: "{{ vault_pki_certificate_key_mode }}"
-      register: vault_pki_certificate_key_copy
-      no_log: true
-
-    - name: Record whether the service TLS identity changed
+    - name: Calculate required issuance
       ansible.builtin.set_fact:
-        vault_pki_certificate_changed: >-
-          {{ vault_pki_certificate_cert_copy.changed or vault_pki_certificate_key_copy.changed }}
+        vault_pki_certificate_needs_issue: >-
+          {{ vault_pki_certificate_existing.status == 404
+          or not (vault_pki_certificate_existing_info.valid_at.renewal_check | default(false)) }}
+      no_log: true
+
+    - name: Report required certificate issuance without writing in check mode
+      ansible.builtin.set_fact:
+        vault_pki_certificate_changed: "{{ vault_pki_certificate_needs_issue | bool }}"
+      changed_when: vault_pki_certificate_needs_issue | bool
+      when: ansible_check_mode
+      no_log: true
+
+    - name: Issue an absent or expiring certificate from the declared Vault issuer
+      when:
+        - vault_pki_certificate_needs_issue | bool
+        - not ansible_check_mode
+      no_log: true
+      block:
+        - name: Authenticate the dedicated certificate issuing identity
+          ansible.builtin.uri:
+            url: "{{ vault_pki_certificate_api_url }}/v1/auth/approle/login"
+            method: POST
+            body_format: json
+            body:
+              role_id: "{{ vault_pki_certificate_issuing_identity.role_id }}"
+              secret_id: "{{ vault_pki_certificate_issuing_identity.secret_id }}"
+            validate_certs: true
+            ca_path: "{{ vault_pki_certificate_ca_path }}"
+            use_netrc: false
+            status_code: 200
+            timeout: 30
+          register: vault_pki_certificate_login
+          delegate_to: localhost
+          become: false
+          changed_when: false
+
+        - name: Request exactly the declared server DNS identity
+          ansible.builtin.uri:
+            url: "{{ vault_pki_certificate_api_url }}/v1/{{ vault_pki_certificate_issue_path }}"
+            method: POST
+            headers:
+              X-Vault-Token: "{{ vault_pki_certificate_login.json.auth.client_token }}"
+            body_format: json
+            body:
+              common_name: "{{ vault_pki_certificate_common_name }}"
+              ttl: "{{ vault_pki_certificate_ttl }}"
+            validate_certs: true
+            ca_path: "{{ vault_pki_certificate_ca_path }}"
+            use_netrc: false
+            status_code: 200
+            timeout: 30
+          register: vault_pki_certificate_issued
+          delegate_to: localhost
+          become: false
+          changed_when: true
+
+        - name: Build the protected issued certificate document
+          ansible.builtin.set_fact:
+            vault_pki_certificate_issued_document:
+              schema_version: 1
+              subject: "{{ vault_pki_certificate_common_name }}"
+              issue_path: "{{ vault_pki_certificate_issue_path }}"
+              certificate: "{{ vault_pki_certificate_issued.json.data.certificate }}"
+              private_key: "{{ vault_pki_certificate_issued.json.data.private_key }}"
+              ca_chain: "{{ vault_pki_certificate_issued.json.data.ca_chain }}"
+              serial_number: "{{ vault_pki_certificate_issued.json.data.serial_number }}"
+
+        - name: Store the issued certificate with version-bound CAS
+          ansible.builtin.uri:
+            url: "{{ vault_pki_certificate_api_url }}/v1/{{ vault_pki_certificate_kv_path }}"
+            method: POST
+            headers:
+              X-Vault-Token: "{{ vault_pki_certificate_kv_token }}"
+            body_format: json
+            body:
+              options:
+                cas: "{{ vault_pki_certificate_existing.json.data.metadata.version | default(0) | int }}"
+              data: "{{ vault_pki_certificate_issued_document }}"
+            validate_certs: true
+            ca_path: "{{ vault_pki_certificate_ca_path }}"
+            use_netrc: false
+            status_code: 200
+            timeout: 30
+          delegate_to: localhost
+          become: false
+          changed_when: true
+
+    - name: Validate and materialize an available final certificate
+      when: not ansible_check_mode or not (vault_pki_certificate_needs_issue | bool)
+      block:
+        - name: Independently read final certificate custody
+          ansible.builtin.uri:
+            url: "{{ vault_pki_certificate_api_url }}/v1/{{ vault_pki_certificate_kv_path }}"
+            headers:
+              X-Vault-Token: "{{ vault_pki_certificate_kv_token }}"
+            validate_certs: true
+            ca_path: "{{ vault_pki_certificate_ca_path }}"
+            use_netrc: false
+            status_code: 200
+            timeout: 30
+          register: vault_pki_certificate_readback
+          check_mode: false
+          delegate_to: localhost
+          become: false
+          changed_when: false
+          no_log: true
+
+        - name: Require exact new certificate custody readback
+          ansible.builtin.assert:
+            that:
+              - vault_pki_certificate_readback.json.data.data == vault_pki_certificate_issued_document
+            quiet: true
+          when: vault_pki_certificate_needs_issue | bool
+          no_log: true
+
+        - name: Inspect the final server certificate
+          community.crypto.x509_certificate_info:
+            content: "{{ vault_pki_certificate_readback.json.data.data.certificate }}"
+            valid_at:
+              now: "+0s"
+          register: vault_pki_certificate_info
+          delegate_to: localhost
+          become: false
+          no_log: true
+
+        - name: Inspect final protected server private key
+          community.crypto.openssl_privatekey_info:
+            content: "{{ vault_pki_certificate_readback.json.data.data.private_key }}"
+          register: vault_pki_certificate_key_info
+          delegate_to: localhost
+          become: false
+          no_log: true
+
+        - name: Require the valid exact public DNS server identity
+          ansible.builtin.assert:
+            that:
+              - vault_pki_certificate_info.valid_at.now
+              - >-
+                vault_pki_certificate_readback.json.data.data.certificate
+                | lit.supplementary.vault_pki_direct_issuer_matches(vault_pki_certificate_issuer.content)
+              - vault_pki_certificate_info.subject.commonName == vault_pki_certificate_common_name
+              - vault_pki_certificate_info.subject_alt_name == ['DNS:' ~ vault_pki_certificate_common_name]
+              - >-
+                vault_pki_certificate_info.basic_constraints is none
+                or 'CA:FALSE' in vault_pki_certificate_info.basic_constraints
+              - "'TLS Web Server Authentication' in vault_pki_certificate_info.extended_key_usage"
+            quiet: true
+
+        - name: Require the protected matching server key pair
+          ansible.builtin.assert:
+            that:
+              - vault_pki_certificate_info.public_key == vault_pki_certificate_key_info.public_key
+            quiet: true
+          no_log: true
+
+        - name: Materialize the Vault-issued service certificate chain
+          ansible.builtin.copy:
+            content: >-
+              {{ vault_pki_certificate_readback.json.data.data.certificate | trim }}
+
+              {{ vault_pki_certificate_issuer.content | trim }}
+            dest: "{{ vault_pki_certificate_cert_path }}"
+            owner: root
+            group: root
+            mode: "0644"
+          register: vault_pki_certificate_cert_copy
+          no_log: true
+
+        - name: Materialize only the required protected service private key
+          ansible.builtin.copy:
+            content: "{{ vault_pki_certificate_readback.json.data.data.private_key }}"
+            dest: "{{ vault_pki_certificate_key_path }}"
+            owner: root
+            group: "{{ vault_pki_certificate_key_group }}"
+            mode: "{{ vault_pki_certificate_key_mode }}"
+          register: vault_pki_certificate_key_copy
+          no_log: true
+
+        - name: Record whether the service TLS identity changed
+          ansible.builtin.set_fact:
+            vault_pki_certificate_changed: >-
+              {{ vault_pki_certificate_cert_copy.changed or vault_pki_certificate_key_copy.changed }}
+          changed_when: false
+  always:
+    - name: Forget role-produced certificate and token intermediates on every exit
+      ansible.builtin.set_fact:
+        vault_pki_certificate_existing: {}
+        vault_pki_certificate_existing_info: {}
+        vault_pki_certificate_login: {}
+        vault_pki_certificate_issued: {}
+        vault_pki_certificate_issued_document: {}
+        vault_pki_certificate_readback: {}
+        vault_pki_certificate_info: {}
+        vault_pki_certificate_key_info: {}
+        vault_pki_certificate_cert_copy: {}
+        vault_pki_certificate_key_copy: {}
       changed_when: false
+      no_log: true
