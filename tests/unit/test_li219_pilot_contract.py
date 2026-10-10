@@ -64,8 +64,7 @@ class PilotContractTests(unittest.TestCase):
                 # Keep the LI-219 protected donor receipt immutable. LI-259 is
                 # a separate, exact protected-main overlay for changed assets.
                 successor = overlay_assets[binding["target_path"]]
-                self.assertEqual(overlay["protected_source_commit"],
-                                 "5b70bdaa4eaa9b0121545cb842eca8b3256e9cc3")
+                self.assertEqual(overlay["protected_source_commit"], "5b70bdaa4eaa9b0121545cb842eca8b3256e9cc3")
                 self.assertEqual(successor["sha256"], digest)
                 self.assertEqual(
                     "central-managed" if successor["mode"] == "byte-identical" else "local-required",
@@ -87,8 +86,7 @@ class PilotContractTests(unittest.TestCase):
             "protected_source_commit": overlay["protected_source_commit"],
             "protected_source_tree": overlay["protected_source_tree"],
             "assets": [
-                {key: row[key] for key in
-                 ("path", "source_path", "source_blob", "source_sha256", "sha256", "mode")}
+                {key: row[key] for key in ("path", "source_path", "source_blob", "source_sha256", "sha256", "mode")}
                 for row in overlay["assets"]
             ],
         }
