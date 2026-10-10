@@ -39,7 +39,8 @@ class CredentialSelectionTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
 
     def test_same_username_in_two_tiers_selects_only_exact_tier(self):
-        tasks = yaml.safe_load((ROOT / "roles/vault_connection_credentials/tasks/read_source.yml").read_text())[2:]
+        sequence = yaml.safe_load((ROOT / "roles/vault_connection_credentials/tasks/read_source.yml").read_text())[1]
+        tasks = [{"block": sequence["block"][1:], "always": sequence["always"]}]
         values = {
             "vault_connection_credentials_source": {
                 "username": "p1000u",

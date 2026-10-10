@@ -38,11 +38,24 @@ class LeafValidationTest(unittest.TestCase):
             directory = Path(directory)
             key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
             name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "fixture.example")])
+            issuer_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            issuer_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Offline declared issuer")])
             now = datetime.datetime.now(datetime.UTC)
+            issuer = (
+                x509.CertificateBuilder()
+                .subject_name(issuer_name)
+                .issuer_name(issuer_name)
+                .public_key(issuer_key.public_key())
+                .serial_number(x509.random_serial_number())
+                .not_valid_before(now - datetime.timedelta(minutes=1))
+                .not_valid_after(now + datetime.timedelta(days=1))
+                .add_extension(x509.BasicConstraints(ca=True, path_length=None), True)
+                .sign(issuer_key, hashes.SHA256())
+            )
             builder = (
                 x509.CertificateBuilder()
                 .subject_name(name)
-                .issuer_name(name)
+                .issuer_name(issuer_name)
                 .public_key(key.public_key())
                 .serial_number(x509.random_serial_number())
                 .not_valid_before(now - datetime.timedelta(minutes=1))
@@ -53,7 +66,7 @@ class LeafValidationTest(unittest.TestCase):
             if ca:
                 builder = builder.add_extension(x509.BasicConstraints(ca=True, path_length=None), True)
             (directory / "certificate.pem").write_bytes(
-                builder.sign(key, hashes.SHA256()).public_bytes(serialization.Encoding.PEM)
+                builder.sign(issuer_key, hashes.SHA256()).public_bytes(serialization.Encoding.PEM)
             )
             (directory / "key.pem").write_bytes(
                 key.private_bytes(
@@ -66,7 +79,15 @@ class LeafValidationTest(unittest.TestCase):
                     "hosts": "localhost",
                     "connection": "local",
                     "gather_facts": False,
-                    "vars": {"vault_pki_certificate_common_name": "fixture.example"},
+                    "vars": {
+                        "vault_pki_certificate_common_name": "fixture.example",
+                        "vault_pki_certificate_issuer": {
+                            "content": issuer.public_bytes(serialization.Encoding.PEM).decode()
+                        },
+                        "vault_pki_certificate_readback": {
+                            "json": {"data": {"data": {"certificate": (directory / "certificate.pem").read_text()}}}
+                        },
+                    },
                     "tasks": [
                         {
                             "name": "Inspect real public fixture",
@@ -91,6 +112,14 @@ class LeafValidationTest(unittest.TestCase):
             config = directory / "ansible.cfg"
             config.write_text("[defaults]\n")
             environment = {k: v for k, v in os.environ.items() if k != "ANSIBLE_VAULT_PASSWORD_FILE"}
+            namespace = directory / "collections/ansible_collections/lit"
+            namespace.mkdir(parents=True)
+            (namespace / "supplementary").symlink_to(root, target_is_directory=True)
+            environment["ANSIBLE_COLLECTIONS_PATH"] = (
+                str(directory / "collections")
+                + ":"
+                + environment.get("ANSIBLE_COLLECTIONS_PATH", "/opt/ansible/collections:/usr/share/ansible/collections")
+            )
             result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture
                 [ANSIBLE_PLAYBOOK, "-i", "localhost,", str(path)],
                 capture_output=True,
