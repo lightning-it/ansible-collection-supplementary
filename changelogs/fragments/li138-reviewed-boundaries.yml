@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - Require caller-managed listeners for NGINX host networking and exactly one pinned CA at each application trust boundary.
+  - Validate and materialize the complete independently fetched Vault issuer chain and declare the exact controller crypto dependency.
+  - Reject malformed S3 origins before client construction and pin the executable crypto collection fixture.

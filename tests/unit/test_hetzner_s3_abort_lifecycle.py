@@ -67,6 +67,32 @@ class FakeS3:
 
 
 class HetznerAbortLifecycleTests(unittest.TestCase):
+    def test_malformed_endpoints_are_refused_before_creating_a_client(self):
+        for endpoint in [
+            "https://",
+            "https://user:secret@example.test",
+            "https://example.test/path",
+            "https://example.test?query=1",
+            "https://example.test#fragment",
+            "https://[invalid",
+            "https://example.test:99999",
+            "https://example.test:bad",
+            "https://example.test\n",
+            "http://example.test",
+        ]:
+            with self.subTest(endpoint=endpoint):
+                module = FakeModule()
+                module.params = {**module.params, "endpoint_url": endpoint}
+                client = Mock()
+                with (
+                    patch.object(MODULE, "AnsibleModule", return_value=module),
+                    patch.object(MODULE, "boto3", SimpleNamespace(client=client)),
+                ):
+                    with self.assertRaises(Rejected) as outcome:
+                        MODULE.main()
+                    client.assert_not_called()
+                    self.assertNotIn("secret", str(outcome.exception.result))
+
     def test_insecure_tls_is_rejected_before_creating_a_client(self):
         module = FakeModule()
         module.params = {**module.params, "validate_certs": False}

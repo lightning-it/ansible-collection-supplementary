@@ -354,6 +354,60 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                 ca.fingerprint(hashes.SHA256()),
             )
 
+    def test_applications_refuse_a_second_unreviewed_ca_before_writes(self):
+        ca, _leaf, _key = certificate_fixture()
+        foreign, _leaf, _key = certificate_fixture()
+        pem = ca.public_bytes(serialization.Encoding.PEM).decode()
+        extra = foreign.public_bytes(serialization.Encoding.PEM).decode()
+        for role, prefix, filename in [
+            ("guacamole_deploy", "java", "java_trust.yml"),
+            ("guacamole_deploy", "guacd", "guacd_trust.yml"),
+            ("keycloak_deploy", "trust", "certificate_trust.yml"),
+        ]:
+            for bundle in [pem, pem + extra]:
+                with (
+                    self.subTest(role=role, prefix=prefix, bundle_count=bundle.count("-----BEGIN")),
+                    tempfile.TemporaryDirectory(dir=os.environ["HOME"]) as temporary,
+                ):
+                    directory = Path(temporary)
+                    marker = directory / "write-boundary"
+                    tasks = yaml.safe_load((ROOT / "roles" / role / "tasks" / filename).read_text())[:2]
+                    tasks += [
+                        {"ansible.builtin.copy": {"dest": str(marker), "content": "public fixture", "mode": "0600"}}
+                    ]
+                    source = directory / "test.yml"
+                    source.write_text(
+                        yaml.safe_dump(
+                            [
+                                {
+                                    "hosts": "localhost",
+                                    "gather_facts": False,
+                                    "vars": {
+                                        f"{role}_{prefix}_ca_certificate": bundle,
+                                        f"{role}_{prefix}_ca_sha256": fingerprint(ca),
+                                    },
+                                    "tasks": tasks,
+                                }
+                            ]
+                        )
+                    )
+                    config = directory / "ansible.cfg"
+                    config.write_text("[defaults]\n")
+                    result = subprocess.run(  # noqa: S603 - fixed tool and generated offline fixture
+                        [shutil.which("ansible-playbook"), "-i", "localhost,", "-c", "local", str(source)],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=45,
+                        env={
+                            **os.environ,
+                            "ANSIBLE_CONFIG": str(config),
+                            "ANSIBLE_LOCAL_TEMP": str(directory / "ansible"),
+                        },
+                    )
+                    self.assertEqual(result.returncode == 0, bundle == pem, result.stdout + result.stderr)
+                    self.assertEqual(marker.exists(), bundle == pem)
+
 
 if __name__ == "__main__":
     unittest.main()

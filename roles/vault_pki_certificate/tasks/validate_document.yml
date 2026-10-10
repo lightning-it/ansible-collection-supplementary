@@ -23,7 +23,10 @@
       - vault_pki_certificate_info.valid_at.now
       - >-
         vault_pki_certificate_candidate.certificate
-        | lit.supplementary.vault_pki_direct_issuer_matches(vault_pki_certificate_issuer.content)
+        | lit.supplementary.vault_pki_direct_issuer_matches(vault_pki_certificate_issuer.json.data.certificate)
+      - >-
+        vault_pki_certificate_candidate.ca_chain | default(vault_pki_certificate_issuer.json.data.ca_chain)
+        == vault_pki_certificate_issuer.json.data.ca_chain
       - vault_pki_certificate_info.subject.commonName == vault_pki_certificate_common_name
       - vault_pki_certificate_info.subject_alt_name == ['DNS:' ~ vault_pki_certificate_common_name]
       - >-

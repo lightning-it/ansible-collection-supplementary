@@ -73,7 +73,12 @@ class LeafValidationTest(unittest.TestCase):
                     "vars": {
                         "vault_pki_certificate_common_name": "fixture.example",
                         "vault_pki_certificate_issuer": {
-                            "content": issuer.public_bytes(serialization.Encoding.PEM).decode()
+                            "json": {
+                                "data": {
+                                    "certificate": issuer.public_bytes(serialization.Encoding.PEM).decode(),
+                                    "ca_chain": [issuer.public_bytes(serialization.Encoding.PEM).decode()],
+                                }
+                            }
                         },
                         "vault_pki_certificate_candidate": {"certificate": (directory / "certificate.pem").read_text()},
                     },

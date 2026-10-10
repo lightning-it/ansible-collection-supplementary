@@ -30,7 +30,12 @@ class HostNetworkTests(unittest.TestCase):
 
     def test_explicit_host_network_has_no_publication_or_bridge(self):
         values = self.values()
-        values.update(nginx_deploy_host_network=True, nginx_deploy_port_bindings=[], nginx_deploy_networks=[])
+        values.update(
+            nginx_deploy_host_network=True,
+            nginx_deploy_port_bindings=[],
+            nginx_deploy_networks=[],
+            nginx_deploy_manage_default_site=False,
+        )
         self.assertTrue(self.accepts(values))
         pod = yaml.safe_load(Templar(DataLoader(), values).template((ROOT / "templates/nginx-pod.yml.j2").read_text()))
         self.assertIs(pod["spec"]["hostNetwork"], True)
@@ -42,7 +47,12 @@ class HostNetworkTests(unittest.TestCase):
             {"nginx_deploy_networks": ["extra.network"]},
         ):
             values = self.values()
-            values.update(nginx_deploy_host_network=True, nginx_deploy_port_bindings=[], nginx_deploy_networks=[])
+            values.update(
+                nginx_deploy_host_network=True,
+                nginx_deploy_port_bindings=[],
+                nginx_deploy_networks=[],
+                nginx_deploy_manage_default_site=False,
+            )
             values.update(change)
             self.assertFalse(self.accepts(values))
 
@@ -52,3 +62,8 @@ class HostNetworkTests(unittest.TestCase):
         pod = yaml.safe_load(Templar(DataLoader(), values).template((ROOT / "templates/nginx-pod.yml.j2").read_text()))
         self.assertNotIn("hostNetwork", pod["spec"])
         self.assertGreater(len(pod["spec"]["containers"][0]["ports"]), 0)
+
+    def test_host_network_cannot_render_a_wildcard_default_listener(self):
+        values = self.values()
+        values.update(nginx_deploy_host_network=True, nginx_deploy_port_bindings=[], nginx_deploy_networks=[])
+        self.assertFalse(self.accepts(values))

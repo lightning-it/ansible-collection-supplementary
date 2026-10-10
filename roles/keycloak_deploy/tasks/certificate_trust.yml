@@ -9,6 +9,8 @@
 - name: Require the exact reviewed Keycloak CA fingerprint
   ansible.builtin.assert:
     that:
+      - keycloak_deploy_trust_ca_certificate | regex_findall('-----BEGIN CERTIFICATE-----') | length == 1
+      - keycloak_deploy_trust_ca_certificate | regex_findall('-----END CERTIFICATE-----') | length == 1
       - keycloak_deploy_trust_ca_info.fingerprints.sha256 == keycloak_deploy_trust_ca_sha256
       - "'CA:TRUE' in keycloak_deploy_trust_ca_info.basic_constraints"
       - not keycloak_deploy_trust_ca_info.expired

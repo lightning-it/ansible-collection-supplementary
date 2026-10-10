@@ -48,6 +48,8 @@
       - nginx_deploy_validate_certs is boolean
       - nginx_deploy_port_bindings is sequence
       - nginx_deploy_host_network is boolean
+      - nginx_deploy_manage_default_site is boolean
+      - not nginx_deploy_host_network or not nginx_deploy_manage_default_site
       - >-
         (nginx_deploy_host_network and nginx_deploy_port_bindings | length == 0)
         or (not nginx_deploy_host_network and nginx_deploy_port_bindings | length > 0)

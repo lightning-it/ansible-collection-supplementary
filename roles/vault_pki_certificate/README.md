@@ -39,4 +39,13 @@ MIT, as declared by the collection.
 
 Lightning IT
 
-The controller requires cryptography >= 40. The exact issuer PEM endpoint derived from the declared issue path is independently read through verified Vault HTTPS, including in check mode. Existing and final custody must pass a direct certificate signature check against that issuer before use. The materialized chain uses that independently fetched issuer, not the untrusted KV chain. Its API path must be readable by the controller. No issuer key or service secret is logged.
+The controller-side execution dependency `cryptography==50.0.1` is declared in
+`meta/execution-environment.yml` for Ansible Builder. The exact issuer JSON endpoint
+derived from the declared issue path is independently read through verified Vault
+HTTPS, including in check mode. Every issuer-to-root chain member must be current,
+a signing CA, correctly ordered and signature-bound with valid path-length constraints.
+Missing parents, duplicate certificates and unbound chains fail before issuance or
+custody writes. Existing and final leaves must bind directly to that issuer; present
+custody chain metadata must match the authenticated chain. The materialized service
+file contains the leaf and this complete authenticated chain so clients need only
+root trust. No issuer key or service secret is logged.

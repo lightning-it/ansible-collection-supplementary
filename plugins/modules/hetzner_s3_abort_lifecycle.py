@@ -72,6 +72,8 @@ rules_after:
   returned: always
 """
 
+from urllib.parse import urlsplit
+
 from ansible.module_utils.basic import AnsibleModule
 
 try:
@@ -136,8 +138,25 @@ def main():
         module.fail_json(msg="TLS certificate validation is required")
     if boto3 is None:
         module.fail_json(msg="boto3 and botocore are required in the controller runtime")
-    if p["abort_days"] < 1 or not p["endpoint_url"].startswith("https://"):
-        module.fail_json(msg="Require a positive abort period and HTTPS endpoint")
+    try:
+        endpoint = urlsplit(p["endpoint_url"])
+        valid_endpoint = (
+            endpoint.scheme == "https"
+            and bool(endpoint.hostname)
+            and endpoint.username is None
+            and endpoint.password is None
+            and not endpoint.path
+            and not endpoint.query
+            and not endpoint.fragment
+            and (endpoint.port is None or 1 <= endpoint.port <= 65535)
+            and not any(character.isspace() for character in p["endpoint_url"])
+        )
+    except ValueError:
+        valid_endpoint = False
+    if p["abort_days"] < 1 or not valid_endpoint:
+        module.fail_json(
+            msg="Require a positive abort period and an HTTPS origin without credentials, path, query or fragment"
+        )
 
     try:
         client = boto3.client(

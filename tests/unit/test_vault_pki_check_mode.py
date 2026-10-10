@@ -1,5 +1,6 @@
 """Real HTTPS previews may read custody but must never issue or write."""
 
+import grp
 import importlib.util
 import json
 import os
@@ -40,8 +41,21 @@ class VaultPkiCheckModeTests(unittest.TestCase):
         bad_issuance=None,
         stored_expansion=None,
         authorization=True,
+        nested_chain=False,
+        incomplete_chain=False,
     ):
         ca, certificate, key = certificate_fixture()
+        ca_chain = [ca.public_bytes(serialization.Encoding.PEM).decode()]
+        if nested_chain:
+            chain_spec = importlib.util.spec_from_file_location(
+                "chain_fixture", Path(__file__).with_name("test_vault_pki_issuer.py")
+            )
+            chain_module = importlib.util.module_from_spec(chain_spec)
+            chain_spec.loader.exec_module(chain_module)
+            ca, certificate, key, ca_chain = chain_module.chain_fixture()
+        server_ca_chain = list(ca_chain)
+        if incomplete_chain:
+            ca_chain = [ca_chain[0], ca_chain[-1]]
         pem = certificate.public_bytes(serialization.Encoding.PEM).decode()
         protected = key.private_bytes(
             serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
@@ -92,10 +106,11 @@ class VaultPkiCheckModeTests(unittest.TestCase):
 
             def do_GET(self):
                 requests.append(("GET", self.path))
-                if self.path == "/v1/pki/issuer/existing/pem":
+                if self.path == "/v1/pki/issuer/existing/json":
                     self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
                     self.end_headers()
-                    self.wfile.write(ca.public_bytes(serialization.Encoding.PEM))
+                    self.wfile.write(json.dumps({"data": {"certificate": ca_chain[0], "ca_chain": ca_chain}}).encode())
                     return
                 self.send_response(200 if existing else 404)
                 self.send_header("Content-Type", "application/json")
@@ -122,7 +137,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                             "data": {
                                 "certificate": issued_pem,
                                 "private_key": issued_key,
-                                "ca_chain": [ca.public_bytes(serialization.Encoding.PEM).decode()],
+                                "ca_chain": ca_chain,
                                 "serial_number": "fixture",
                             }
                         }
@@ -155,7 +170,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
             ca_path.write_bytes(ca.public_bytes(serialization.Encoding.PEM))
             cert_path = directory / "server.pem"
             key_path = directory / "server.key"
-            cert_path.write_text(pem)
+            cert_path.write_text(pem + "\n" + "\n".join(server_ca_chain))
             key_path.write_text(protected)
             key_path.chmod(0o600)
             server = HTTPServer(("127.0.0.1", 0), Handler)
@@ -201,6 +216,30 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 del values["vault_pki_leaf_role_definition"][omitted]
             if expansion:
                 values["vault_pki_leaf_role_definition"].update(expansion)
+            task_path = ROOT / "roles" / role / "tasks/main.yml"
+            if apply and role == "vault_pki_certificate":
+                # Keep actual issuance/validation/copy behavior while adapting only
+                # fixture ownership to the unprivileged CI account, never sudo.
+                fixture_role = directory / "role-tasks"
+                fixture_role.mkdir()
+                for filename in ("assert.yml", "validate_document.yml"):
+                    shutil.copyfile(task_path.with_name(filename), fixture_role / filename)
+                fixture_tasks = yaml.safe_load(task_path.read_text())
+
+                def adapt_fixture_ownership(tasks):
+                    for task in tasks:
+                        if "ansible.builtin.copy" in task:
+                            self.assertEqual(task["ansible.builtin.copy"]["owner"], "root")
+                            task["ansible.builtin.copy"]["owner"] = str(os.geteuid())
+                            if task["ansible.builtin.copy"]["group"] == "root":
+                                task["ansible.builtin.copy"]["group"] = str(os.getegid())
+                        for branch in ("block", "always", "rescue"):
+                            adapt_fixture_ownership(task.get(branch, []))
+
+                adapt_fixture_ownership(fixture_tasks)
+                task_path = fixture_role / "main.yml"
+                task_path.write_text(yaml.safe_dump(fixture_tasks))
+                values["vault_pki_certificate_key_group"] = grp.getgrgid(os.getegid()).gr_name
             play = [
                 {
                     "hosts": "localhost",
@@ -208,7 +247,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                     "vars": {**values, "role_fixture": role},
                     "tasks": [
                         {
-                            "block": [{"ansible.builtin.import_tasks": str(ROOT / "roles" / role / "tasks/main.yml")}],
+                            "block": [{"ansible.builtin.import_tasks": str(task_path)}],
                             "always": [
                                 {
                                     "ansible.builtin.assert": {
@@ -266,6 +305,25 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 server.server_close()
                 thread.join()
             self.assertNotIn("OFFLINE_PKI_CANARY", result.stdout + result.stderr)
+            if nested_chain and apply and not incomplete_chain:
+                materialized = directory / "materialized.pem"
+                self.assertEqual(materialized.read_text().count("-----BEGIN CERTIFICATE-----"), 4)
+                verification = subprocess.run(  # noqa: S603 - fixed OpenSSL and generated public fixture
+                    [
+                        shutil.which("openssl"),
+                        "verify",
+                        "-CAfile",
+                        str(ca_path),
+                        "-untrusted",
+                        str(materialized),
+                        str(materialized),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(verification.returncode, 0, verification.stderr)
+
             if (
                 foreign_issuer
                 or not bare_domains
@@ -276,12 +334,15 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 or bad_issuance
                 or stored_expansion
                 or authorization is not True
+                or incomplete_chain
             ):
                 self.assertNotEqual(result.returncode, 0)
             else:
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertRegex(result.stdout, r"changed=1(?:\s|$)")
-            if not bare_domains or expansion or omitted or not isinstance(authorization, bool):
+                self.assertRegex(result.stdout, r"changed=[1-9][0-9]*(?:\s|$)" if apply else r"changed=1(?:\s|$)")
+            if incomplete_chain:
+                self.assertEqual(requests, [("GET", "/v1/pki/issuer/existing/json")])
+            elif not bare_domains or expansion or omitted or not isinstance(authorization, bool):
                 self.assertEqual(requests, [])
             elif stored_expansion or authorization is False:
                 self.assertEqual([method for method, _path in requests], ["GET"])
@@ -375,6 +436,12 @@ class VaultPkiCheckModeTests(unittest.TestCase):
             {"allowed_domains_template": True},
         ):
             self.exercise("vault_pki_leaf_role", True, expansion=expansion)
+
+    def test_complete_nested_chain_materializes_for_root_only_clients(self):
+        self.exercise("vault_pki_certificate", existing=False, apply=True, nested_chain=True)
+
+    def test_missing_parent_ca_is_refused_before_custody_or_issuance(self):
+        self.exercise("vault_pki_certificate", existing=False, apply=True, nested_chain=True, incomplete_chain=True)
 
 
 if __name__ == "__main__":

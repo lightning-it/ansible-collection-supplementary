@@ -9,7 +9,7 @@
       ansible.builtin.uri:
         url: >-
           {{ vault_pki_certificate_api_url ~ '/v1/'
-          ~ vault_pki_certificate_issue_path.split('/issue/')[0] ~ '/pem' }}
+          ~ vault_pki_certificate_issue_path.split('/issue/')[0] ~ '/json' }}
         validate_certs: true
         ca_path: "{{ vault_pki_certificate_ca_path }}"
         use_netrc: false
@@ -21,6 +21,14 @@
       delegate_to: localhost
       become: false
       changed_when: false
+
+    - name: Require a complete valid independently authenticated issuer chain
+      ansible.builtin.assert:
+        that:
+          - >-
+            vault_pki_certificate_issuer.json.data.ca_chain
+            | lit.supplementary.vault_pki_chain_is_valid(vault_pki_certificate_issuer.json.data.certificate)
+        quiet: true
 
     - name: Read existing server certificate custody
       ansible.builtin.uri:
@@ -54,7 +62,7 @@
         that:
           - >-
             vault_pki_certificate_existing.json.data.data.certificate
-            | lit.supplementary.vault_pki_direct_issuer_matches(vault_pki_certificate_issuer.content)
+            | lit.supplementary.vault_pki_direct_issuer_matches(vault_pki_certificate_issuer.json.data.certificate)
         quiet: true
       when: vault_pki_certificate_existing.status == 200
       no_log: true
@@ -201,10 +209,11 @@
 
         - name: Materialize the Vault-issued service certificate chain
           ansible.builtin.copy:
-            content: >-
+            content: |
               {{ vault_pki_certificate_readback.json.data.data.certificate | trim }}
-
-              {{ vault_pki_certificate_issuer.content | trim }}
+              {% for authority in vault_pki_certificate_issuer.json.data.ca_chain %}
+              {{ authority | trim }}
+              {% endfor %}
             dest: "{{ vault_pki_certificate_cert_path }}"
             owner: root
             group: root
