@@ -23,7 +23,7 @@ class LeafValidationTest(unittest.TestCase):
     def exercise(self, ca):
         root = Path(__file__).resolve().parents[2]
         tasks = yaml.safe_load((root / "roles/vault_pki_certificate/tasks/main.yml").read_text())
-        tasks = tasks[0]["block"]
+        tasks = tasks[1]["block"]
         predicates = [
             t
             for t in next(

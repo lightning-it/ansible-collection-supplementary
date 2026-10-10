@@ -1,10 +1,10 @@
 ---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
 - name: Resolve certificate custody with unconditional RAM cleanup
   block:
-    - name: Prechecks
-      ansible.builtin.import_tasks: assert.yml
-      tags: always
-
     - name: Independently fetch the exact declared public Vault issuer
       ansible.builtin.uri:
         url: >-
