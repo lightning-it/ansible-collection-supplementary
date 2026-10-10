@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import http.server
 import hashlib
+import http.server
 import os
 import shutil
 import subprocess
@@ -189,7 +189,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
                     ),
                     encoding="utf-8",
                 )
-                result = subprocess.run(  # noqa: S603
+                result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                     [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                     env={
                         **os.environ,
@@ -768,7 +768,7 @@ esac
                 "PATH": f"{fake_bin}:{os.environ['PATH']}",
             }
             legacy_unit.chmod(0o666)
-            insecure_result = subprocess.run(  # noqa: S603
+            insecure_result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                 [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                 env=environment,
                 capture_output=True,
@@ -784,7 +784,7 @@ esac
             legacy_unit.chmod(0o644)
             log.unlink(missing_ok=True)
             try:
-                result = subprocess.run(  # noqa: S603
+                result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                     [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                     env=environment,
                     capture_output=True,
@@ -855,7 +855,7 @@ esac
             (state / f"{native_state}.enabled").write_text("generated", encoding="utf-8")
             log.unlink(missing_ok=True)
 
-            restore_failure_result = subprocess.run(  # noqa: S603
+            restore_failure_result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                 [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                 env=environment,
                 capture_output=True,
@@ -931,7 +931,7 @@ esac
                     ),
                     encoding="utf-8",
                 )
-                result = subprocess.run(  # noqa: S603
+                result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                     [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                     env={
                         **os.environ,
@@ -992,7 +992,7 @@ esac
                 f"[defaults]\nremote_tmp={temporary_path / 'remote'}\n",
                 encoding="utf-8",
             )
-            result = subprocess.run(  # noqa: S603
+            result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                 [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                 env={
                     **os.environ,
@@ -1079,7 +1079,7 @@ esac
                 ),
                 encoding="utf-8",
             )
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture
                 [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                 capture_output=True,
                 text=True,
@@ -1128,7 +1128,7 @@ esac
             )
             config = temporary_path / "ansible.cfg"
             config.write_text("[defaults]\nstdout_callback=default\n", encoding="utf-8")
-            result = subprocess.run(  # noqa: S603
+            result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                 [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                 env={
                     **os.environ,
@@ -1213,7 +1213,7 @@ esac
             )
             config = temporary_path / "ansible.cfg"
             config.write_text("[defaults]\nstdout_callback=default\n", encoding="utf-8")
-            result = subprocess.run(  # noqa: S603
+            result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                 [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                 env={
                     **os.environ,

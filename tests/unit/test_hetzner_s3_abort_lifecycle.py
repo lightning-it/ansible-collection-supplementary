@@ -6,10 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-MODULE_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "plugins/modules/hetzner_s3_abort_lifecycle.py"
-)
+MODULE_PATH = Path(__file__).resolve().parents[2] / "plugins/modules/hetzner_s3_abort_lifecycle.py"
 SPEC = importlib.util.spec_from_file_location("hetzner_s3_abort_lifecycle", MODULE_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
@@ -74,10 +71,10 @@ class HetznerAbortLifecycleTests(unittest.TestCase):
         client = FakeS3(rules)
         module = FakeModule()
         module.check_mode = check_mode
-        with patch.object(MODULE, "AnsibleModule", return_value=module), patch.object(
-            MODULE, "boto3", SimpleNamespace(client=lambda *args, **kwargs: client)
-        ), patch.object(
-            MODULE, "Config", lambda **kwargs: kwargs, create=True
+        with (
+            patch.object(MODULE, "AnsibleModule", return_value=module),
+            patch.object(MODULE, "boto3", SimpleNamespace(client=lambda *args, **kwargs: client)),
+            patch.object(MODULE, "Config", lambda **kwargs: kwargs, create=True),
         ):
             try:
                 MODULE.main()

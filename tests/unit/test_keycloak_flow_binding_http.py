@@ -55,25 +55,45 @@ class FlowBindingHTTPTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory(prefix="flow-binding-http-") as temporary:
                 path = Path(temporary)
-                play = [{
-                    "hosts": "localhost", "gather_facts": False,
-                    "vars": {
-                        "keycloak_cac_url": "http://127.0.0.1:" + str(server.server_port),
-                        "keycloak_cac_realm": "master", "keycloak_cac_admin_user": "admin",
-                        "keycloak_cac_admin_password": "BROKER_CONTRACT_CANARY_SECRET",
-                        "keycloak_cac_validate_certs": True, "keycloak_cac_request_timeout": 5,
-                        "keycloak_cac_realm_flow_bindings": [{"realm": "fixture", "browser_flow": "target"}],
-                    },
-                    "tasks": [{"ansible.builtin.import_tasks": str(ROOT / "roles/keycloak_cac/tasks/cac_21_realm_flow_bindings.yml")}],
-                }]
+                play = [
+                    {
+                        "hosts": "localhost",
+                        "gather_facts": False,
+                        "vars": {
+                            "keycloak_cac_url": "http://127.0.0.1:" + str(server.server_port),
+                            "keycloak_cac_realm": "master",
+                            "keycloak_cac_admin_user": "admin",
+                            "keycloak_cac_admin_password": "BROKER_CONTRACT_CANARY_SECRET",
+                            "keycloak_cac_validate_certs": True,
+                            "keycloak_cac_request_timeout": 5,
+                            "keycloak_cac_realm_flow_bindings": [{"realm": "fixture", "browser_flow": "target"}],
+                        },
+                        "tasks": [
+                            {
+                                "ansible.builtin.import_tasks": str(
+                                    ROOT / "roles/keycloak_cac/tasks/cac_21_realm_flow_bindings.yml"
+                                )
+                            }
+                        ],
+                    }
+                ]
                 (path / "play.yml").write_text(yaml.safe_dump(play))
                 (path / "ansible.cfg").write_text("[defaults]\n")
                 command = ["ansible-playbook", "-i", "localhost,", "-c", "local", str(path / "play.yml")]
                 if check:
                     command.append("--check")
-                result = subprocess.run(command, text=True, capture_output=True, timeout=45,
-                                        env={**os.environ, "ANSIBLE_CONFIG": str(path / "ansible.cfg"),
-                                             "ANSIBLE_LOCAL_TEMP": str(path / "ansible"), "ANSIBLE_NOCOLOR": "1"})
+                result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture
+                    command,
+                    text=True,
+                    capture_output=True,
+                    timeout=45,
+                    env={
+                        **os.environ,
+                        "ANSIBLE_CONFIG": str(path / "ansible.cfg"),
+                        "ANSIBLE_LOCAL_TEMP": str(path / "ansible"),
+                        "ANSIBLE_NOCOLOR": "1",
+                    },
+                )
             self.assertNotIn("BROKER_CONTRACT_CANARY_SECRET", result.stdout + result.stderr)
             self.assertEqual(state["enabled"], False)
             self.assertEqual(state["unrelated"], "keep-me")

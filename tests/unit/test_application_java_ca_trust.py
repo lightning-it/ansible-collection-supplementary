@@ -34,9 +34,7 @@ def certificate_fixture(hostname="localhost"):
         .not_valid_before(now - datetime.timedelta(minutes=1))
         .not_valid_after(now + datetime.timedelta(days=1))
     )
-    ca = builder.add_extension(
-        x509.BasicConstraints(ca=True, path_length=0), critical=True
-    ).sign(key, hashes.SHA256())
+    ca = builder.add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True).sign(key, hashes.SHA256())
     leaf_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     leaf = (
         x509.CertificateBuilder()
@@ -47,9 +45,7 @@ def certificate_fixture(hostname="localhost"):
         .public_key(leaf_key.public_key())
         .serial_number(x509.random_serial_number())
         .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
-        .add_extension(
-            x509.SubjectAlternativeName([x509.DNSName(hostname)]), critical=False
-        )
+        .add_extension(x509.SubjectAlternativeName([x509.DNSName(hostname)]), critical=False)
         .sign(key, hashes.SHA256())
     )
     return ca, leaf, leaf_key
@@ -67,16 +63,8 @@ class ApplicationJavaTrustTests(unittest.TestCase):
         values.update(extra)
         environment = Environment(undefined=StrictUndefined, autoescape=False)  # noqa: S701 - YAML, not HTML
         environment.filters.update(FilterModule().filters())
-        template = (
-            "guacamole-pod.yml.j2"
-            if role == "guacamole_deploy"
-            else "keycloak-pod.yml.j2"
-        )
-        return yaml.safe_load(
-            environment.from_string(
-                (location / "templates" / template).read_text()
-            ).render(values)
-        )
+        template = "guacamole-pod.yml.j2" if role == "guacamole_deploy" else "keycloak-pod.yml.j2"
+        return yaml.safe_load(environment.from_string((location / "templates" / template).read_text()).render(values))
 
     def test_guacamole_trust_preserves_proxy_and_default_off(self):
         base = {
@@ -89,24 +77,14 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                 "guacamole_deploy",
                 {**base, "guacamole_deploy_java_ca_certificate": certificate},
             )
-            app = next(
-                item
-                for item in pod["spec"]["containers"]
-                if item["name"] == "guacamole"
-            )
+            app = next(item for item in pod["spec"]["containers"] if item["name"] == "guacamole")
             values = {item["name"]: item["value"] for item in app["env"]}
             self.assertIn("-Dhttps.proxyHost=10.20.30.1", values["JAVA_TOOL_OPTIONS"])
             self.assertNotIn("OPENID_ENABLED", values)
-            init = [
-                item
-                for item in pod["spec"]["initContainers"]
-                if item["name"] == "java-trust"
-            ]
+            init = [item for item in pod["spec"]["initContainers"] if item["name"] == "java-trust"]
             if certificate:
                 self.assertEqual(len(init), 1)
-                self.assertIn(
-                    'cp "$JAVA_HOME/lib/security/cacerts"', init[0]["args"][0]
-                )
+                self.assertIn('cp "$JAVA_HOME/lib/security/cacerts"', init[0]["args"][0])
                 self.assertIn(
                     "-Djavax.net.ssl.trustStore=/etc/guacamole-trust/cacerts",
                     values["JAVA_TOOL_OPTIONS"],
@@ -114,9 +92,7 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                 self.assertTrue(app["volumeMounts"][0]["readOnly"])
             else:
                 self.assertEqual(init, [])
-                self.assertNotIn(
-                    "javax.net.ssl.trustStore", values["JAVA_TOOL_OPTIONS"]
-                )
+                self.assertNotIn("javax.net.ssl.trustStore", values["JAVA_TOOL_OPTIONS"])
 
     def test_keycloak_public_ca_is_readonly_and_default_off(self):
         base = {
@@ -136,11 +112,7 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                     "/opt/keycloak/extra-trust/issuer-ca.pem",
                 )
                 self.assertTrue(
-                    next(
-                        item
-                        for item in app["volumeMounts"]
-                        if item["name"] == "keycloak-trust"
-                    )["readOnly"]
+                    next(item for item in app["volumeMounts"] if item["name"] == "keycloak-trust")["readOnly"]
                 )
             else:
                 self.assertNotIn("KC_TRUSTSTORE_PATHS", values)
@@ -156,15 +128,9 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                 directory = Path(temporary)
                 (directory / "java-trust").mkdir()
                 base_var = (
-                    "guacamole_deploy_base_dir"
-                    if role == "guacamole_deploy"
-                    else "keycloak_deploy_host_data_dir"
+                    "guacamole_deploy_base_dir" if role == "guacamole_deploy" else "keycloak_deploy_host_data_dir"
                 )
-                base_value = (
-                    str(directory)
-                    if role == "guacamole_deploy"
-                    else str(directory / "data")
-                )
+                base_value = str(directory) if role == "guacamole_deploy" else str(directory / "data")
                 for matched in (True, False):
                     play = [
                         {
@@ -173,16 +139,10 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                             "vars": {
                                 base_var: base_value,
                                 f"{role}_{prefix}_ca_certificate": pem,
-                                f"{role}_{prefix}_ca_sha256": fingerprint(ca)
-                                if matched
-                                else ":".join(["00"] * 32),
+                                f"{role}_{prefix}_ca_sha256": fingerprint(ca) if matched else ":".join(["00"] * 32),
                             },
                             "tasks": [
-                                {
-                                    "ansible.builtin.import_tasks": str(
-                                        ROOT / "roles" / role / "tasks" / filename
-                                    )
-                                }
+                                {"ansible.builtin.import_tasks": str(ROOT / "roles" / role / "tasks" / filename)}
                             ],
                         }
                     ]
@@ -212,24 +172,18 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                         check=False,
                     )
                     if matched:
-                        self.assertEqual(
-                            result.returncode, 0, result.stdout + result.stderr
-                        )
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                     else:
                         self.assertNotEqual(result.returncode, 0)
                         self.assertIn("exact unexpired reviewed CA", result.stdout)
                     self.assertFalse((directory / "java-trust/issuer-ca.pem").exists())
 
     def test_real_init_command_preserves_stock_java_trust_and_adds_only_pinned_ca(self):
-        self.assertIsNotNone(
-            shutil.which("keytool"), "Pinned Devtools keytool required"
-        )
+        self.assertIsNotNone(shutil.which("keytool"), "Pinned Devtools keytool required")
         ca, _leaf, _key = certificate_fixture()
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
-            (directory / "issuer-ca.pem").write_bytes(
-                ca.public_bytes(serialization.Encoding.PEM)
-            )
+            (directory / "issuer-ca.pem").write_bytes(ca.public_bytes(serialization.Encoding.PEM))
             pod = self.render(
                 "guacamole_deploy",
                 {
@@ -237,11 +191,7 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                     "guacamole_deploy_java_ca_certificate": "PUBLIC_CA_FIXTURE",
                 },
             )
-            init = next(
-                item
-                for item in pod["spec"]["initContainers"]
-                if item["name"] == "java-trust"
-            )
+            init = next(item for item in pod["spec"]["initContainers"] if item["name"] == "java-trust")
             command = init["args"][0].replace("/trust/", str(directory) + "/")
             keytool = Path(shutil.which("keytool")).resolve()
             java_home = keytool.parent.parent
@@ -275,20 +225,10 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                 timeout=15,
                 check=True,
             ).stdout
-            baseline_aliases = {
-                line.split(",", 1)[0]
-                for line in baseline.splitlines()
-                if "trustedCertEntry" in line
-            }
-            after_aliases = {
-                line.split(",", 1)[0]
-                for line in after.splitlines()
-                if "trustedCertEntry" in line
-            }
+            baseline_aliases = {line.split(",", 1)[0] for line in baseline.splitlines() if "trustedCertEntry" in line}
+            after_aliases = {line.split(",", 1)[0] for line in after.splitlines() if "trustedCertEntry" in line}
             self.assertGreater(len(baseline_aliases), 50)
-            self.assertEqual(
-                after_aliases - baseline_aliases, {"guacamole-reviewed-ca"}
-            )
+            self.assertEqual(after_aliases - baseline_aliases, {"guacamole-reviewed-ca"})
             self.assertTrue(baseline_aliases.issubset(after_aliases))
             pinned = subprocess.run(  # noqa: S603 - trusted fixture commands and fixed tool arguments
                 [
