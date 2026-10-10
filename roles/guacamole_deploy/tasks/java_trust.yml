@@ -2,6 +2,8 @@
 - name: Inspect the supplied Guacamole public CA
   community.crypto.x509_certificate_info:
     content: "{{ guacamole_deploy_java_ca_certificate }}"
+    valid_at:
+      now: "+0s"
   register: guacamole_deploy_java_ca_info
 
 - name: Require the exact reviewed Guacamole CA fingerprint
@@ -10,6 +12,7 @@
       - guacamole_deploy_java_ca_info.fingerprints.sha256 == guacamole_deploy_java_ca_sha256
       - "'CA:TRUE' in guacamole_deploy_java_ca_info.basic_constraints"
       - not guacamole_deploy_java_ca_info.expired
+      - guacamole_deploy_java_ca_info.valid_at.now
     fail_msg: Guacamole Java trust requires the exact unexpired reviewed CA certificate.
     quiet: true
 

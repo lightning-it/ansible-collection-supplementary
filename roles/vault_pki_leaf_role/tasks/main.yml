@@ -29,6 +29,8 @@
   ansible.builtin.assert:
     that:
       - vault_pki_leaf_role_current.json.data.allowed_other_sans | default([]) | length == 0
+      - vault_pki_leaf_role_current.json.data.allowed_serial_numbers | default([]) | length == 0
+      - vault_pki_leaf_role_current.json.data.allowed_user_ids | default([]) | length == 0
       - vault_pki_leaf_role_current.json.data.allowed_uri_sans | default([]) | length == 0
       - not vault_pki_leaf_role_current.json.data.allow_uri_sans_template | default(false) | bool
       - not vault_pki_leaf_role_current.json.data.allowed_domains_template | default(false) | bool

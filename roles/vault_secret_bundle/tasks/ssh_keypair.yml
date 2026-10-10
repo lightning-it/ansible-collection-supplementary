@@ -8,6 +8,13 @@
       - vault_secret_bundle_keypair.public_field is match('^[A-Za-z][A-Za-z0-9_]*$')
       - vault_secret_bundle_keypair.private_field != vault_secret_bundle_keypair.public_field
       - >-
+        (vault_secret_bundle_keypair.private_field not in vault_secret_bundle_effective
+        and vault_secret_bundle_keypair.public_field not in vault_secret_bundle_effective)
+        or (vault_secret_bundle_effective.get(vault_secret_bundle_keypair.private_field) is string
+        and vault_secret_bundle_effective.get(vault_secret_bundle_keypair.public_field) is string
+        and vault_secret_bundle_effective.get(vault_secret_bundle_keypair.private_field) | length > 0
+        and vault_secret_bundle_effective.get(vault_secret_bundle_keypair.public_field) | length > 0)
+      - >-
         (vault_secret_bundle_effective.get(vault_secret_bundle_keypair.private_field, '') | length > 0)
         == (vault_secret_bundle_effective.get(vault_secret_bundle_keypair.public_field, '') | length > 0)
       - >-

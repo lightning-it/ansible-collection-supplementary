@@ -2,6 +2,8 @@
 - name: Inspect the supplied guacd public CA
   community.crypto.x509_certificate_info:
     content: "{{ guacamole_deploy_guacd_ca_certificate }}"
+    valid_at:
+      now: "+0s"
   register: guacamole_deploy_guacd_ca_info
 
 - name: Require the exact reviewed guacd CA fingerprint
@@ -10,6 +12,7 @@
       - guacamole_deploy_guacd_ca_info.fingerprints.sha256 == guacamole_deploy_guacd_ca_sha256
       - "'CA:TRUE' in guacamole_deploy_guacd_ca_info.basic_constraints"
       - not guacamole_deploy_guacd_ca_info.expired
+      - guacamole_deploy_guacd_ca_info.valid_at.now
     quiet: true
 
 - name: Prepare the guacd trust directory

@@ -21,7 +21,7 @@ from jinja2 import Environment, StrictUndefined
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def certificate_fixture(hostname="localhost"):
+def certificate_fixture(hostname="localhost", future_ca=False):
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Offline regression CA")])
     now = datetime.datetime.now(datetime.UTC)
@@ -31,8 +31,8 @@ def certificate_fixture(hostname="localhost"):
         .issuer_name(name)
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(now - datetime.timedelta(minutes=1))
-        .not_valid_after(now + datetime.timedelta(days=1))
+        .not_valid_before(now + datetime.timedelta(days=1) if future_ca else now - datetime.timedelta(minutes=1))
+        .not_valid_after(now + datetime.timedelta(days=2))
     )
     ca = builder.add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True).sign(key, hashes.SHA256())
     leaf_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -223,6 +223,55 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                         self.assertNotEqual(result.returncode, 0)
                         self.assertIn("exact unexpired reviewed CA", result.stdout)
                     self.assertFalse((directory / "java-trust/issuer-ca.pem").exists())
+
+    def test_all_application_trust_boundaries_refuse_future_pinned_ca_before_writes(self):
+        for role, prefix, filename in (
+            ("guacamole_deploy", "java", "java_trust.yml"),
+            ("guacamole_deploy", "guacd", "guacd_trust.yml"),
+            ("keycloak_deploy", "trust", "certificate_trust.yml"),
+        ):
+            for future in (False, True):
+                with self.subTest(role=role, prefix=prefix, future=future), tempfile.TemporaryDirectory() as temporary:
+                    directory = Path(temporary)
+                    ca, _leaf, _key = certificate_fixture(future_ca=future)
+                    pem = ca.public_bytes(serialization.Encoding.PEM).decode()
+                    marker = directory / "write-boundary"
+                    tasks = yaml.safe_load((ROOT / "roles" / role / "tasks" / filename).read_text())[:2]
+                    tasks += [
+                        {"ansible.builtin.copy": {"dest": str(marker), "content": "public fixture", "mode": "0600"}}
+                    ]
+                    source = directory / "test.yml"
+                    source.write_text(
+                        yaml.safe_dump(
+                            [
+                                {
+                                    "hosts": "localhost",
+                                    "gather_facts": False,
+                                    "vars": {
+                                        f"{role}_{prefix}_ca_certificate": pem,
+                                        f"{role}_{prefix}_ca_sha256": fingerprint(ca),
+                                    },
+                                    "tasks": tasks,
+                                }
+                            ]
+                        )
+                    )
+                    config = directory / "ansible.cfg"
+                    config.write_text("[defaults]\n")
+                    result = subprocess.run(  # noqa: S603 - fixed local Ansible command and controlled offline fixture
+                        [shutil.which("ansible-playbook"), "-i", "localhost,", "-c", "local", str(source)],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=45,
+                        env={
+                            **os.environ,
+                            "ANSIBLE_CONFIG": str(config),
+                            "ANSIBLE_LOCAL_TEMP": str(directory / "ansible"),
+                        },
+                    )
+                    self.assertEqual(result.returncode == 0, not future, result.stdout + result.stderr)
+                    self.assertEqual(marker.exists(), not future)
 
     def test_real_init_command_preserves_stock_java_trust_and_adds_only_pinned_ca(self):
         self.assertIsNotNone(shutil.which("keytool"), "Pinned Devtools keytool required")

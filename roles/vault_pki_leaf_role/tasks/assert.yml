@@ -2,6 +2,7 @@
 - name: Validate narrowly scoped PKI leaf role input
   ansible.builtin.assert:
     that:
+      - vault_pki_leaf_role_allow_change is boolean
       - vault_pki_leaf_role_api_url is match('^https://')
       - vault_pki_leaf_role_mount is match('^[a-z0-9-]+$')
       - vault_pki_leaf_role_name is match('^[a-z0-9_-]+$')

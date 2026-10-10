@@ -28,7 +28,7 @@ class VaultKeypairTests(unittest.TestCase):
             collection = path / "ansible_collections/lit/supplementary"
             collection.parent.mkdir(parents=True)
             collection.symlink_to(ROOT, target_is_directory=True)
-            existing = {}
+            existing = {"private": "", "public": ""} if scenario == "blank" else {}
             if check and scenario in ("reuse", "mismatch"):
                 key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
                 existing = {
@@ -124,6 +124,12 @@ class VaultKeypairTests(unittest.TestCase):
     def test_check_mode_rejects_mismatched_existing_pair(self):
         code, _output = self.execute("mismatch", check=True)
         self.assertNotEqual(code, 0)
+
+    def test_blank_stored_pair_is_refused_consistently_before_generation_or_verification(self):
+        for check in (False, True):
+            with self.subTest(check=check):
+                code, _output = self.execute("blank", check=check)
+                self.assertNotEqual(code, 0)
 
     def test_readonly_missing_pair_fails(self):
         code, _output = self.execute("readonly")

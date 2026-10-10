@@ -1,9 +1,12 @@
 """The default-role cleanup must be bounded, idempotent and fail closed."""
 
 import importlib.util
+import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 PATH = Path(__file__).resolve().parents[2] / "plugins/modules/keycloak_default_role_composites.py"
 SPEC = importlib.util.spec_from_file_location("keycloak_default_role_composites", PATH)
@@ -146,6 +149,19 @@ class KeycloakDefaultRoleTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "CA trust configuration") as error:
                     MODULE.KeycloakAPI("https://keycloak.example", True, str(path))
                 self.assertNotIn("PRIVATE-PATH-CANARY", str(error.exception))
+
+    def test_login_rejects_nonobject_success_responses_without_internal_tracebacks(self):
+        api = MODULE.KeycloakAPI("http://127.0.0.1:8080", True, None)
+        for payload in ([], None, "PRIVATE-RESPONSE-CANARY", 42):
+            with self.subTest(payload_type=type(payload).__name__):
+                api.opener = SimpleNamespace(
+                    open=lambda request, timeout, payload=payload: io.BytesIO(json.dumps(payload).encode())
+                )
+                with self.assertRaisesRegex(ValueError, "authentication failed") as error:
+                    api.login("master", "fixture", "PRIVATE-PASSWORD-CANARY")
+                self.assertNotIn("CANARY", str(error.exception))
+        api.opener = SimpleNamespace(open=lambda request, timeout: io.BytesIO(b'{"access_token":"fixture-token"}'))
+        self.assertEqual(api.login("master", "fixture", "fixture"), "fixture-token")
 
     def test_remote_api_must_use_loopback_or_validated_tls(self):
         with self.assertRaisesRegex(ValueError, "loopback"):

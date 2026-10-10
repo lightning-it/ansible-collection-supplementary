@@ -206,7 +206,10 @@ class KeycloakAPI:
         )
         try:
             with self.opener.open(request, timeout=15) as response:
-                value = json.load(response).get("access_token")
+                payload = json.load(response)
+                if not isinstance(payload, dict):
+                    raise ValueError("Keycloak authentication response is malformed")
+                value = payload.get("access_token")
         except (HTTPError, URLError, ValueError) as error:
             raise ValueError("Keycloak administrator authentication failed") from error
         if not isinstance(value, str) or not value:

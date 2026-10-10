@@ -38,6 +38,8 @@ class VaultPkiCheckModeTests(unittest.TestCase):
         omitted=None,
         failing_path=None,
         bad_issuance=None,
+        stored_expansion=None,
+        authorization=True,
     ):
         ca, certificate, key = certificate_fixture()
         pem = certificate.public_bytes(serialization.Encoding.PEM).decode()
@@ -75,7 +77,14 @@ class VaultPkiCheckModeTests(unittest.TestCase):
         if foreign_issuer:
             payload["data"]["data"]["issue_path"] = "pki/issuer/foreign/issue/server"
         if role == "vault_pki_leaf_role":
-            payload = {"data": {"allowed_domains": ["other.example"], "max_ttl": 3600, "key_type": "ec"}}
+            payload = {
+                "data": {
+                    "allowed_domains": ["other.example"],
+                    "max_ttl": 3600,
+                    "key_type": "ec",
+                    **(stored_expansion or {}),
+                }
+            }
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args):
@@ -175,7 +184,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                     vault_pki_leaf_role_mount="pki",
                     vault_pki_leaf_role_name="server",
                     vault_pki_leaf_role_admin_token=CANARY,
-                    vault_pki_leaf_role_allow_change=True,
+                    vault_pki_leaf_role_allow_change=authorization,
                     vault_pki_leaf_role_definition={
                         "allowed_domains": ["localhost"],
                         "allow_bare_domains": bare_domains,
@@ -257,13 +266,25 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 server.server_close()
                 thread.join()
             self.assertNotIn("OFFLINE_PKI_CANARY", result.stdout + result.stderr)
-            if foreign_issuer or not bare_domains or expansion or forged or omitted or failing_path or bad_issuance:
+            if (
+                foreign_issuer
+                or not bare_domains
+                or expansion
+                or forged
+                or omitted
+                or failing_path
+                or bad_issuance
+                or stored_expansion
+                or authorization is not True
+            ):
                 self.assertNotEqual(result.returncode, 0)
             else:
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertRegex(result.stdout, r"changed=1(?:\s|$)")
-            if not bare_domains or expansion or omitted:
+            if not bare_domains or expansion or omitted or not isinstance(authorization, bool):
                 self.assertEqual(requests, [])
+            elif stored_expansion or authorization is False:
+                self.assertEqual([method for method, _path in requests], ["GET"])
             elif bad_issuance:
                 self.assertIn(("POST", "/v1/pki/issuer/existing/issue/server"), requests)
                 self.assertNotIn(("POST", "/v1/fixture/data/server"), requests)
@@ -335,6 +356,16 @@ class VaultPkiCheckModeTests(unittest.TestCase):
             with self.subTest(field=field):
                 self.exercise("vault_pki_leaf_role", False, omitted=field)
                 self.exercise("vault_pki_leaf_role", False, expansion={field: "false"})
+
+    def test_explicit_change_authorization_rejects_coercible_nonbooleans(self):
+        for authorization in ("yes", 1, None, False):
+            with self.subTest(authorization=authorization):
+                self.exercise("vault_pki_leaf_role", True, apply=True, authorization=authorization)
+
+    def test_preserved_identity_allowlists_cannot_broaden_an_existing_role(self):
+        for field in ("allowed_serial_numbers", "allowed_user_ids"):
+            with self.subTest(field=field):
+                self.exercise("vault_pki_leaf_role", True, apply=True, stored_expansion={field: ["*"]})
 
     def test_name_expansion_options_fail_before_api_access(self):
         for expansion in (
