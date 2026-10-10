@@ -1298,8 +1298,8 @@ class WorkflowCouplingTests(unittest.TestCase):
         manifest = json.loads((ROOT / ".lit/li259-supplementary-port.json").read_text())
         self.assertEqual("5128b10bef931478541985d314293d879ea317be", manifest["source_candidate"])
         self.assertEqual("aa45941e2d24194f29f480306bff39d27d7b4824", manifest["core_candidate"])
-        self.assertIsNone(manifest["protected_source_commit"])
-        self.assertEqual("disabled-until-coupled-protected-adoption", manifest["activation"])
+        self.assertEqual("5b70bdaa4eaa9b0121545cb842eca8b3256e9cc3", manifest["protected_source_commit"])
+        self.assertEqual("disabled-until-native-acceptance", manifest["activation"])
         for row in manifest["assets"]:
             content = (ROOT / row["path"]).read_bytes()
             self.assertEqual(row["sha256"], hashlib.sha256(content).hexdigest(), row["path"])
