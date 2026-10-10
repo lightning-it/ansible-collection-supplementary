@@ -26,13 +26,16 @@ certificate_fixture = FIXTURE.certificate_fixture
 
 
 class VaultPkiCheckModeTests(unittest.TestCase):
-    def exercise(self, role, existing, foreign_issuer=False):
+    def exercise(
+        self, role, existing, foreign_issuer=False, apply=False, bare_domains=True, expansion=None, forged=False
+    ):
         ca, certificate, key = certificate_fixture()
         pem = certificate.public_bytes(serialization.Encoding.PEM).decode()
         protected = key.private_bytes(
             serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
         ).decode()
         requests = []
+        original_existing = existing
         payload = {
             "data": {
                 "data": {
@@ -45,10 +48,16 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 "metadata": {"version": 1},
             }
         }
+        if forged:
+            _wrong_ca, wrong_leaf, wrong_key = certificate_fixture()
+            payload["data"]["data"]["certificate"] = wrong_leaf.public_bytes(serialization.Encoding.PEM).decode()
+            payload["data"]["data"]["private_key"] = wrong_key.private_bytes(
+                serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+            ).decode()
         if foreign_issuer:
             payload["data"]["data"]["issue_path"] = "pki/issuer/foreign/issue/server"
         if role == "vault_pki_leaf_role":
-            payload = {"data": {"allowed_domains": ["other.example"]}}
+            payload = {"data": {"allowed_domains": ["other.example"], "max_ttl": 3600, "key_type": "ec"}}
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args):
@@ -56,14 +65,35 @@ class VaultPkiCheckModeTests(unittest.TestCase):
 
             def do_GET(self):
                 requests.append(("GET", self.path))
+                if self.path == "/v1/pki/issuer/existing/pem":
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(ca.public_bytes(serialization.Encoding.PEM))
+                    return
                 self.send_response(200 if existing else 404)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps(payload if existing else {"errors": []}).encode())
 
             def do_POST(self):
+                nonlocal existing, payload
                 requests.append(("POST", self.path))
+                if apply and role == "vault_pki_leaf_role" and not existing:
+                    payload = {"data": json.loads(self.rfile.read(int(self.headers["Content-Length"])))}
+                    existing = True
+                    self.send_response(204)
+                    self.end_headers()
+                    return
                 self.send_response(403)
+                self.end_headers()
+
+            def do_PATCH(self):
+                requests.append(("PATCH", self.path))
+                if self.headers.get("Content-Type") != "application/merge-patch+json":
+                    self.send_response(415)
+                else:
+                    payload["data"].update(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+                    self.send_response(204)
                 self.end_headers()
 
         with tempfile.TemporaryDirectory(dir=os.environ["HOME"]) as temporary:
@@ -103,6 +133,8 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                     vault_pki_leaf_role_allow_change=True,
                     vault_pki_leaf_role_definition={
                         "allowed_domains": ["localhost"],
+                        "allow_bare_domains": bare_domains,
+                        "allow_wildcard_certificates": False,
                         "allow_any_name": False,
                         "allow_subdomains": False,
                         "allow_glob_domains": False,
@@ -111,6 +143,8 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                         "issuer_ref": "existing",
                     },
                 )
+            if expansion:
+                values["vault_pki_leaf_role_definition"].update(expansion)
             play = [
                 {
                     "hosts": "localhost",
@@ -123,9 +157,14 @@ class VaultPkiCheckModeTests(unittest.TestCase):
             source.write_text(yaml.safe_dump(play))
             config = directory / "ansible.cfg"
             config.write_text("[defaults]\n")
+            namespace = directory / "collections/ansible_collections/lit"
+            namespace.mkdir(parents=True)
+            (namespace / "supplementary").symlink_to(ROOT, target_is_directory=True)
             try:
                 result = subprocess.run(  # noqa: S603 - controlled offline role fixture
-                    [shutil.which("ansible-playbook"), "-i", "localhost,", "-c", "local", "--check", str(source)],
+                    [shutil.which("ansible-playbook"), "-i", "localhost,", "-c", "local"]
+                    + ([] if apply else ["--check"])
+                    + [str(source)],
                     capture_output=True,
                     text=True,
                     check=False,
@@ -134,6 +173,11 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                         **os.environ,
                         "ANSIBLE_CONFIG": str(config),
                         "ANSIBLE_NOCOLOR": "1",
+                        "ANSIBLE_COLLECTIONS_PATH": str(directory / "collections")
+                        + ":"
+                        + os.environ.get(
+                            "ANSIBLE_COLLECTIONS_PATH", "/opt/ansible/collections:/usr/share/ansible/collections"
+                        ),
                         "ANSIBLE_LOCAL_TEMP": str(directory / "ansible"),
                     },
                 )
@@ -142,12 +186,25 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 server.server_close()
                 thread.join()
             self.assertNotIn("OFFLINE_PKI_CANARY", result.stdout + result.stderr)
-            if foreign_issuer:
+            if foreign_issuer or not bare_domains or expansion or forged:
                 self.assertNotEqual(result.returncode, 0)
             else:
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertRegex(result.stdout, r"changed=1(?:\s|$)")
-            self.assertEqual([method for method, _path in requests], ["GET"])
+            if not bare_domains or expansion:
+                self.assertEqual(requests, [])
+            elif apply:
+                self.assertEqual(
+                    [method for method, _path in requests], ["GET", "PATCH" if original_existing else "POST", "GET"]
+                )
+                if original_existing:
+                    self.assertEqual(payload["data"]["max_ttl"], 3600)
+                    self.assertEqual(payload["data"]["key_type"], "ec")
+            else:
+                self.assertEqual(
+                    [method for method, _path in requests],
+                    ["GET", "GET"] if role == "vault_pki_certificate" else ["GET"],
+                )
             self.assertFalse((directory / "materialized.pem").exists())
             self.assertFalse((directory / "materialized.key").exists())
 
@@ -163,6 +220,25 @@ class VaultPkiCheckModeTests(unittest.TestCase):
         for existing in (False, True):
             with self.subTest(existing=existing):
                 self.exercise("vault_pki_leaf_role", existing)
+
+    def test_existing_role_patch_preserves_undeclared_restrictions_and_new_role_uses_post(self):
+        for existing in (True, False):
+            self.exercise("vault_pki_leaf_role", existing, apply=True)
+
+    def test_exact_domains_require_bare_domain_issuance_before_api_access(self):
+        self.exercise("vault_pki_leaf_role", True, bare_domains=False)
+
+    def test_forged_custody_with_copied_metadata_cannot_pass_issuer_verification(self):
+        self.exercise("vault_pki_certificate", True, forged=True)
+
+    def test_name_expansion_options_fail_before_api_access(self):
+        for expansion in (
+            {"allow_wildcard_certificates": True},
+            {"allowed_uri_sans": ["*"]},
+            {"allowed_other_sans": ["*"]},
+            {"allowed_domains_template": True},
+        ):
+            self.exercise("vault_pki_leaf_role", True, expansion=expansion)
 
 
 if __name__ == "__main__":

@@ -77,7 +77,7 @@ from ansible.module_utils.basic import AnsibleModule
 try:
     import boto3
     from botocore.config import Config
-    from botocore.exceptions import ClientError
+    from botocore.exceptions import BotoCoreError, ClientError
 except ImportError:
     boto3 = None
 
@@ -114,6 +114,8 @@ def read_rules(client, bucket, module):
         if s3_error_code(error) == "NoSuchLifecycleConfiguration":
             return []
         module.fail_json(msg="Cannot read bucket lifecycle", error_code=s3_error_code(error))
+    except BotoCoreError:
+        module.fail_json(msg="Cannot read bucket lifecycle: transport failure")
 
 
 def main():
@@ -137,15 +139,18 @@ def main():
     if p["abort_days"] < 1 or not p["endpoint_url"].startswith("https://"):
         module.fail_json(msg="Require a positive abort period and HTTPS endpoint")
 
-    client = boto3.client(
-        "s3",
-        endpoint_url=p["endpoint_url"],
-        region_name=p["region"],
-        aws_access_key_id=p["access_key"],
-        aws_secret_access_key=p["secret_key"],
-        verify=p["validate_certs"],
-        config=Config(signature_version="s3v4", retries={"max_attempts": 2}),
-    )
+    try:
+        client = boto3.client(
+            "s3",
+            endpoint_url=p["endpoint_url"],
+            region_name=p["region"],
+            aws_access_key_id=p["access_key"],
+            aws_secret_access_key=p["secret_key"],
+            verify=p["validate_certs"],
+            config=Config(signature_version="s3v4", retries={"max_attempts": 2}),
+        )
+    except BotoCoreError:
+        module.fail_json(msg="Cannot initialize S3 client: transport failure")
     rules = read_rules(client, p["bucket"], module)
     if any(not is_owned_rule(rule) for rule in rules):
         module.fail_json(msg="An unrelated lifecycle rule exists; refusing to replace it")
@@ -164,6 +169,8 @@ def main():
         client.put_bucket_lifecycle_configuration(Bucket=p["bucket"], LifecycleConfiguration={"Rules": [desired]})
     except ClientError as error:
         module.fail_json(msg="Cannot reconcile bucket lifecycle", error_code=s3_error_code(error))
+    except BotoCoreError:
+        module.fail_json(msg="Cannot reconcile bucket lifecycle: transport failure")
     verified = read_rules(client, p["bucket"], module)
     if len(verified) != 1 or not is_owned_rule(verified[0], p["abort_days"]):
         module.fail_json(msg="Bucket lifecycle readback did not match the declared rule")

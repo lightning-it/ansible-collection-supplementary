@@ -2,11 +2,14 @@
 """Validate SSH key correspondence in RAM for read-only secret-bundle plans."""
 
 from ansible.errors import AnsibleFilterError
-from cryptography.exceptions import UnsupportedAlgorithm
-from cryptography.hazmat.primitives import serialization
 
 
 def vault_ssh_keypair_matches(private, public):
+    try:
+        from cryptography.exceptions import UnsupportedAlgorithm
+        from cryptography.hazmat.primitives import serialization
+    except ImportError:
+        raise AnsibleFilterError("cryptography is required for SSH keypair verification") from None
     try:
         encoded = private.encode("utf-8")
         if encoded.startswith(b"-----BEGIN OPENSSH PRIVATE KEY-----"):

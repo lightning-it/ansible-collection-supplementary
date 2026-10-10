@@ -3,6 +3,23 @@
   ansible.builtin.import_tasks: assert.yml
   tags: always
 
+- name: Independently fetch the exact declared public Vault issuer
+  ansible.builtin.uri:
+    url: >-
+      {{ vault_pki_certificate_api_url ~ '/v1/'
+      ~ vault_pki_certificate_issue_path.split('/issue/')[0] ~ '/pem' }}
+    validate_certs: true
+    ca_path: "{{ vault_pki_certificate_ca_path }}"
+    use_netrc: false
+    status_code: 200
+    return_content: true
+    timeout: 30
+  register: vault_pki_certificate_issuer
+  check_mode: false
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
 - name: Read existing server certificate custody
   ansible.builtin.uri:
     url: "{{ vault_pki_certificate_api_url }}/v1/{{ vault_pki_certificate_kv_path }}"
@@ -26,6 +43,16 @@
       - vault_pki_certificate_existing.json.data.data.schema_version == 1
       - vault_pki_certificate_existing.json.data.data.subject == vault_pki_certificate_common_name
       - vault_pki_certificate_existing.json.data.data.issue_path == vault_pki_certificate_issue_path
+    quiet: true
+  when: vault_pki_certificate_existing.status == 200
+  no_log: true
+
+- name: Verify existing custody against the independently authenticated issuer
+  ansible.builtin.assert:
+    that:
+      - >-
+        vault_pki_certificate_existing.json.data.data.certificate
+        | lit.supplementary.vault_pki_direct_issuer_matches(vault_pki_certificate_issuer.content)
     quiet: true
   when: vault_pki_certificate_existing.status == 200
   no_log: true
@@ -180,6 +207,9 @@
       ansible.builtin.assert:
         that:
           - vault_pki_certificate_info.valid_at.now
+          - >-
+            vault_pki_certificate_readback.json.data.data.certificate
+            | lit.supplementary.vault_pki_direct_issuer_matches(vault_pki_certificate_issuer.content)
           - vault_pki_certificate_info.subject.commonName == vault_pki_certificate_common_name
           - vault_pki_certificate_info.subject_alt_name == ['DNS:' ~ vault_pki_certificate_common_name]
           - >-
@@ -200,7 +230,7 @@
         content: >-
           {{ vault_pki_certificate_readback.json.data.data.certificate | trim }}
 
-          {{ vault_pki_certificate_readback.json.data.data.ca_chain | join('\n') | trim }}
+          {{ vault_pki_certificate_issuer.content | trim }}
         dest: "{{ vault_pki_certificate_cert_path }}"
         owner: root
         group: root

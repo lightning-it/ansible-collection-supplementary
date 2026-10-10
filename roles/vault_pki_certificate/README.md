@@ -38,3 +38,5 @@ MIT, as declared by the collection.
 ## Author
 
 Lightning IT
+
+The controller requires cryptography >= 40. The exact issuer PEM endpoint derived from the declared issue path is independently read through verified Vault HTTPS, including in check mode. Existing and final custody must pass a direct certificate signature check against that issuer before use. The materialized chain uses that independently fetched issuer, not the untrusted KV chain. Its API path must be readable by the controller. No issuer key or service secret is logged.

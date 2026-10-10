@@ -136,3 +136,34 @@ class HetznerAbortLifecycleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TransportFailureTests(unittest.TestCase):
+    def test_transport_failures_are_sanitized_at_every_client_boundary(self):
+        class TransportError(Exception):
+            pass
+
+        class ServiceError(Exception):
+            pass
+
+        for stage in ("create", "read", "write", "readback"):
+            with self.subTest(stage=stage):
+                client = Mock()
+                error = TransportError("https://SENSITIVE-CANARY")
+                client.get_bucket_lifecycle_configuration.side_effect = (
+                    [{"Rules": []}, error] if stage == "readback" else error if stage == "read" else [{"Rules": []}]
+                )
+                if stage == "write":
+                    client.put_bucket_lifecycle_configuration.side_effect = error
+                creator = Mock(side_effect=error) if stage == "create" else Mock(return_value=client)
+                with (
+                    patch.object(MODULE, "AnsibleModule", return_value=FakeModule()),
+                    patch.object(MODULE, "boto3", SimpleNamespace(client=creator)),
+                    patch.object(MODULE, "Config", lambda **kwargs: kwargs, create=True),
+                    patch.object(MODULE, "BotoCoreError", TransportError, create=True),
+                    patch.object(MODULE, "ClientError", ServiceError, create=True),
+                ):
+                    with self.assertRaises(Rejected) as outcome:
+                        MODULE.main()
+                self.assertNotIn("SENSITIVE-CANARY", str(outcome.exception.result))
+                self.assertIn("transport failure", outcome.exception.result["msg"])

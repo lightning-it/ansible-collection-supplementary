@@ -25,6 +25,16 @@
   become: false
   changed_when: false
   no_log: true
+- name: Refuse undeclared alternate identity expansion in an existing role
+  ansible.builtin.assert:
+    that:
+      - vault_pki_leaf_role_current.json.data.allowed_other_sans | default([]) | length == 0
+      - vault_pki_leaf_role_current.json.data.allowed_uri_sans | default([]) | length == 0
+      - not vault_pki_leaf_role_current.json.data.allow_uri_sans_template | default(false) | bool
+      - not vault_pki_leaf_role_current.json.data.allowed_domains_template | default(false) | bool
+    quiet: true
+  when: vault_pki_leaf_role_current.status == 200
+  no_log: true
 - name: Calculate the exact declared role delta
   ansible.builtin.set_fact:
     vault_pki_leaf_role_changed: >-
@@ -44,9 +54,12 @@
     url: >-
       {{ vault_pki_leaf_role_api_url ~ '/v1/' ~ vault_pki_leaf_role_mount
       ~ '/roles/' ~ vault_pki_leaf_role_name }}
-    method: POST
+    method: "{{ (vault_pki_leaf_role_current.status == 200) | ternary('PATCH', 'POST') }}"
     headers:
       X-Vault-Token: '{{ vault_pki_leaf_role_admin_token }}'
+      Content-Type: >-
+        {{ (vault_pki_leaf_role_current.status == 200)
+        | ternary('application/merge-patch+json', 'application/json') }}
     body_format: json
     body: '{{ vault_pki_leaf_role_definition }}'
     validate_certs: true
@@ -95,6 +108,12 @@
     that:
       - vault_pki_leaf_role_definition == (vault_pki_leaf_role_readback.json.data | dict2items | selectattr('key', 'in',
         vault_pki_leaf_role_definition.keys()) | items2dict)
+      - >-
+        vault_pki_leaf_role_current.status != 200
+        or (vault_pki_leaf_role_current.json.data | dict2items
+        | rejectattr('key', 'in', vault_pki_leaf_role_definition.keys()) | items2dict)
+        == (vault_pki_leaf_role_readback.json.data | dict2items
+        | rejectattr('key', 'in', vault_pki_leaf_role_definition.keys()) | items2dict)
     quiet: true
   no_log: true
   when: not ansible_check_mode or not (vault_pki_leaf_role_changed | bool)
