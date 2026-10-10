@@ -819,7 +819,7 @@ class NativeRetryTests(unittest.TestCase):
         self.assertEqual("dispatched", self.recover())
         self.receive()
         self.assertEqual([(f"repos/{self.repo}/actions/jobs/102/rerun", {})], self.effects)
-        self.assertFalse(any("requested_reviewers" in route or "/dispatches" in route for route, _ in self.effects))
+        self.assertFalse(any("requested_reviewers" in route or "/dispatches" in route for route, _payload in self.effects))
         self.assertEqual(self.head, self.pr["head"]["sha"])
 
     def test_actual_schedule_main_calls_recovery_and_duplicate_delivery_is_inert(self):

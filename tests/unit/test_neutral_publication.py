@@ -171,7 +171,7 @@ promote_publication "${id}" bound-id
 """
         )
         result = subprocess.run(  # noqa: S603 - execute the shipped publisher with isolated API stubs
-            ["/bin/bash", "-c", script], env=self.env, capture_output=True, text=True, timeout=30
+            ["/bin/bash", "-c", script], env=self.env, capture_output=True, text=True, timeout=30, check=False
         )
         self.data = json.loads(self.fixture.read_text())
         self.assertEqual(success, result.returncode == 0, result.stderr + result.stdout)
@@ -192,7 +192,7 @@ promote_publication "${id}" bound-id
                 self.save()
                 self.publish(False)
                 self.assertEqual("failure", self.data["check"]["conclusion"])
-                self.assertEqual(1, sum(m == "POST" for m, _ in self.data["writes"]))
+                self.assertEqual(1, sum(m == "POST" for m, _payload in self.data["writes"]))
 
     def test_unknown_create_exact_absent_ambiguous_and_later_attempt(self):
         for outcome in ("materialized", "absent", "ambiguous"):
@@ -205,7 +205,7 @@ promote_publication "${id}" bound-id
                     self.assertEqual([["POST", "failure"]], self.data["writes"])
                 self.env["GITHUB_RUN_ATTEMPT"] = "2"
                 self.publish(outcome == "materialized")
-                self.assertEqual(1, sum(m == "POST" for m, _ in self.data["writes"]))
+                self.assertEqual(1, sum(m == "POST" for m, _payload in self.data["writes"]))
 
     def test_previously_attempted_pending_result_remains_get_only(self):
         self.data["drift_after_post"] = True
@@ -216,7 +216,7 @@ promote_publication "${id}" bound-id
         self.env["GITHUB_RUN_ATTEMPT"] = "2"
         writes = len(self.data["writes"])
         self.publish(False)
-        self.assertEqual(1, sum(m == "POST" for m, _ in self.data["writes"]))
+        self.assertEqual(1, sum(m == "POST" for m, _payload in self.data["writes"]))
         self.assertEqual("failure", self.data["check"]["conclusion"])
         self.assertEqual(writes, len(self.data["writes"]))
 
@@ -240,6 +240,7 @@ promote_publication "${id}" bound-id
             env=self.env,
             capture_output=True,
             text=True,
+            check=False,
         )
         self.assertNotEqual(0, result.returncode)
         self.assertTrue(json.loads(self.fixture.read_text())["invalid_output"])
@@ -323,7 +324,7 @@ promote_publication "${id}" bound-id
                 self.publish(outcome == "materialized")
                 self.assertEqual(writes, len(self.data["writes"]))
                 self.assertEqual(1, self.data["writes"].count(["PATCH", "failure"]))
-                self.assertFalse(any(method == "POST" for method, _ in self.data["writes"]))
+                self.assertFalse(any(method == "POST" for method, _payload in self.data["writes"]))
 
     def test_unknown_details_patch_materialized_absent_and_later_attempt_never_repeats(self):
         for outcome in ("materialized", "absent"):
