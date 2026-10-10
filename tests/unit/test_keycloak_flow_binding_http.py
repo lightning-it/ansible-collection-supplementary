@@ -86,6 +86,7 @@ class FlowBindingHTTPTests(unittest.TestCase):
                     command,
                     text=True,
                     capture_output=True,
+                    check=False,
                     timeout=45,
                     env={
                         **os.environ,

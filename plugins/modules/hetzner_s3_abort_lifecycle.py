@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # Copyright: (c) 2026 Lightning IT
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: MIT OR GPL-3.0-or-later
+# GNU General Public License v3.0+ alternative: https://www.gnu.org/licenses/gpl-3.0.txt
 # ruff: noqa: E402
 """Reconcile the one abort rule on a dedicated Hetzner backup bucket."""
 
@@ -32,12 +33,10 @@ options:
     description: Bucket administrative access key.
     type: str
     required: true
-    no_log: true
   secret_key:
     description: Bucket administrative secret key.
     type: str
     required: true
-    no_log: true
   abort_days:
     description: Days before incomplete multipart uploads are aborted.
     type: int
@@ -47,7 +46,7 @@ options:
     type: bool
     default: true
 author:
-  - Lightning IT
+  - Lightning IT (@litroc)
 """
 
 EXAMPLES = r"""
@@ -84,9 +83,7 @@ except ImportError:
 
 
 RULE_ID = "abort-incomplete-multipart-uploads"
-ALLOWED_RULE_KEYS = frozenset(
-    {"ID", "Status", "Filter", "Prefix", "AbortIncompleteMultipartUpload"}
-)
+ALLOWED_RULE_KEYS = frozenset({"ID", "Status", "Filter", "Prefix", "AbortIncompleteMultipartUpload"})
 
 
 def is_owned_rule(rule, days):
@@ -156,9 +153,7 @@ def main():
         "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": p["abort_days"]},
     }
     try:
-        client.put_bucket_lifecycle_configuration(
-            Bucket=p["bucket"], LifecycleConfiguration={"Rules": [desired]}
-        )
+        client.put_bucket_lifecycle_configuration(Bucket=p["bucket"], LifecycleConfiguration={"Rules": [desired]})
     except ClientError as error:
         module.fail_json(msg="Cannot reconcile bucket lifecycle", error_code=s3_error_code(error))
     verified = read_rules(client, p["bucket"], module)

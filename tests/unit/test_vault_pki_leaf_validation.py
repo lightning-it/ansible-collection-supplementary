@@ -90,6 +90,7 @@ class LeafValidationTest(unittest.TestCase):
             result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture
                 [ANSIBLE_PLAYBOOK, "-i", "localhost,", str(path)],
                 capture_output=True,
+                check=False,
                 text=True,
                 timeout=60,
                 env={**environment, "ANSIBLE_CONFIG": str(config), "ANSIBLE_REMOTE_TMP": str(directory / "tmp")},

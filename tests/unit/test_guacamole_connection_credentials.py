@@ -68,6 +68,7 @@ class ConnectionCredentialTests(unittest.TestCase):
                     "ANSIBLE_LOCAL_TEMP": str(path / "ansible"),
                 },
                 capture_output=True,
+                check=False,
                 text=True,
                 timeout=30,
             )

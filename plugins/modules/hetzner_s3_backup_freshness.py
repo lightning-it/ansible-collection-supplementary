@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # Copyright: (c) 2026 Lightning IT
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: MIT OR GPL-3.0-or-later
+# GNU General Public License v3.0+ alternative: https://www.gnu.org/licenses/gpl-3.0.txt
 # ruff: noqa: E402, UP017
 """Read the latest encrypted backup across every S3 list page."""
 
@@ -32,12 +33,10 @@ options:
     description: Read-only bucket access key.
     type: str
     required: true
-    no_log: true
   secret_key:
     description: Read-only bucket secret key.
     type: str
     required: true
-    no_log: true
   prefix:
     description: Exact service directory prefix, ending in a slash.
     type: str
@@ -55,7 +54,7 @@ options:
     type: bool
     default: true
 author:
-  - Lightning IT
+  - Lightning IT (@litroc)
 """
 
 EXAMPLES = r"""
@@ -110,8 +109,7 @@ except ImportError:
 def latest_backup(pages, prefix, service, now, max_pages=1000):
     """Select one real S3 object timestamp, with a finite pagination bound."""
     pattern = re.compile(
-        r"\A" + re.escape(prefix) + r"postgres-" + re.escape(service)
-        + r"-\d{8}T\d{6}Z\.dump\.vault\Z"
+        r"\A" + re.escape(prefix) + r"postgres-" + re.escape(service) + r"-\d{8}T\d{6}Z\.dump\.vault\Z"
     )
     latest = None
     count = 0
@@ -138,9 +136,12 @@ def latest_backup(pages, prefix, service, now, max_pages=1000):
     if latest is None:
         raise ValueError("No nonempty encrypted backup object exists")
     age = max(0, int((now - latest[1]).total_seconds()))
-    return {"latest_object": latest[0], "age_seconds": age,
-            "matching_objects": count,
-            "recent_objects": [key for _, key in sorted(recent, reverse=True)]}
+    return {
+        "latest_object": latest[0],
+        "age_seconds": age,
+        "matching_objects": count,
+        "recent_objects": [key for _modified, key in sorted(recent, reverse=True)],
+    }
 
 
 def require_fresh(result, max_age_seconds):
@@ -157,8 +158,7 @@ def main():
             access_key=dict(type="str", required=True, no_log=True),
             secret_key=dict(type="str", required=True, no_log=True),
             prefix=dict(type="str", required=True),
-            service=dict(type="str", required=True,
-                         choices=["keycloak", "netbox", "guacamole"]),
+            service=dict(type="str", required=True, choices=["keycloak", "netbox", "guacamole"]),
             max_age_seconds=dict(type="int", default=None),
             validate_certs=dict(type="bool", default=True),
         ),
@@ -168,30 +168,43 @@ def main():
     if boto3 is None:
         module.fail_json(msg="boto3 and botocore are required in the controller runtime")
     endpoint = urlsplit(args["endpoint_url"])
-    if (endpoint.scheme != "https" or not endpoint.hostname
-            or endpoint.username is not None or endpoint.password is not None
-            or endpoint.path or endpoint.query or endpoint.fragment
-            or not args["validate_certs"]
-            or not args["prefix"].endswith("/")
-            or args["prefix"].startswith("/")
-            or ".." in args["prefix"].split("/")
-            or (args["max_age_seconds"] is not None and
-                (args["max_age_seconds"] < 1 or
-                 args["max_age_seconds"] > 31 * 86400))):
+    if (
+        endpoint.scheme != "https"
+        or not endpoint.hostname
+        or endpoint.username is not None
+        or endpoint.password is not None
+        or endpoint.path
+        or endpoint.query
+        or endpoint.fragment
+        or not args["validate_certs"]
+        or not args["prefix"].endswith("/")
+        or args["prefix"].startswith("/")
+        or ".." in args["prefix"].split("/")
+        or (
+            args["max_age_seconds"] is not None
+            and (args["max_age_seconds"] < 1 or args["max_age_seconds"] > 31 * 86400)
+        )
+    ):
         module.fail_json(msg="Unsafe backup freshness contract")
     try:
         client = boto3.client(
-            "s3", endpoint_url=args["endpoint_url"], region_name=args["region"],
+            "s3",
+            endpoint_url=args["endpoint_url"],
+            region_name=args["region"],
             aws_access_key_id=args["access_key"],
             aws_secret_access_key=args["secret_key"],
-            verify=True, config=Config(signature_version="s3v4"),
+            verify=True,
+            config=Config(signature_version="s3v4"),
         )
         pages = client.get_paginator("list_objects_v2").paginate(
-            Bucket=args["bucket"], Prefix=args["prefix"],
+            Bucket=args["bucket"],
+            Prefix=args["prefix"],
             PaginationConfig={"PageSize": 1000},
         )
         result = latest_backup(
-            pages, args["prefix"], args["service"],
+            pages,
+            args["prefix"],
+            args["service"],
             datetime.datetime.now(datetime.timezone.utc),
         )
         require_fresh(result, args["max_age_seconds"])

@@ -61,7 +61,7 @@ class BackupFreshnessTests(unittest.TestCase):
 
     def test_listing_page_limit_fails_closed(self):
         with self.assertRaisesRegex(ValueError, "page limit"):
-            MODULE.latest_backup(({} for _ in range(1001)), self.prefix, "keycloak", self.now)
+            MODULE.latest_backup(({} for _page in range(1001)), self.prefix, "keycloak", self.now)
 
     def test_declared_rpo_rejects_a_stale_object(self):
         result = {"age_seconds": 3601}

@@ -1,22 +1,9 @@
 #!/usr/bin/python
+# Copyright: (c) 2026 Lightning IT
+# SPDX-License-Identifier: MIT OR GPL-3.0-or-later
+# GNU General Public License v3.0+ alternative: https://www.gnu.org/licenses/gpl-3.0.txt
+# ruff: noqa: E402
 """Remove only explicitly allowlisted children of a Keycloak default role."""
-
-from __future__ import annotations
-
-import json
-import ssl
-from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode, urlsplit
-from urllib.request import (
-    HTTPHandler,
-    HTTPRedirectHandler,
-    HTTPSHandler,
-    ProxyHandler,
-    Request,
-    build_opener,
-)
-
-from ansible.module_utils.basic import AnsibleModule
 
 DOCUMENTATION = r"""
 ---
@@ -28,19 +15,23 @@ description:
   - Does not delete role definitions or alter user role mappings.
 options:
   api_url:
+    description: Keycloak API origin; remote endpoints require HTTPS.
     type: str
     required: true
   auth_realm:
+    description: Realm used for administrator authentication.
     type: str
     required: true
   auth_username:
+    description: Administrator username.
     type: str
     required: true
   auth_password:
+    description: Administrator password, suppressed by the runtime argument specification.
     type: str
     required: true
-    no_log: true
   realm:
+    description: Realm whose allowlisted default-role children are reconciled.
     type: str
     required: true
   allowed_removals:
@@ -55,12 +46,14 @@ options:
     description:
       - Refuse removal while the realm has users or active client sessions.
   validate_certs:
+    description: Validate the TLS certificate; disabling validation is refused.
     type: bool
     default: true
   ca_cert:
+    description: Optional CA certificate bundle used for TLS validation.
     type: path
 author:
-  - Lightning IT
+  - Lightning IT (@litroc)
 """
 
 EXAMPLES = r"""
@@ -86,6 +79,22 @@ removed:
   type: list
   elements: str
 """
+
+
+import json
+import ssl
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlencode, urlsplit
+from urllib.request import (
+    HTTPHandler,
+    HTTPRedirectHandler,
+    HTTPSHandler,
+    ProxyHandler,
+    Request,
+    build_opener,
+)
+
+from ansible.module_utils.basic import AnsibleModule
 
 
 def canonical_allowed(entries):
@@ -138,7 +147,7 @@ def plan_removal(children, allowed, client_lookup):
 
 
 class NoRedirect(HTTPRedirectHandler):
-    def redirect_request(self, request, fp, code, msg, headers, newurl):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
 
 
@@ -204,7 +213,7 @@ class KeycloakAPI:
 
 def require_no_users_or_sessions(api, prefix, token):
     status, users = api.call(prefix + "/users/count", token=token)
-    if status != 200 or type(users) is not int or users < 0:
+    if status != 200 or (not isinstance(users, int) or isinstance(users, bool)) or users < 0:
         raise ValueError("Keycloak realm user count is unavailable")
     status, sessions = api.call(prefix + "/client-session-stats", token=token)
     if status != 200 or not isinstance(sessions, list) or len(sessions) > 1000:
@@ -214,7 +223,7 @@ def require_no_users_or_sessions(api, prefix, token):
         if not isinstance(item, dict):
             raise ValueError("Keycloak realm session count is malformed")
         value = item.get("active")
-        if type(value) is int and value >= 0:
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
             active.append(value)
         elif isinstance(value, str) and value.isascii() and value.isdecimal() and len(value) <= 9:
             active.append(int(value))
@@ -252,7 +261,7 @@ def reconcile(api, realm, token, allowed, check_mode=False, require_empty_realm=
         require_no_users_or_sessions(api, prefix, token)
     if not planned or check_mode:
         return planned
-    status, _ = api.call(path, method="DELETE", data=children, token=token)
+    status, _response = api.call(path, method="DELETE", data=children, token=token)
     if status != 204:
         raise ValueError("Keycloak default-role composite removal failed")
     status, remaining = api.call(path, token=token)
@@ -281,9 +290,7 @@ def main():
         allowed = canonical_allowed(p["allowed_removals"])
         api = KeycloakAPI(p["api_url"], p["validate_certs"], p["ca_cert"])
         token = api.login(p["auth_realm"], p["auth_username"], p["auth_password"])
-        removed = reconcile(
-            api, p["realm"], token, allowed, module.check_mode, p["require_empty_realm"]
-        )
+        removed = reconcile(api, p["realm"], token, allowed, module.check_mode, p["require_empty_realm"])
         module.exit_json(
             changed=bool(removed),
             removed=[(client + "/" if client else "") + name for client, name in removed],

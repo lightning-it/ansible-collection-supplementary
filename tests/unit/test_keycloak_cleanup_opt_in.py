@@ -70,6 +70,7 @@ class CleanupOptInTests(unittest.TestCase):
                 [ANSIBLE_PLAYBOOK, "-i", "localhost,", "-c", "local", str(path / "play.yml")],
                 text=True,
                 capture_output=True,
+                check=False,
                 timeout=30,
                 env={
                     **os.environ,

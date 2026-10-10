@@ -65,6 +65,7 @@ class VaultKeypairTests(unittest.TestCase):
             result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture
                 [ANSIBLE_PLAYBOOK, "-i", "localhost,", "-c", "local", str(path / "play.yml")],
                 capture_output=True,
+                check=False,
                 text=True,
                 timeout=60,
                 env={**os.environ, "ANSIBLE_CONFIG": str(path / "ansible.cfg")},
@@ -80,15 +81,15 @@ class VaultKeypairTests(unittest.TestCase):
         self.assertEqual(code, 0, output)
 
     def test_readonly_missing_pair_fails(self):
-        code, _ = self.execute("readonly")
+        code, _output = self.execute("readonly")
         self.assertNotEqual(code, 0)
 
     def test_partial_pair_fails_before_generation(self):
-        code, _ = self.execute("partial")
+        code, _output = self.execute("partial")
         self.assertNotEqual(code, 0)
 
     def test_wrong_public_key_fails_and_cleans_up_volatile_private_file(self):
-        code, _ = self.execute("mismatch")
+        code, _output = self.execute("mismatch")
         self.assertNotEqual(code, 0)
 
 
