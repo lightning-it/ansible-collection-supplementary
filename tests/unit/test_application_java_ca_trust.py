@@ -90,9 +90,31 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                     values["JAVA_TOOL_OPTIONS"],
                 )
                 self.assertTrue(app["volumeMounts"][0]["readOnly"])
+                self.assertTrue(
+                    next(volume for volume in pod["spec"]["volumes"] if volume["name"] == "java-trust")[
+                        "selinuxRelabel"
+                    ]
+                )
             else:
                 self.assertEqual(init, [])
                 self.assertNotIn("javax.net.ssl.trustStore", values["JAVA_TOOL_OPTIONS"])
+
+    def test_rotating_either_pinned_ca_changes_the_transactional_manifest(self):
+        base = {"guacamole_deploy_secrets": {"db_password": "offline-fixture-only"}}
+        for kind in ("java", "guacd"):
+            values = {
+                **base,
+                f"guacamole_deploy_{kind}_ca_certificate": "PUBLIC_CA_FIXTURE",
+                f"guacamole_deploy_{kind}_ca_sha256": ":".join(["11"] * 32),
+            }
+            before = self.render("guacamole_deploy", values)
+            values[f"guacamole_deploy_{kind}_ca_sha256"] = ":".join(["22"] * 32)
+            after = self.render("guacamole_deploy", values)
+            self.assertNotEqual(before, after)
+            self.assertEqual(
+                after["metadata"]["annotations"][f"lit.io/{kind}-ca-sha256"],
+                values[f"guacamole_deploy_{kind}_ca_sha256"],
+            )
 
     def test_keycloak_public_ca_is_readonly_and_default_off(self):
         base = {
@@ -113,6 +135,11 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                 )
                 self.assertTrue(
                     next(item for item in app["volumeMounts"] if item["name"] == "keycloak-trust")["readOnly"]
+                )
+                self.assertTrue(
+                    next(volume for volume in pod["spec"]["volumes"] if volume["name"] == "keycloak-trust")[
+                        "selinuxRelabel"
+                    ]
                 )
             else:
                 self.assertNotIn("KC_TRUSTSTORE_PATHS", values)
@@ -203,6 +230,14 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                 timeout=15,
                 check=True,
             ).stdout
+            # Ubuntu's stock truststore can be read-only; its private copy must
+            # become writable before the import and read-only again afterwards.
+            fixture_java_home = directory / "jdk"
+            stock = fixture_java_home / "lib/security/cacerts"
+            stock.parent.mkdir(parents=True)
+            shutil.copyfile(java_home / "lib/security/cacerts", stock)
+            stock.chmod(0o444)
+            java_home = fixture_java_home
             subprocess.run(  # noqa: S603 - trusted fixture commands and fixed tool arguments
                 ["/bin/sh", "-ec", command],
                 env={**os.environ, "JAVA_HOME": str(java_home)},

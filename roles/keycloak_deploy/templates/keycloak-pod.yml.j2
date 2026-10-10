@@ -91,6 +91,7 @@ spec:
   volumes:
 {% if keycloak_deploy_trust_ca_certificate | length > 0 %}
     - name: keycloak-trust
+      selinuxRelabel: true
       hostPath:
         path: {{ ((keycloak_deploy_host_data_dir | dirname) ~ '/java-trust') | to_json }}
         type: Directory

@@ -40,6 +40,13 @@
     fail_msg: Browser-flow binding requires exactly one existing top-level flow.
     quiet: true
 
+- name: Report browser-flow drift without writing in check mode
+  ansible.builtin.debug:
+    msg: The declared browser-flow binding differs from the current realm.
+  changed_when: keycloak_cac_flow_before.json.browserFlow != keycloak_cac_flow_binding.browser_flow
+  when: ansible_check_mode
+  no_log: true
+
 - name: Update only a differing browser-flow binding
   ansible.builtin.uri:
     url: "{{ keycloak_cac_url }}/admin/realms/{{ keycloak_cac_flow_binding.realm | urlencode }}"

@@ -1,0 +1,13 @@
+---
+- name: Validate Vault-issued server certificate custody inputs
+  ansible.builtin.assert:
+    that:
+      - vault_pki_certificate_api_url is match('^https://')
+      - vault_pki_certificate_kv_path is match('^[a-zA-Z0-9_./-]+/data/[a-zA-Z0-9_./-]+$')
+      - vault_pki_certificate_issue_path is match('^[a-zA-Z0-9_-]+/issuer/[a-zA-Z0-9_-]+/issue/[a-zA-Z0-9_-]+$')
+      - vault_pki_certificate_common_name is match('^[a-z0-9][a-z0-9.-]+[a-z0-9]$')
+      - vault_pki_certificate_cert_path is match('^/[a-zA-Z0-9_./-]+$')
+      - vault_pki_certificate_key_path is match('^/[a-zA-Z0-9_./-]+$')
+      - vault_pki_certificate_cert_path != vault_pki_certificate_key_path
+      - vault_pki_certificate_key_mode in ['0400', '0600', '0640']
+    quiet: true

@@ -63,14 +63,15 @@ class FakeS3:
     def put_bucket_lifecycle_configuration(self, **kwargs):
         self.put_calls += 1
         requested = kwargs["LifecycleConfiguration"]["Rules"][0]
-        self.rules = [rule(requested["ID"])]
+        self.rules = [requested]
 
 
 class HetznerAbortLifecycleTests(unittest.TestCase):
-    def run_module(self, rules, *, check_mode=False):
+    def run_module(self, rules, *, check_mode=False, abort_days=7):
         client = FakeS3(rules)
         module = FakeModule()
         module.check_mode = check_mode
+        module.params = {**module.params, "abort_days": abort_days}
         with (
             patch.object(MODULE, "AnsibleModule", return_value=module),
             patch.object(MODULE, "boto3", SimpleNamespace(client=lambda *args, **kwargs: client)),
@@ -94,6 +95,20 @@ class HetznerAbortLifecycleTests(unittest.TestCase):
         self.assertTrue(outcome.result["changed"])
         self.assertEqual(client.put_calls, 1)
         self.assertEqual(len(client.rules), 1)
+
+    def test_changed_days_update_once_and_then_converge(self):
+        outcome, client = self.run_module([rule(MODULE.RULE_ID)], abort_days=14)
+        self.assertIsInstance(outcome, Completed)
+        self.assertTrue(outcome.result["changed"])
+        self.assertEqual(client.rules[0]["AbortIncompleteMultipartUpload"], {"DaysAfterInitiation": 14})
+        repeated, client = self.run_module(client.rules, abort_days=14)
+        self.assertFalse(repeated.result["changed"])
+        self.assertEqual(client.put_calls, 0)
+
+    def test_changed_days_preview_never_writes(self):
+        outcome, client = self.run_module([rule(MODULE.RULE_ID)], abort_days=14, check_mode=True)
+        self.assertTrue(outcome.result["changed"])
+        self.assertEqual(client.put_calls, 0)
 
     def test_unrelated_rule_fails_closed(self):
         outcome, client = self.run_module([rule("other", extra={"Expiration": {"Days": 30}})])

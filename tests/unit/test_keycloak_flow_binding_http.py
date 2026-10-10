@@ -124,6 +124,13 @@ class FlowBindingHTTPTests(unittest.TestCase):
         result, writes, state = self.exercise("old", check=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(writes, [])
+        self.assertRegex(result.stdout, r"changed=1(?:\s|$)")
+
+    def test_check_mode_matching_flow_reports_no_drift(self):
+        result, writes, _state = self.exercise("target", check=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(writes, [])
+        self.assertRegex(result.stdout, r"changed=0(?:\s|$)")
 
 
 if __name__ == "__main__":

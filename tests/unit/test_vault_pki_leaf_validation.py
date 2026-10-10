@@ -25,7 +25,11 @@ class LeafValidationTest(unittest.TestCase):
         tasks = yaml.safe_load((root / "roles/vault_pki_certificate/tasks/main.yml").read_text())
         predicates = [
             t
-            for t in tasks
+            for t in next(
+                task["block"]
+                for task in tasks
+                if task["name"] == "Validate and materialize an available final certificate"
+            )
             if t["name"]
             in ("Require the valid exact public DNS server identity", "Require the protected matching server key pair")
         ]

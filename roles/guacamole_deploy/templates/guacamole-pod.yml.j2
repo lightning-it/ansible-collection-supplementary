@@ -4,6 +4,15 @@ metadata:
   name: {{ guacamole_deploy_pod_name }}
   labels:
     app: {{ guacamole_deploy_pod_name }}
+{% if guacamole_deploy_java_ca_certificate | length > 0 or guacamole_deploy_guacd_ca_certificate | length > 0 %}
+  annotations:
+{% if guacamole_deploy_java_ca_certificate | length > 0 %}
+    lit.io/java-ca-sha256: {{ guacamole_deploy_java_ca_sha256 | to_json }}
+{% endif %}
+{% if guacamole_deploy_guacd_ca_certificate | length > 0 %}
+    lit.io/guacd-ca-sha256: {{ guacamole_deploy_guacd_ca_sha256 | to_json }}
+{% endif %}
+{% endif %}
 spec:
   restartPolicy: Always
 {% if guacamole_deploy_host_aliases | length > 0 %}
@@ -34,6 +43,7 @@ spec:
       args:
         - >-
           cp "$JAVA_HOME/lib/security/cacerts" /trust/cacerts;
+          chmod u+w /trust/cacerts;
           keytool -importcert -noprompt -trustcacerts -alias guacamole-reviewed-ca
           -file /trust/issuer-ca.pem -keystore /trust/cacerts -storepass changeit;
           chmod 0644 /trust/cacerts
@@ -164,10 +174,10 @@ spec:
 {% endif %}
   volumes:
 {% if guacamole_deploy_guacd_ca_certificate | length > 0 %}
-    - {name: guacd-trust, hostPath: {path: {{ guacamole_deploy_base_dir }}/guacd-trust, type: Directory}}
+    - {name: guacd-trust, hostPath: {path: {{ guacamole_deploy_base_dir }}/guacd-trust, type: Directory}, selinuxRelabel: true}
 {% endif %}
 {% if guacamole_deploy_java_ca_certificate | length > 0 %}
-    - {name: java-trust, hostPath: {path: {{ guacamole_deploy_base_dir }}/java-trust, type: Directory}}
+    - {name: java-trust, hostPath: {path: {{ guacamole_deploy_base_dir }}/java-trust, type: Directory}, selinuxRelabel: true}
 {% endif %}
     - {name: postgres, hostPath: {path: {{ guacamole_deploy_base_dir }}/postgres, type: Directory}}
     - {name: postgres-init, hostPath: {path: {{ guacamole_deploy_base_dir }}/postgres-init, type: Directory}}

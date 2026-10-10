@@ -1,18 +1,8 @@
 ---
-- name: Validate narrowly scoped PKI leaf role input
-  ansible.builtin.assert:
-    that:
-      - vault_pki_leaf_role_api_url is match('^https://')
-      - vault_pki_leaf_role_mount is match('^[a-z0-9-]+$')
-      - vault_pki_leaf_role_name is match('^[a-z0-9_-]+$')
-      - vault_pki_leaf_role_definition.allowed_domains | length > 0
-      - not vault_pki_leaf_role_definition.allow_any_name | bool
-      - not vault_pki_leaf_role_definition.allow_subdomains | bool
-      - not vault_pki_leaf_role_definition.allow_glob_domains | bool
-      - not vault_pki_leaf_role_definition.allow_ip_sans | bool
-      - not vault_pki_leaf_role_definition.allow_localhost | bool
-      - vault_pki_leaf_role_definition.issuer_ref | length > 0
-    quiet: true
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
 - name: Read the exact PKI leaf role
   ansible.builtin.uri:
     url: >-
@@ -30,6 +20,7 @@
     timeout: 30
     return_content: true
   register: vault_pki_leaf_role_current
+  check_mode: false
   delegate_to: localhost
   become: false
   changed_when: false
@@ -69,7 +60,9 @@
   become: false
   changed_when: true
   no_log: true
-  when: vault_pki_leaf_role_changed | bool
+  when:
+    - vault_pki_leaf_role_changed | bool
+    - not ansible_check_mode
 - name: Independently read the reconciled exact leaf role
   ansible.builtin.uri:
     url: >-
@@ -85,9 +78,17 @@
     timeout: 30
     return_content: true
   register: vault_pki_leaf_role_readback
+  check_mode: false
+  when: not ansible_check_mode or not (vault_pki_leaf_role_changed | bool)
   delegate_to: localhost
   become: false
   changed_when: false
+  no_log: true
+- name: Report exact leaf role drift without writing in check mode
+  ansible.builtin.debug:
+    msg: The declared PKI leaf role differs from its current configuration.
+  changed_when: vault_pki_leaf_role_changed | bool
+  when: ansible_check_mode
   no_log: true
 - name: Require every declared leaf role field to match independent readback
   ansible.builtin.assert:
@@ -96,3 +97,4 @@
         vault_pki_leaf_role_definition.keys()) | items2dict)
     quiet: true
   no_log: true
+  when: not ansible_check_mode or not (vault_pki_leaf_role_changed | bool)

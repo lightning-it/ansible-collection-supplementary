@@ -86,7 +86,7 @@ RULE_ID = "abort-incomplete-multipart-uploads"
 ALLOWED_RULE_KEYS = frozenset({"ID", "Status", "Filter", "Prefix", "AbortIncompleteMultipartUpload"})
 
 
-def is_owned_rule(rule, days):
+def is_owned_rule(rule, days=None):
     """Accept only the exact cleanup action, including Hetzner's Prefix form."""
     if not isinstance(rule, dict) or set(rule) - ALLOWED_RULE_KEYS:
         return False
@@ -94,7 +94,13 @@ def is_owned_rule(rule, days):
         return False
     if rule.get("Filter", {"Prefix": ""}) not in ({"Prefix": ""}, {}):
         return False
-    return rule.get("AbortIncompleteMultipartUpload") == {"DaysAfterInitiation": days}
+    action = rule.get("AbortIncompleteMultipartUpload")
+    if not isinstance(action, dict) or set(action) != {"DaysAfterInitiation"}:
+        return False
+    current = action["DaysAfterInitiation"]
+    return (
+        isinstance(current, int) and not isinstance(current, bool) and current > 0 and (days is None or current == days)
+    )
 
 
 def s3_error_code(error):
@@ -139,9 +145,9 @@ def main():
         config=Config(signature_version="s3v4", retries={"max_attempts": 2}),
     )
     rules = read_rules(client, p["bucket"], module)
-    if any(not is_owned_rule(rule, p["abort_days"]) for rule in rules):
+    if any(not is_owned_rule(rule) for rule in rules):
         module.fail_json(msg="An unrelated lifecycle rule exists; refusing to replace it")
-    if len(rules) == 1:
+    if len(rules) == 1 and is_owned_rule(rules[0], p["abort_days"]):
         module.exit_json(changed=False, rules_before=1, rules_after=1)
     if module.check_mode:
         module.exit_json(changed=True, rules_before=len(rules), rules_after=1)

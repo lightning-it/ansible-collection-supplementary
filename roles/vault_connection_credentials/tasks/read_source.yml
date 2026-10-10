@@ -30,7 +30,8 @@
   ansible.builtin.set_fact:
     vault_connection_credentials_matches: >-
       {{ vault_connection_credentials_document.secret.accounts
-         | selectattr('username', 'equalto', vault_connection_credentials_source.username) | list }}
+         | selectattr('username', 'equalto', vault_connection_credentials_source.username)
+         | selectattr('tier', 'equalto', vault_connection_credentials_source.tier) | list }}
   no_log: true
   changed_when: false
 
