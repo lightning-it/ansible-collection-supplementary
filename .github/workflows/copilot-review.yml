@@ -868,15 +868,16 @@ jobs:
               # its own later protected source, not the original request source.
               if completed and intent["schema"] == 1 and run.get("head_branch") == "develop":
                   resume_ref, resume_sha = "develop", source
+              expected_title = (
+                  f"First review PR #{intent['pr']} head {intent['head']} "
+                  f"owner {intent['owner_run']} old review {review_id}"
+              )
               require(sha(source) and type(run["id"]) is int and str(run["id"]) == run_id and type(run["run_attempt"]) is int and run["run_attempt"] == 1
                       and run["event"] == "workflow_dispatch" and run["path"] == WORKFLOW and run["name"] == "Continue deferred first review request"
                       and run["repository"]["full_name"] == repo and run["head_repository"]["full_name"] == repo
                       and run["head_sha"] == source == resume_sha and run["head_branch"] == resume_ref
                       and run["actor"]["login"] == run["triggering_actor"]["login"] == "github-actions[bot]"
-                      and run["display_title"] == (
-                          f"First review PR #{intent['pr']} head {intent['head']} "
-                          f"owner {intent['owner_run']} old review {review_id}"
-                      ), "resume native run")
+                      and run["display_title"] == expected_title, "resume native run")
               if completed:
                   require(run["status"] == "completed" and run["conclusion"] == "success", "resume native completion")
               else:

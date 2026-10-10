@@ -35,15 +35,15 @@
     {
       "path": "scripts/review_request_continuation.py",
       "source_blob": "d3c1b154b163b4f814fe558ce6d9cab0c264a4aa",
-      "sha256": "9b7a8ae25b0eb1981784de20aa326ece0ed149c2251c89583b515ba79b30d3ef",
-      "mode": "byte-identical",
+      "sha256": "71e062106e12759db9a8536306e02dcbc9bcb9950646d557339afe3e9daf6862",
+      "mode": "adapted-local",
       "source_path": "default/scripts/review_request_continuation.py",
       "source_sha256": "9b7a8ae25b0eb1981784de20aa326ece0ed149c2251c89583b515ba79b30d3ef"
     },
     {
       "path": ".github/workflows/copilot-review.yml",
       "source_blob": "79049ebdc3b28b4255f3ee547e77fce1db2de613",
-      "sha256": "ca9ea3613f15a961c7276403ce5f90733522810c220baa9519a86b568efe1da9",
+      "sha256": "636ce150d04f9f9e0f97dc598727cbf2060ba0fad3742d0da22d22177c30fd10",
       "mode": "adapted-local",
       "source_path": "default/.github/workflows/copilot-review.yml",
       "source_sha256": "5c6318942c0aa07d46eb1c571aaad4aa770c1e8444d0db38b0247e09739f3a69"
@@ -51,8 +51,8 @@
     {
       "path": ".github/workflows/review-request-continuation.yml",
       "source_blob": "4bf23ad623710390a3ecef9d9c1fc8dc6f71415a",
-      "sha256": "0e51ffc3d838fa3b32dd68e84c16dc01e7178df1ba3633241a787925c9e1fb46",
-      "mode": "byte-identical",
+      "sha256": "9bcc9996400f8b36398b30b911f0bddd0c51b872a12024b64c7d43d318a461e6",
+      "mode": "adapted-local",
       "source_path": "default/.github/workflows/review-request-continuation.yml",
       "source_sha256": "0e51ffc3d838fa3b32dd68e84c16dc01e7178df1ba3633241a787925c9e1fb46"
     },
@@ -123,8 +123,8 @@
   ],
   "protected_source_tree": "02e51272db78684a92f1caac33fcec6e0a07a12f",
   "protected_source_receipt": {
-    "id": "sha256:89c902cf2a4d15106504edd3f250142444f30537281895e6cddf76c0997fd841",
-    "sha256": "89c902cf2a4d15106504edd3f250142444f30537281895e6cddf76c0997fd841",
+    "id": "sha256:e57589b6c51a12a5699aaa6e18a0f18935fa38039ca7a4a7cf16ed3074586856",
+    "sha256": "e57589b6c51a12a5699aaa6e18a0f18935fa38039ca7a4a7cf16ed3074586856",
     "schema": "li259-protected-main-assets-v1"
   }
 }

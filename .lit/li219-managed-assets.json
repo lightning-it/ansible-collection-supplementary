@@ -66,9 +66,9 @@
     {
       "path": ".github/workflows/copilot-review.yml",
       "category": "local-required",
-      "sha256": "ca9ea3613f15a961c7276403ce5f90733522810c220baa9519a86b568efe1da9",
+      "sha256": "636ce150d04f9f9e0f97dc598727cbf2060ba0fad3742d0da22d22177c30fd10",
       "owner": "ansible-collection-supplementary",
-      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+      "purpose": "Protected Source continuation with Supplementary-native E126 indentation adaptation; runtime behavior unchanged."
     },
     {
       "path": "scripts/lit-push-ready.py",
@@ -79,15 +79,19 @@
     },
     {
       "path": ".github/workflows/review-request-continuation.yml",
-      "category": "central-managed",
+      "category": "local-required",
       "source": "shared-assets-lit/default/.github/workflows/review-request-continuation.yml",
-      "sha256": "0e51ffc3d838fa3b32dd68e84c16dc01e7178df1ba3633241a787925c9e1fb46"
+      "sha256": "9bcc9996400f8b36398b30b911f0bddd0c51b872a12024b64c7d43d318a461e6",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Protected Source continuation with Supplementary-native E126 indentation adaptation; runtime behavior unchanged."
     },
     {
       "path": "scripts/review_request_continuation.py",
-      "category": "central-managed",
+      "category": "local-required",
       "source": "shared-assets-lit/default/scripts/review_request_continuation.py",
-      "sha256": "9b7a8ae25b0eb1981784de20aa326ece0ed149c2251c89583b515ba79b30d3ef"
+      "sha256": "71e062106e12759db9a8536306e02dcbc9bcb9950646d557339afe3e9daf6862",
+      "owner": "ansible-collection-supplementary",
+      "purpose": "Protected Source continuation with Supplementary-native E126 indentation adaptation; runtime behavior unchanged."
     },
     {
       "path": "scripts/review_request_provenance.py",
