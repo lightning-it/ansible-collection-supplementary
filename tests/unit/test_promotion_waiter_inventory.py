@@ -119,6 +119,26 @@ class PromotionWaiterInventoryTests(unittest.TestCase):
                 with self.assertRaises(IncompleteInventory):
                     collect_waiting_runs(pages([value]), WORKFLOW_ID)
 
+    def test_malformed_or_naive_external_timestamp_fails_closed(self) -> None:
+        for field in ("created_at", "updated_at"):
+            for timestamp in (
+                None,
+                "",
+                "yesterday",
+                "2026-10-09T00:00:00",
+                "2026-13-09T00:00:00Z",
+                "2026-10-09T00:00:00+99:00",
+            ):
+                with self.subTest(field=field, timestamp=timestamp):
+                    value = run(1)
+                    value[field] = timestamp
+                    with self.assertRaises(IncompleteInventory):
+                        collect_waiting_runs(pages([value]), WORKFLOW_ID)
+        value = run(1)
+        value["updated_at"] = "2026-10-08T23:59:59Z"
+        with self.assertRaises(IncompleteInventory):
+            collect_waiting_runs(pages([value]), WORKFLOW_ID)
+
     def test_foreign_workflow_and_missing_identity_fail_closed(self) -> None:
         foreign = run(1)
         foreign["workflow_id"] = WORKFLOW_ID + 1

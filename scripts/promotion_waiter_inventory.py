@@ -40,6 +40,9 @@ COMPLETED_JOB_CONCLUSIONS = frozenset(
 )
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
+API_TIMESTAMP = re.compile(
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\Z"
+)
 
 
 class IncompleteInventory(ValueError):
@@ -58,6 +61,18 @@ def _unique_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 def _is_json_int(value: Any) -> bool:
     """Reject booleans, which Python otherwise treats as integers."""
     return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _api_timestamp(value: Any, field: str) -> datetime:
+    if not isinstance(value, str) or not API_TIMESTAMP.fullmatch(value):
+        raise IncompleteInventory(f"invalid {field}")
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
+    except ValueError as exc:
+        raise IncompleteInventory(f"invalid {field}") from exc
+    if parsed.utcoffset() is None:
+        raise IncompleteInventory(f"invalid {field}")
+    return parsed
 
 
 def _read_page(repository: str, workflow_id: int, page: int) -> dict[str, Any]:
@@ -139,9 +154,13 @@ def collect_waiting_runs(fetch_page: Callable[[int], dict[str, Any]], workflow_i
             actor = run.get("actor")
             if not isinstance(actor, dict) or not isinstance(actor.get("login"), str) or not actor["login"]:
                 raise IncompleteInventory("missing actor")
-            for field in ("event", "head_branch", "created_at", "updated_at"):
+            for field in ("event", "head_branch"):
                 if not isinstance(run.get(field), str) or not run[field]:
                     raise IncompleteInventory(f"missing {field}")
+            created_at = _api_timestamp(run.get("created_at"), "created_at")
+            updated_at = _api_timestamp(run.get("updated_at"), "updated_at")
+            if updated_at < created_at:
+                raise IncompleteInventory("updated_at precedes created_at")
             prs = run.get("pull_requests")
             if not isinstance(prs, list):
                 raise IncompleteInventory("missing PR association inventory")
