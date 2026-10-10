@@ -131,7 +131,7 @@ spec:
         timeoutSeconds: 5
 
     - name: keycloak
-      image: quay.io/keycloak/keycloak:26.7.1@sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+      image: quay.io/keycloak/keycloak:26.8.0@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741
       imagePullPolicy: IfNotPresent
       command:
         - /bin/bash
