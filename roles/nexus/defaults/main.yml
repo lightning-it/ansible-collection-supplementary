@@ -32,7 +32,7 @@ nexus_nexus_disable_anonymous: false
 nexus_nexus_image: >-
   docker.io/sonatype/nexus3:latest@sha256:adb4539e29bcb1c91e5545c853f6c74da5e57efd4c243aa4d5454f309904ab13
 nexus_caddy_image: >-
-  docker.io/caddy:2@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d
+  docker.io/caddy:2@sha256:f2a1290d0463aad60660d4ec134943f183ee2a5f6c3eb7bf32dd984f2f020772
 
 # Host path bind-mounted into the Nexus container at /nexus-data.
 nexus_nexus_data_dir: /srv/nexus
