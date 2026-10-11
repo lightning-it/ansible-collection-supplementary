@@ -17,6 +17,7 @@ from scripts.rep120_caller_contract import (
     WORKFLOW,
     HeldContext,
     describe,
+    exact_type,
     inspect_context,
     main,
 )
@@ -44,6 +45,26 @@ def context() -> dict[str, str]:
 
 
 class CallerContractTests(unittest.TestCase):
+    def test_exact_builtin_types_reject_bool_and_subclasses(self):
+        class IntegerSubclass(int):
+            pass
+
+        class StringSubclass(str):
+            pass
+
+        class DictSubclass(dict[str, object]):
+            pass
+
+        for value, expected in ((1, int), ("value", str), ({}, dict)):
+            self.assertTrue(exact_type(value, expected))
+        for value, expected in (
+            (True, int),
+            (IntegerSubclass(1), int),
+            (StringSubclass("value"), str),
+            (DictSubclass(), dict),
+        ):
+            self.assertFalse(exact_type(value, expected))
+
     def test_default_description_has_no_request_token_transport_or_acceptance(self):
         result = describe()
         self.assertFalse(result["enabled"])

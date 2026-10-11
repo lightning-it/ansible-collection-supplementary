@@ -20,7 +20,7 @@ from collections.abc import Mapping
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
-from scripts.rep120_caller_contract import AUDIENCE, REQUEST_FIELDS, inspect_context
+from scripts.rep120_caller_contract import AUDIENCE, REQUEST_FIELDS, exact_type, inspect_context
 
 MAGIC = b"LIT178T1"
 TRAILER = b"LIT178END"
@@ -58,12 +58,12 @@ def decode(data: bytes) -> dict[str, Any]:
             result[key] = value
         return result
 
-    def constant(_):
+    def constant(_value):
         raise ValueError
 
     try:
         value = json.loads(data.decode("utf-8"), object_pairs_hook=pairs, parse_constant=constant)
-        if type(value) is not dict:
+        if not exact_type(value, dict):
             raise ValueError
         return value
     except (ValueError, UnicodeError, RecursionError):
@@ -78,13 +78,13 @@ def remaining(deadline: float) -> float:
 
 
 def hex_value(value: object, length: int) -> bool:
-    return type(value) is str and re.fullmatch(rf"[0-9a-f]{{{length}}}", value) is not None
+    return exact_type(value, str) and re.fullmatch(rf"[0-9a-f]{{{length}}}", value) is not None
 
 
 def bind_run(envelope: dict[str, Any], environ: Mapping[str, str]) -> dict[str, Any]:
     """Fill only the template's null run_id with this actual first-attempt run."""
     context = inspect_context(environ)
-    if type(envelope) is not dict or type(envelope.get("request")) is not dict:
+    if not exact_type(envelope, dict) or not exact_type(envelope.get("request"), dict):
         raise Held("missing request template")
     run_id = int(context["GITHUB_RUN_ID"])
     request = envelope["request"]
@@ -98,12 +98,12 @@ def validate_inputs(delivery: dict[str, Any], envelope: dict[str, Any], context:
     observed = inspect_context(context)
     if observed["GITHUB_EVENT_NAME"] != "workflow_dispatch":
         raise Held("manual caller required")
-    if type(delivery) is not dict or set(delivery) != DELIVERY_FIELDS:
+    if not exact_type(delivery, dict) or set(delivery) != DELIVERY_FIELDS:
         raise Held("missing delivery binding")
     try:
-        if type(delivery["ipv4"]) is not str or str(ipaddress.IPv4Address(delivery["ipv4"])) != delivery["ipv4"]:
+        if not exact_type(delivery["ipv4"], str) or str(ipaddress.IPv4Address(delivery["ipv4"])) != delivery["ipv4"]:
             raise ValueError
-        if type(delivery["port"]) is not int or not 1 <= delivery["port"] <= 65535:
+        if not exact_type(delivery["port"], int) or not 1 <= delivery["port"] <= 65535:
             raise ValueError
     except (ValueError, TypeError):
         raise Held("invalid address") from None
@@ -111,7 +111,7 @@ def validate_inputs(delivery: dict[str, Any], envelope: dict[str, Any], context:
         raise Held("invalid certificate pin")
     pem = delivery["public_pem"]
     if (
-        type(pem) is not str
+        not exact_type(pem, str)
         or not 1 <= len(pem) <= MAX_OIDC
         or not pem.startswith("-----BEGIN CERTIFICATE-----\n")
         or not pem.rstrip().endswith("-----END CERTIFICATE-----")
@@ -120,9 +120,9 @@ def validate_inputs(delivery: dict[str, Any], envelope: dict[str, Any], context:
     ):
         raise Held("invalid public certificate")
     expiry = delivery["expires_at"]
-    if type(expiry) is not int or not now < expiry <= now + 300:
+    if not exact_type(expiry, int) or not now < expiry <= now + 300:
         raise Held("expired delivery")
-    if type(envelope) is not dict or set(envelope) != ENVELOPE_FIELDS or envelope["schema"] != SCHEMA:
+    if not exact_type(envelope, dict) or set(envelope) != ENVELOPE_FIELDS or envelope["schema"] != SCHEMA:
         raise Held("invalid nonsecret envelope")
     for name in ENVELOPE_FIELDS - {"schema", "request"}:
         if not hex_value(envelope[name], 40 if name == "source_sha" else 64):
@@ -130,12 +130,12 @@ def validate_inputs(delivery: dict[str, Any], envelope: dict[str, Any], context:
     if envelope["source_sha"] != observed["GITHUB_SHA"]:
         raise Held("caller source mismatch")
     request = envelope["request"]
-    if type(request) is not dict or set(request) != set(REQUEST_FIELDS):
+    if not exact_type(request, dict) or set(request) != set(REQUEST_FIELDS):
         raise Held("invalid request fields")
     if request["operation_key"] != envelope["operation_key"] or not hex_value(request["expected_head"], 40):
         raise Held("request binding mismatch")
     for field in ("run_id", "approval_id", "expires_at"):
-        if type(request[field]) is not int or not 1 <= request[field] <= 2**53 - 1:
+        if not exact_type(request[field], int) or not 1 <= request[field] <= 2**53 - 1:
             raise Held("invalid request identity")
     if request["run_id"] != int(observed["GITHUB_RUN_ID"]) or not now < request["expires_at"] <= expiry:
         raise Held("request run/deadline mismatch")
@@ -143,9 +143,9 @@ def validate_inputs(delivery: dict[str, Any], envelope: dict[str, Any], context:
     if path is None and contents is None:
         pass
     elif (
-        type(path) is not str
+        not exact_type(path, str)
         or re.fullmatch(r"ledger/operations/" + envelope["operation_key"] + r"/(record|[0-9]{4})\.json", path) is None
-        or type(contents) is not str
+        or not exact_type(contents, str)
     ):
         raise Held("invalid append path")
     else:
@@ -162,7 +162,7 @@ def validate_inputs(delivery: dict[str, Any], envelope: dict[str, Any], context:
 def oidc_endpoint(value: str) -> tuple[str, str]:
     """Only the runner's GitHub HTTPS idtoken URL; no audience override."""
     try:
-        if type(value) is not str or not 1 <= len(value) <= 4096 or any(ord(c) < 33 or ord(c) > 126 for c in value):
+        if not exact_type(value, str) or not 1 <= len(value) <= 4096 or any(ord(c) < 33 or ord(c) > 126 for c in value):
             raise ValueError
         url = urlsplit(value)
         host = url.hostname or ""
@@ -186,7 +186,11 @@ def oidc_endpoint(value: str) -> tuple[str, str]:
 def oidc_capability(environ: Mapping[str, str]) -> tuple[str, str, str]:
     host, target = oidc_endpoint(environ.get("ACTIONS_ID_TOKEN_REQUEST_URL", ""))
     bearer = environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
-    if type(bearer) is not str or not 1 <= len(bearer) <= MAX_OIDC or any(ord(c) < 33 or ord(c) > 126 for c in bearer):
+    if (
+        not exact_type(bearer, str)
+        or not 1 <= len(bearer) <= MAX_OIDC
+        or any(ord(c) < 33 or ord(c) > 126 for c in bearer)
+    ):
         raise Held("missing runner OIDC capability")
     return host, target, bearer
 
@@ -221,7 +225,7 @@ def fetch_oidc(environ: Mapping[str, str], deadline: float) -> str:
         token = result.get("value")
         if (
             set(result) != {"value"}
-            or type(token) is not str
+            or not exact_type(token, str)
             or not 1 <= len(token) <= MAX_OIDC
             or re.fullmatch(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", token) is None
         ):

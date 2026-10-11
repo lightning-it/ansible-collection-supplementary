@@ -306,7 +306,7 @@ class TransportTests(unittest.TestCase):
 
     def tls_exchange(self, bad_pin=False, bad_hostname=False):
         # Private fixture key stays in Linux memfd only; no key in repo/log/argv.
-        key, cert = (os.memfd_create("sender-test", os.MFD_CLOEXEC) for _ in range(2))
+        key, cert = (os.memfd_create("sender-test", os.MFD_CLOEXEC) for _index in range(2))
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         results: list[str] = []
         thread = None

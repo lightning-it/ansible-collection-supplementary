@@ -8,6 +8,9 @@ import os
 import re
 import sys
 from collections.abc import Mapping
+from typing import TypeGuard, TypeVar
+
+ExactValue = TypeVar("ExactValue")
 
 REPOSITORY = "lightning-it/ansible-collection-supplementary"
 REPOSITORY_ID = "1103407173"
@@ -58,10 +61,16 @@ class HeldContext(ValueError):
     """Reject context without including untrusted input or secret values."""
 
 
+def exact_type(value: object, expected: type[ExactValue]) -> TypeGuard[ExactValue]:
+    """Require the exact builtin type; bool/int and subclasses are distinct."""
+    observed = type(value)
+    return observed is expected
+
+
 def inspect_context(environ: Mapping[str, str]) -> dict[str, str]:
     """Inspect only metadata. Environment strings are NOT authenticated OIDC."""
     context = {key: environ.get(key, "") for key in CONTEXT_FIELDS}
-    if any(type(value) is not str or len(value) > 256 for value in context.values()):
+    if any(not exact_type(value, str) or len(value) > 256 for value in context.values()):
         raise HeldContext("missing or malformed caller metadata")
     expected = {
         "GITHUB_REPOSITORY": REPOSITORY,
