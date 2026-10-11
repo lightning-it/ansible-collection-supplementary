@@ -55,14 +55,16 @@ class CallerContractTests(unittest.TestCase):
         class DictSubclass(dict[str, object]):
             pass
 
-        for value, expected in ((1, int), ("value", str), ({}, dict)):
+        positive_cases: tuple[tuple[object, type[Any]], ...] = ((1, int), ("value", str), ({}, dict))
+        for value, expected in positive_cases:
             self.assertTrue(exact_type(value, expected))
-        for value, expected in (
+        negative_cases: tuple[tuple[object, type[Any]], ...] = (
             (True, int),
             (IntegerSubclass(1), int),
             (StringSubclass("value"), str),
             (DictSubclass(), dict),
-        ):
+        )
+        for value, expected in negative_cases:
             self.assertFalse(exact_type(value, expected))
 
     def test_default_description_has_no_request_token_transport_or_acceptance(self):
