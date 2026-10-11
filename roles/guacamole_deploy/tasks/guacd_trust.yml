@@ -4,6 +4,8 @@
     content: "{{ guacamole_deploy_guacd_ca_certificate }}"
     valid_at:
       now: "+0s"
+  delegate_to: localhost
+  become: false
   register: guacamole_deploy_guacd_ca_info
 
 - name: Require the exact reviewed guacd CA fingerprint

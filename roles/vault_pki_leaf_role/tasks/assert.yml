@@ -23,6 +23,8 @@
       - vault_pki_leaf_role_definition.allow_glob_domains | default(true) is sameas false
       - vault_pki_leaf_role_definition.allow_ip_sans | default(true) is sameas false
       - vault_pki_leaf_role_definition.allow_localhost | default(true) is sameas false
+      - vault_pki_leaf_role_definition.server_flag | default(false) is sameas true
+      - vault_pki_leaf_role_definition.client_flag | default(true) is sameas false
       - vault_pki_leaf_role_definition.issuer_ref | length > 0
     quiet: true
 
@@ -32,3 +34,11 @@
       - item is string and item is match('^[a-z0-9][a-z0-9.-]*[a-z0-9]$')
     quiet: true
   loop: "{{ vault_pki_leaf_role_definition.allowed_domains }}"
+
+- name: Require positive integer seconds and key bit counts before API access
+  ansible.builtin.assert:
+    that:
+      - vault_pki_leaf_role_definition[item] | string is match('^[1-9][0-9]*$')
+    quiet: true
+  loop: [ttl, max_ttl, key_bits]
+  when: item in vault_pki_leaf_role_definition

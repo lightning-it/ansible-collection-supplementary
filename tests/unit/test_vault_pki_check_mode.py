@@ -35,6 +35,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
         apply=False,
         bare_domains=True,
         expansion=None,
+        numeric_fields=None,
         forged=False,
         omitted=None,
         failing_path=None,
@@ -160,7 +161,12 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 if self.headers.get("Content-Type") != "application/merge-patch+json":
                     self.send_response(415)
                 else:
-                    payload["data"].update(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+                    incoming = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                    # Vault canonicalizes integer role fields in its independent GET.
+                    for field in ("ttl", "max_ttl", "key_bits"):
+                        if field in incoming:
+                            incoming[field] = int(incoming[field])
+                    payload["data"].update(incoming)
                     self.send_response(204)
                 self.end_headers()
 
@@ -210,8 +216,12 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                         "allow_ip_sans": False,
                         "allow_localhost": False,
                         "issuer_ref": "existing",
+                        "server_flag": True,
+                        "client_flag": False,
                     },
                 )
+            if numeric_fields:
+                values["vault_pki_leaf_role_definition"].update(numeric_fields)
             if omitted:
                 del values["vault_pki_leaf_role_definition"][omitted]
             if expansion:
@@ -388,6 +398,16 @@ class VaultPkiCheckModeTests(unittest.TestCase):
     def test_existing_role_patch_preserves_undeclared_restrictions_and_new_role_uses_post(self):
         for existing in (True, False):
             self.exercise("vault_pki_leaf_role", existing, apply=True)
+
+    def test_numeric_inventory_templates_match_canonical_vault_readback(self):
+        self.exercise("vault_pki_leaf_role", True, apply=True,
+                      numeric_fields={"ttl": "1800", "max_ttl": "3600", "key_bits": "256"})
+
+    def test_invalid_numeric_fields_fail_before_api_access(self):
+        for field in ("ttl", "max_ttl", "key_bits"):
+            for value in (0, True, "1h", "-1", "not-a-number"):
+                with self.subTest(field=field, value=value):
+                    self.exercise("vault_pki_leaf_role", True, expansion={field: value})
 
     def test_exact_domains_require_bare_domain_issuance_before_api_access(self):
         self.exercise("vault_pki_leaf_role", True, bare_domains=False)

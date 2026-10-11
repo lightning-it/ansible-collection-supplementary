@@ -4,6 +4,8 @@
     content: "{{ guacamole_deploy_java_ca_certificate }}"
     valid_at:
       now: "+0s"
+  delegate_to: localhost
+  become: false
   register: guacamole_deploy_java_ca_info
 
 - name: Require the exact reviewed Guacamole CA fingerprint

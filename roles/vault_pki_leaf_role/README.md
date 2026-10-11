@@ -36,6 +36,8 @@ No dependent role. Existing issuer and authorization provisioning belong to the 
         allow_glob_domains: false
         allow_ip_sans: false
         allow_localhost: false
+        server_flag: true
+        client_flag: false
 ```
 
 ## License
@@ -45,3 +47,5 @@ MIT, as declared by the collection.
 ## Author
 
 Lightning IT
+
+Optional `ttl` and `max_ttl` use positive integer seconds; `key_bits` uses a positive integer. Numeric inventory templates are normalized before comparison and writes so Vault readback remains idempotent. Duration suffixes are rejected before API access.

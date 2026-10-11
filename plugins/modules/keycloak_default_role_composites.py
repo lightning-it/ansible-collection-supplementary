@@ -8,6 +8,7 @@
 DOCUMENTATION = r"""
 ---
 module: keycloak_default_role_composites
+version_added: "4.0.4"
 short_description: Remove allowlisted Keycloak realm default-role composites
 description:
   - Reconciles an empty effective default-role composite for one realm.
