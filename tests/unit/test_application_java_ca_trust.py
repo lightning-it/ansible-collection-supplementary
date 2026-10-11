@@ -224,6 +224,60 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                         self.assertIn("exact unexpired reviewed CA", result.stdout)
                     self.assertFalse((directory / "java-trust/issuer-ca.pem").exists())
 
+    def test_keycloak_deploy_check_mode_validates_ca_and_plans_rotation_without_writes(self):
+        ca, _leaf, _key = certificate_fixture()
+        future, _leaf, _key = certificate_fixture(future_ca=True)
+        role = ROOT / "roles/keycloak_deploy"
+        for label, certificate, pin, accepted in (
+            ("valid", ca.public_bytes(serialization.Encoding.PEM).decode(), fingerprint(ca), True),
+            ("wrong-pin", ca.public_bytes(serialization.Encoding.PEM).decode(), ":".join(["00"] * 32), False),
+            ("future", future.public_bytes(serialization.Encoding.PEM).decode(), fingerprint(future), False),
+            ("malformed", "NOT A CERTIFICATE", fingerprint(ca), False),
+        ):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                trust = directory / "java-trust"
+                trust.mkdir()
+                existing = trust / "issuer-ca.pem"
+                existing.write_text("OLD PUBLIC CA")
+                values = yaml.safe_load((role / "defaults/main.yml").read_text())
+                values.update(
+                    ansible_os_family="Fixture",
+                    keycloak_deploy_skip_runtime=False,
+                    keycloak_deploy_skip_deploy=False,
+                    keycloak_deploy_host_data_dir=str(directory / "data"),
+                    keycloak_deploy_trust_ca_certificate=certificate,
+                    keycloak_deploy_trust_ca_sha256=pin,
+                )
+                source = directory / "play.yml"
+                source.write_text(
+                    yaml.safe_dump(
+                        [
+                            {
+                                "hosts": "localhost",
+                                "gather_facts": False,
+                                "vars": values,
+                                "tasks": [{"ansible.builtin.import_tasks": str(role / "tasks/deploy.yml")}],
+                            }
+                        ]
+                    )
+                )
+                config = directory / "ansible.cfg"
+                config.write_text("[defaults]\nstdout_callback=default\n")
+                result = subprocess.run(  # noqa: S603 - fixed tool and generated public fixture
+                    [shutil.which("ansible-playbook"), "-i", "localhost,", "-c", "local", "--check", str(source)],
+                    env={**os.environ, "ANSIBLE_CONFIG": str(config), "ANSIBLE_LOCAL_TEMP": str(directory / "ansible")},
+                    capture_output=True,
+                    text=True,
+                    timeout=45,
+                    check=False,
+                )
+                self.assertEqual(result.returncode == 0, accepted, result.stdout + result.stderr)
+                self.assertEqual(existing.read_text(), "OLD PUBLIC CA")
+                if accepted:
+                    self.assertIn("Materialize only the reviewed public Keycloak CA", result.stdout)
+                    self.assertNotIn("changed=0", result.stdout.split("PLAY RECAP")[-1])
+
     def test_all_application_trust_boundaries_refuse_future_pinned_ca_before_writes(self):
         for role, prefix, filename in (
             ("guacamole_deploy", "java", "java_trust.yml"),

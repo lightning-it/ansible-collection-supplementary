@@ -4,6 +4,8 @@
     content: "{{ keycloak_deploy_trust_ca_certificate }}"
     valid_at:
       now: "+0s"
+  delegate_to: localhost
+  become: false
   register: keycloak_deploy_trust_ca_info
 
 - name: Require the exact reviewed Keycloak CA fingerprint

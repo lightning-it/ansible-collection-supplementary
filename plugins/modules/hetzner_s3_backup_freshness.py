@@ -8,6 +8,7 @@
 DOCUMENTATION = r"""
 ---
 module: hetzner_s3_backup_freshness
+version_added: "4.1.0"
 short_description: Enforce a maximum age for an encrypted S3 database backup
 description:
   - Paginates the complete dedicated service prefix instead of trusting one S3 page.
@@ -167,9 +168,16 @@ def main():
     args = module.params
     if boto3 is None:
         module.fail_json(msg="boto3 and botocore are required in the controller runtime")
-    endpoint = urlsplit(args["endpoint_url"])
+    try:
+        endpoint = urlsplit(args["endpoint_url"])
+        port = endpoint.port
+    except ValueError:
+        module.fail_json(msg="Unsafe backup freshness contract")
+        return
     if (
         endpoint.scheme != "https"
+        or any(character.isspace() for character in args["endpoint_url"])
+        or (port is not None and not 1 <= port <= 65535)
         or not endpoint.hostname
         or endpoint.username is not None
         or endpoint.password is not None

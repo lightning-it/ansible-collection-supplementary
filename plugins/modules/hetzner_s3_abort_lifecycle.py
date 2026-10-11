@@ -8,6 +8,7 @@
 DOCUMENTATION = r"""
 ---
 module: hetzner_s3_abort_lifecycle
+version_added: "4.1.0"
 short_description: Reconcile multipart cleanup on a dedicated Hetzner bucket
 description:
   - Owns the complete lifecycle configuration of one dedicated backup bucket.

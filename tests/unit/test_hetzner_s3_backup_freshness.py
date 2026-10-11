@@ -6,6 +6,8 @@ import importlib.util
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -68,6 +70,49 @@ class BackupFreshnessTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "older than the declared RPO"):
             MODULE.require_fresh(result, 3600)
         MODULE.require_fresh(result, None)
+
+    def test_main_refuses_malformed_endpoints_without_client_or_secret_traceback(self):
+        class Rejected(Exception):
+            pass
+
+        def fail(**result):
+            raise Rejected(result)
+
+        for endpoint in (
+            "https://[CANARY",
+            "https://example.test:CANARY",
+            "https://example.test:99999",
+            "https://CANARY:secret@example.test",
+            "https://example.test/path",
+            "https://example.test?CANARY",
+            "https://example.test\n",
+            "http://example.test",
+        ):
+            with self.subTest(endpoint=endpoint):
+                module = SimpleNamespace(
+                    params={
+                        "bucket": "fixture",
+                        "endpoint_url": endpoint,
+                        "region": "nbg1",
+                        "access_key": "CANARY_ACCESS",
+                        "secret_key": "CANARY_SECRET",
+                        "prefix": self.prefix,
+                        "service": "keycloak",
+                        "validate_certs": True,
+                        "max_age_seconds": 3600,
+                    },
+                    fail_json=fail,
+                )
+                client = Mock()
+                with (
+                    patch.object(MODULE, "AnsibleModule", return_value=module),
+                    patch.object(MODULE, "boto3", SimpleNamespace(client=client)),
+                ):
+                    with self.assertRaises(Rejected) as outcome:
+                        MODULE.main()
+                    client.assert_not_called()
+                    self.assertEqual(outcome.exception.args, ({"msg": "Unsafe backup freshness contract"},))
+                    self.assertNotIn("CANARY", str(outcome.exception))
 
 
 if __name__ == "__main__":

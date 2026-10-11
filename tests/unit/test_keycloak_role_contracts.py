@@ -260,9 +260,11 @@ class KeycloakRoleContractTests(unittest.TestCase):
         )
         manifest_render = next(task for task in pod_tasks if task["name"].startswith("Render Keycloak Pod manifest"))
         self.assertIn("not keycloak_deploy_manage_systemd", manifest_render["when"])
-        runtime_block = yaml.safe_load((ROOT / "roles/keycloak_deploy/tasks/deploy.yml").read_text(encoding="utf-8"))[
-            2
-        ]["block"]
+        runtime_block = next(
+            task
+            for task in yaml.safe_load((ROOT / "roles/keycloak_deploy/tasks/deploy.yml").read_text(encoding="utf-8"))
+            if task["name"] == "Deploy Keycloak runtime"
+        )["block"]
         runtime_map = {task["name"]: task for task in runtime_block}
         inspect = runtime_map["Inspect the effective Keycloak environment"]
         self.assertEqual(
@@ -750,9 +752,13 @@ exit 0
         rescue_names = [task["name"] for task in transaction["rescue"]]
         self.assertIn("Capture safe native Keycloak service failure properties", rescue_names)
 
-        deploy = yaml.safe_load(
-            (ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy.yml").read_text(encoding="utf-8")
-        )[2]["block"]
+        deploy = next(
+            task
+            for task in yaml.safe_load(
+                (ROOT / "roles" / "keycloak_deploy" / "tasks" / "deploy.yml").read_text(encoding="utf-8")
+            )
+            if task["name"] == "Deploy Keycloak runtime"
+        )["block"]
         deploy_names = [task["name"] for task in deploy]
         self.assertLess(
             deploy_names.index("Require the desired database endpoint in the active Keycloak pod"),

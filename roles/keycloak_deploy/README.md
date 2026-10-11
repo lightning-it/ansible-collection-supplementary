@@ -180,3 +180,7 @@ Lightning IT
 Run the three scenarios documented in
 [`docs/testing/keycloak.md`](../../docs/testing/keycloak.md). No external service
 credential is required; use ephemeral test credentials only.
+
+Pinned outbound CA inspection also runs in check mode on the controller. Invalid, future or mismatched CAs fail
+before host changes; directory and certificate tasks report prospective drift without writing. Runtime Pod and
+service deployment remain skipped in check mode.

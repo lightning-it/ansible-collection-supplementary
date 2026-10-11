@@ -110,6 +110,7 @@ class DependencyMetadataTests(unittest.TestCase):
 
         root = PATH.parents[2]
         metadata = yaml.safe_load((root / "meta/execution-environment.yml").read_text())
+        self.assertEqual(metadata["version"], 1)
         requirements = root / metadata["dependencies"]["python"]
         self.assertIn("cryptography==50.0.1", requirements.read_text().splitlines())
         galaxy = yaml.safe_load((root / "galaxy.yml").read_text())
