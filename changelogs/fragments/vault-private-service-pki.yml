@@ -1,0 +1,4 @@
+---
+minor_changes:
+  - Add explicit existing-issuer leaf-role reconciliation and Vault-issued service certificate custody.
+  - Add optional fingerprint-pinned guacd CA trust while preserving stock public CAs and private DNS host aliases.

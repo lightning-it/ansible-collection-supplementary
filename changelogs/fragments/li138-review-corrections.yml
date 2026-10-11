@@ -1,0 +1,9 @@
+---
+bugfixes:
+  - guacamole_deploy - bind both reviewed CA pins into transactional manifest drift and relabel trust mounts on SELinux.
+  - guacamole_deploy - always clear resolved connection credential facts after failed API reconciliation.
+  - vault_connection_credentials - validate the interface before reads and select exact username/tier pairs.
+  - vault_pki_certificate - bind custody to the declared issuer path and preview issuance without writes.
+  - vault_pki_leaf_role - run safe GETs and report drift without writes in check mode.
+  - keycloak_cac - report browser-flow drift without PUT requests in check mode.
+  - keycloak_deploy - relabel the reviewed public CA mount on SELinux.

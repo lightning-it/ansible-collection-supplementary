@@ -297,7 +297,24 @@ jobs:
             "$GITHUB_WORKSPACE/" "$collection_root/"
           cd "$collection_root"
           ansible-test sanity --requirements --python "$PYTHON_VERSION"
+      - name: Install the metadata-declared executable unit-fixture dependency
+        run: |
+          set -euo pipefail
+          fixture_specs="$(python -c '
+          import yaml
+          dependencies = yaml.safe_load(open("galaxy.yml"))["dependencies"]
+          for name in ("community.crypto", "community.hashi_vault"):
+              print(name + ":" + dependencies[name])
+          ')"
+          mapfile -t fixture_requirements <<< "$fixture_specs"
+          ANSIBLE_COLLECTIONS_PATH="$RUNNER_TEMP/unit-collections" \
+          ansible-galaxy collection install \
+            --no-deps \
+            --collections-path "$RUNNER_TEMP/unit-collections" \
+            "${fixture_requirements[@]}"
       - name: Run policy and evidence unit tests
+        env:
+          ANSIBLE_COLLECTIONS_PATH: ${{ runner.temp }}/unit-collections
         run: python -m pytest -q tests/test_role_coverage.py tests/unit
       - name: Compile workflow-facing Python tools
         run: |

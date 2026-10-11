@@ -1,0 +1,8 @@
+---
+vault_pki_leaf_role_api_url: ""
+vault_pki_leaf_role_ca_path: ""
+vault_pki_leaf_role_admin_token: ""
+vault_pki_leaf_role_mount: ""
+vault_pki_leaf_role_name: ""
+vault_pki_leaf_role_definition: {}
+vault_pki_leaf_role_allow_change: false

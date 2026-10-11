@@ -1,0 +1,43 @@
+---
+- name: Inspect the final server certificate
+  community.crypto.x509_certificate_info:
+    content: "{{ vault_pki_certificate_candidate.certificate }}"
+    valid_at:
+      now: "+0s"
+  register: vault_pki_certificate_info
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: Inspect final protected server private key
+  community.crypto.openssl_privatekey_info:
+    content: "{{ vault_pki_certificate_candidate.private_key }}"
+  register: vault_pki_certificate_key_info
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: Require the valid exact public DNS server identity
+  ansible.builtin.assert:
+    that:
+      - vault_pki_certificate_info.valid_at.now
+      - >-
+        vault_pki_certificate_candidate.certificate
+        | lit.supplementary.vault_pki_direct_issuer_matches(vault_pki_certificate_issuer.json.data.certificate)
+      - >-
+        vault_pki_certificate_candidate.ca_chain | default(vault_pki_certificate_issuer.json.data.ca_chain)
+        == vault_pki_certificate_issuer.json.data.ca_chain
+      - vault_pki_certificate_info.subject.commonName == vault_pki_certificate_common_name
+      - vault_pki_certificate_info.subject_alt_name == ['DNS:' ~ vault_pki_certificate_common_name]
+      - >-
+        vault_pki_certificate_info.basic_constraints is none
+        or 'CA:FALSE' in vault_pki_certificate_info.basic_constraints
+      - "'TLS Web Server Authentication' in vault_pki_certificate_info.extended_key_usage"
+    quiet: true
+
+- name: Require the protected matching server key pair
+  ansible.builtin.assert:
+    that:
+      - vault_pki_certificate_info.public_key == vault_pki_certificate_key_info.public_key
+    quiet: true
+  no_log: true

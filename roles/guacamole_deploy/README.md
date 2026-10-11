@@ -15,6 +15,15 @@ guacd and PostgreSQL remain pod-internal.
 
 All defaults are defined in `defaults/main.yml`.
 
+- `guacamole_deploy_java_ca_certificate` supplies one public PEM CA and
+  `guacamole_deploy_java_ca_sha256` pins its colon-separated DER fingerprint.
+  The role rejects an expired, non-CA or mismatched certificate. An init
+  container extends the pinned image's stock Java CA store with that CA;
+  the application mounts the resulting store read-only. The standard
+  `changeit` integrity password protects no private key or authentication
+  credential. Certificate and hostname verification remain enabled.
+  Empty inputs retain the stock Java truststore. Runtime acceptance of
+  the consumer's issuer and rejection of an unrelated CA remain mandatory.
 - `guacamole_deploy_connections` declares credential-free RDP, SSH, or VNC
   connections.
 - `guacamole_deploy_network_name` and `guacamole_deploy_network_ipv4` optionally
@@ -34,6 +43,13 @@ All defaults are defined in `defaults/main.yml`.
   values so host-level bypasses cannot silently enter the application container.
 - `guacamole_deploy_oidc_enabled` enables the OpenID Connect extension and
   requires issuer, authorization, JWKS, client, and redirect settings.
+- `guacamole_deploy_oidc_scope` explicitly declares space-separated request scopes.
+  Its default preserves upstream `openid email profile`. An installation using
+  the immutable `sub` username and an explicitly mapped groups claim can select
+  `openid` to avoid requesting profile or email data. OpenID Connect Core 1.0
+  sections 3.1.2.1 and 5.4 require `openid` and make other scopes optional; this
+  differs from the Guacamole manual's suggested `openid profile` minimum.
+  Confirm the actual token claims and browser authorization before acceptance.
 - `guacamole_deploy_oidc_groups_claim_type` explicitly selects the token claim
   that carries group names and defaults to `groups`.
 - `guacamole_deploy_oidc_username_claim_type` selects the username claim and
@@ -57,6 +73,12 @@ All defaults are defined in `defaults/main.yml`.
 
 Credentials must not be placed in connection or group contracts. The local
 break-glass hash changes only when its Vault-custodied password or salt changes.
+
+A connection may declare `credential_fields`, mapping `password`, `private-key`
+or `passphrase` to field names in the Vault-backed runtime secret bundle. The
+inventory contains only references; the role requires nonempty secret values,
+resolves them immediately before the API request, suppresses request logging,
+and clears the resolved parameters afterward. Inline credentials remain forbidden.
 
 The pod definition is Kubernetes YAML and its persistent lifecycle is managed
 only through `lit.foundational.podman_systemd` and a native `.kube` Quadlet.

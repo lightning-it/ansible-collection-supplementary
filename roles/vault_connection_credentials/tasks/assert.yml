@@ -1,0 +1,31 @@
+---
+- name: Validate the connection credential interface before Vault reads
+  ansible.builtin.assert:
+    that:
+      - vault_connection_credentials_sources is sequence and vault_connection_credentials_sources is not string
+      - vault_connection_credentials_auth is mapping
+      - vault_connection_credentials_auth.url is match('^https://')
+      - vault_connection_credentials_auth.ca_cert is match('^/')
+      - vault_connection_credentials_auth.role_id | length > 0
+      - vault_connection_credentials_auth.secret_id | length > 0
+      - vault_connection_credentials_auth.auth_mount_point is match('^[A-Za-z0-9_-]+$')
+      - vault_connection_credentials_kv_mount is match('^[A-Za-z0-9_-]+$')
+      - >-
+        vault_connection_credentials_sources | map(attribute='destination') | unique | length
+        == vault_connection_credentials_sources | length
+    quiet: true
+  no_log: true
+
+- name: Validate every declared source before any secret lookup
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.vault_path is match('^[A-Za-z0-9_./-]+$') and '..' not in item.vault_path.split('/')
+      - item.destination is match('^[A-Za-z][A-Za-z0-9_]*$')
+      - item.subject is string and item.subject | length > 0
+      - item.purpose is string and item.purpose | length > 0
+      - item.username is string and item.username | length > 0
+      - item.tier is string and item.tier | length > 0
+    quiet: true
+  loop: "{{ vault_connection_credentials_sources }}"
+  no_log: true

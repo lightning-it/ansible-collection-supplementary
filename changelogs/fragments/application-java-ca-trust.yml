@@ -1,0 +1,8 @@
+---
+minor_changes:
+  - >-
+    guacamole_deploy - support a fingerprint-pinned public CA in the
+    application's Java truststore without disabling TLS verification.
+  - >-
+    keycloak_deploy - support a fingerprint-pinned public CA through the
+    documented Keycloak truststore-paths setting.

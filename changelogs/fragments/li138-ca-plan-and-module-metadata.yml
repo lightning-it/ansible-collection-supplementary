@@ -1,0 +1,11 @@
+---
+bugfixes:
+  - >-
+    keycloak_deploy - validate pinned public CA content on the controller and plan trust drift
+    in check mode before runtime deployment.
+  - >-
+    hetzner_s3_backup_freshness - refuse malformed HTTPS origins without exposing parsing tracebacks
+    or creating an S3 client.
+  - >-
+    collection - use collection execution-environment metadata version one and declare the introduction
+    version of S3 modules.

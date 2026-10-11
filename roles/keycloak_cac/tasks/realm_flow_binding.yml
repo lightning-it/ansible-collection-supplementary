@@ -1,0 +1,89 @@
+---
+- name: Read the current realm browser-flow binding
+  ansible.builtin.uri:
+    url: "{{ keycloak_cac_url }}/admin/realms/{{ keycloak_cac_flow_binding.realm | urlencode }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_cac_flow_token.json.access_token }}"
+    validate_certs: "{{ keycloak_cac_validate_certs }}"
+    timeout: "{{ keycloak_cac_request_timeout | int }}"
+    status_code: 200
+    return_content: true
+  register: keycloak_cac_flow_before
+  check_mode: false
+  changed_when: false
+  no_log: true
+
+- name: Read available authentication flows before binding
+  ansible.builtin.uri:
+    url: "{{ keycloak_cac_url }}/admin/realms/{{ keycloak_cac_flow_binding.realm | urlencode }}/authentication/flows"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_cac_flow_token.json.access_token }}"
+    validate_certs: "{{ keycloak_cac_validate_certs }}"
+    timeout: "{{ keycloak_cac_request_timeout | int }}"
+    status_code: 200
+    return_content: true
+  register: keycloak_cac_available_flows
+  check_mode: false
+  changed_when: false
+  no_log: true
+
+- name: Require one existing top-level target flow
+  ansible.builtin.assert:
+    that:
+      - >-
+        keycloak_cac_available_flows.json
+        | selectattr('alias', 'equalto', keycloak_cac_flow_binding.browser_flow)
+        | selectattr('topLevel', 'equalto', true)
+        | list | length == 1
+    fail_msg: Browser-flow binding requires exactly one existing top-level flow.
+    quiet: true
+
+- name: Report browser-flow drift without writing in check mode
+  ansible.builtin.debug:
+    msg: The declared browser-flow binding differs from the current realm.
+  changed_when: keycloak_cac_flow_before.json.browserFlow != keycloak_cac_flow_binding.browser_flow
+  when: ansible_check_mode
+  no_log: true
+
+- name: Update only a differing browser-flow binding
+  ansible.builtin.uri:
+    url: "{{ keycloak_cac_url }}/admin/realms/{{ keycloak_cac_flow_binding.realm | urlencode }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ keycloak_cac_flow_token.json.access_token }}"
+    body_format: json
+    body:
+      browserFlow: "{{ keycloak_cac_flow_binding.browser_flow }}"
+    validate_certs: "{{ keycloak_cac_validate_certs }}"
+    timeout: "{{ keycloak_cac_request_timeout | int }}"
+    status_code: 204
+  when:
+    - not ansible_check_mode
+    - keycloak_cac_flow_before.json.browserFlow != keycloak_cac_flow_binding.browser_flow
+  changed_when: true
+  no_log: true
+
+- name: Read back the exact browser-flow binding
+  ansible.builtin.uri:
+    url: "{{ keycloak_cac_url }}/admin/realms/{{ keycloak_cac_flow_binding.realm | urlencode }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_cac_flow_token.json.access_token }}"
+    validate_certs: "{{ keycloak_cac_validate_certs }}"
+    timeout: "{{ keycloak_cac_request_timeout | int }}"
+    status_code: 200
+    return_content: true
+  register: keycloak_cac_flow_after
+  changed_when: false
+  no_log: true
+  when: not ansible_check_mode
+
+- name: Verify the target binding without altering other realm fields
+  ansible.builtin.assert:
+    that:
+      - keycloak_cac_flow_after.json.browserFlow == keycloak_cac_flow_binding.browser_flow
+      - keycloak_cac_flow_after.json.enabled == keycloak_cac_flow_before.json.enabled
+    quiet: true
+  when: not ansible_check_mode

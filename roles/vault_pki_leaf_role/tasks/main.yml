@@ -1,0 +1,121 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Read the exact PKI leaf role
+  ansible.builtin.uri:
+    url: >-
+      {{ vault_pki_leaf_role_api_url ~ '/v1/' ~ vault_pki_leaf_role_mount
+      ~ '/roles/' ~ vault_pki_leaf_role_name }}
+    method: GET
+    headers:
+      X-Vault-Token: '{{ vault_pki_leaf_role_admin_token }}'
+    validate_certs: true
+    ca_path: '{{ vault_pki_leaf_role_ca_path }}'
+    use_netrc: false
+    status_code:
+      - 200
+      - 404
+    timeout: 30
+    return_content: true
+  register: vault_pki_leaf_role_current
+  check_mode: false
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  no_log: true
+- name: Refuse undeclared alternate identity expansion in an existing role
+  ansible.builtin.assert:
+    that:
+      - vault_pki_leaf_role_current.json.data.allowed_other_sans | default([]) | length == 0
+      - vault_pki_leaf_role_current.json.data.allowed_serial_numbers | default([]) | length == 0
+      - vault_pki_leaf_role_current.json.data.allowed_user_ids | default([]) | length == 0
+      - vault_pki_leaf_role_current.json.data.allowed_uri_sans | default([]) | length == 0
+      - not vault_pki_leaf_role_current.json.data.allow_uri_sans_template | default(false) | bool
+      - not vault_pki_leaf_role_current.json.data.allowed_domains_template | default(false) | bool
+    quiet: true
+  when: vault_pki_leaf_role_current.status == 200
+  no_log: true
+- name: Calculate the exact declared role delta
+  ansible.builtin.set_fact:
+    vault_pki_leaf_role_changed: >-
+      {{ vault_pki_leaf_role_current.status == 404
+      or vault_pki_leaf_role_definition != (vault_pki_leaf_role_current.json.data
+      | default({}) | dict2items
+      | selectattr('key', 'in', vault_pki_leaf_role_definition.keys()) | items2dict) }}
+  no_log: true
+- name: Require the reviewed leaf-only change authorization
+  ansible.builtin.assert:
+    that:
+      - vault_pki_leaf_role_allow_change | bool
+    quiet: true
+  when: vault_pki_leaf_role_changed | bool
+- name: Reconcile only the declared existing-issuer leaf role
+  ansible.builtin.uri:
+    url: >-
+      {{ vault_pki_leaf_role_api_url ~ '/v1/' ~ vault_pki_leaf_role_mount
+      ~ '/roles/' ~ vault_pki_leaf_role_name }}
+    method: "{{ (vault_pki_leaf_role_current.status == 200) | ternary('PATCH', 'POST') }}"
+    headers:
+      X-Vault-Token: '{{ vault_pki_leaf_role_admin_token }}'
+      Content-Type: >-
+        {{ (vault_pki_leaf_role_current.status == 200)
+        | ternary('application/merge-patch+json', 'application/json') }}
+    body_format: json
+    body: '{{ vault_pki_leaf_role_definition }}'
+    validate_certs: true
+    ca_path: '{{ vault_pki_leaf_role_ca_path }}'
+    use_netrc: false
+    status_code:
+      - 200
+      - 204
+    timeout: 30
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  no_log: true
+  when:
+    - vault_pki_leaf_role_changed | bool
+    - not ansible_check_mode
+- name: Independently read the reconciled exact leaf role
+  ansible.builtin.uri:
+    url: >-
+      {{ vault_pki_leaf_role_api_url ~ '/v1/' ~ vault_pki_leaf_role_mount
+      ~ '/roles/' ~ vault_pki_leaf_role_name }}
+    method: GET
+    headers:
+      X-Vault-Token: '{{ vault_pki_leaf_role_admin_token }}'
+    validate_certs: true
+    ca_path: '{{ vault_pki_leaf_role_ca_path }}'
+    use_netrc: false
+    status_code: 200
+    timeout: 30
+    return_content: true
+  register: vault_pki_leaf_role_readback
+  check_mode: false
+  when: not ansible_check_mode or not (vault_pki_leaf_role_changed | bool)
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  no_log: true
+- name: Report exact leaf role drift without writing in check mode
+  ansible.builtin.debug:
+    msg: The declared PKI leaf role differs from its current configuration.
+  changed_when: vault_pki_leaf_role_changed | bool
+  when: ansible_check_mode
+  no_log: true
+- name: Require every declared leaf role field to match independent readback
+  ansible.builtin.assert:
+    that:
+      - vault_pki_leaf_role_definition == (vault_pki_leaf_role_readback.json.data | dict2items | selectattr('key', 'in',
+        vault_pki_leaf_role_definition.keys()) | items2dict)
+      - >-
+        vault_pki_leaf_role_current.status != 200
+        or (vault_pki_leaf_role_current.json.data | dict2items
+        | rejectattr('key', 'in', vault_pki_leaf_role_definition.keys()) | items2dict)
+        == (vault_pki_leaf_role_readback.json.data | dict2items
+        | rejectattr('key', 'in', vault_pki_leaf_role_definition.keys()) | items2dict)
+    quiet: true
+  no_log: true
+  when: not ansible_check_mode or not (vault_pki_leaf_role_changed | bool)

@@ -1,4 +1,19 @@
 ---
+- name: Validate explicit private DNS host aliases
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.keys() | list | sort == ['hostnames', 'ip']
+      - >-
+        item.ip is match('^(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])'
+        ~ '(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}$')
+      - item.hostnames is sequence
+      - item.hostnames is not string
+      - item.hostnames | length > 0
+      - item.hostnames | select('match', '^[a-z0-9][a-z0-9.-]+[a-z0-9]$') | list | length == item.hostnames | length
+    quiet: true
+  loop: "{{ guacamole_deploy_host_aliases }}"
+
 - name: Validate Guacamole deployment contract
   ansible.builtin.assert:
     that:
@@ -74,6 +89,31 @@
         | select('match', '^[A-Za-z0-9](?:[A-Za-z0-9_.:-]{0,251}[A-Za-z0-9])?$')
         | list | length == guacamole_deploy_no_proxy | length
       - guacamole_deploy_proxy_url is string
+      - guacamole_deploy_java_ca_certificate is string
+      - guacamole_deploy_java_ca_sha256 is string
+      - guacamole_deploy_guacd_ca_certificate is string
+      - guacamole_deploy_guacd_ca_sha256 is string
+      - guacamole_deploy_guacd_stock_ca_bundle is match('^/[A-Za-z0-9_./-]+$')
+      - "'..' not in guacamole_deploy_guacd_stock_ca_bundle"
+      - >-
+        guacamole_deploy_guacd_ca_certificate | length == 0 or (
+          guacamole_deploy_guacd_ca_certificate is search('-----BEGIN CERTIFICATE-----')
+          and guacamole_deploy_guacd_ca_certificate | regex_findall('-----BEGIN CERTIFICATE-----') | length == 1
+          and guacamole_deploy_guacd_ca_certificate | regex_findall('-----END CERTIFICATE-----') | length == 1
+          and 'PRIVATE KEY' not in guacamole_deploy_guacd_ca_certificate
+          and guacamole_deploy_guacd_ca_sha256 is match('^(?:[a-f0-9]{2}:){31}[a-f0-9]{2}$')
+        )
+      - guacamole_deploy_host_aliases is sequence
+      - guacamole_deploy_host_aliases is not string
+      - >-
+        guacamole_deploy_java_ca_certificate | length == 0 or (
+          guacamole_deploy_java_ca_certificate is search('-----BEGIN CERTIFICATE-----')
+          and guacamole_deploy_java_ca_certificate | regex_findall('-----BEGIN CERTIFICATE-----') | length == 1
+          and guacamole_deploy_java_ca_certificate | regex_findall('-----END CERTIFICATE-----') | length == 1
+          and guacamole_deploy_java_ca_certificate is search('-----END CERTIFICATE-----')
+          and 'PRIVATE KEY' not in guacamole_deploy_java_ca_certificate
+          and guacamole_deploy_java_ca_sha256 is match('^(?:[a-f0-9]{2}:){31}[a-f0-9]{2}$')
+        )
       - >-
         guacamole_deploy_proxy_url | length == 0
         or guacamole_deploy_proxy_url is match(
@@ -132,6 +172,15 @@
         or guacamole_deploy_oidc_username_claim_type | trim | length > 0
       - >-
         not guacamole_deploy_oidc_enabled | bool
+        or guacamole_deploy_oidc_scope is string
+      - >-
+        not guacamole_deploy_oidc_enabled | bool
+        or guacamole_deploy_oidc_scope is match('^[A-Za-z0-9_:./-]+( [A-Za-z0-9_:./-]+)*$')
+      - >-
+        not guacamole_deploy_oidc_enabled | bool
+        or 'openid' in guacamole_deploy_oidc_scope.split(' ')
+      - >-
+        not guacamole_deploy_oidc_enabled | bool
         or guacamole_deploy_oidc_groups_claim_type is string
       - >-
         not guacamole_deploy_oidc_enabled | bool
@@ -152,6 +201,25 @@
       - item.protocol | default('', true) in ['rdp', 'ssh', 'vnc']
       - item.parameters | default({}) is mapping
       - item.attributes | default({}) is mapping
+      - item.credential_fields | default({}) is mapping
+      - >-
+        (item.credential_fields | default({})).keys() | list
+        | difference(['password', 'private-key', 'passphrase']) | length == 0
+      - >-
+        (item.credential_fields | default({})).values() | list
+        | select('string') | list | length
+        == (item.credential_fields | default({})) | length
+      - >-
+        (item.credential_fields | default({})).values() | list
+        | difference(guacamole_deploy_secrets.keys() | list) | length == 0
+      - >-
+        (item.credential_fields | default({})).values() | list
+        | map('extract', guacamole_deploy_secrets) | select('string') | list | length
+        == (item.credential_fields | default({})) | length
+      - >-
+        (item.credential_fields | default({})).values() | list
+        | map('extract', guacamole_deploy_secrets) | map('trim')
+        | select('equalto', '') | list | length == 0
       - "'password' not in (item.parameters | default({}))"
       - "'private-key' not in (item.parameters | default({}))"
       - "'passphrase' not in (item.parameters | default({}))"

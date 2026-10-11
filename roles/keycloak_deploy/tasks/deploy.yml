@@ -12,6 +12,13 @@
     - not keycloak_deploy_skip_deploy | bool
   tags: always
 
+- name: Validate and plan explicitly pinned Keycloak outbound certificate trust
+  ansible.builtin.include_tasks: certificate_trust.yml
+  when:
+    - not keycloak_deploy_skip_runtime | bool
+    - not keycloak_deploy_skip_deploy | bool
+    - keycloak_deploy_trust_ca_certificate | length > 0
+
 - name: Deploy Keycloak runtime
   when:
     - not keycloak_deploy_skip_runtime | bool

@@ -12,6 +12,14 @@ the operating-system preparation declared by the caller are required.
 
 See `roles/keycloak_deploy/defaults/main.yml`.
 
+`keycloak_deploy_trust_ca_certificate` optionally supplies one public PEM CA,
+pinned by `keycloak_deploy_trust_ca_sha256` (colon-separated DER fingerprint).
+The role rejects an expired, non-CA or mismatched certificate and mounts it
+read-only. `KC_TRUSTSTORE_PATHS` adds it to Keycloak's default Java trust;
+normal hostname verification stays enabled. Empty inputs preserve the current
+trust configuration. A conflicting explicit `KC_TRUSTSTORE_PATHS` is rejected.
+See [Keycloak truststore documentation](https://www.keycloak.org/server/keycloak-truststore).
+
 Key variables:
 - `keycloak_deploy_image`
 - `keycloak_deploy_pod_manifest_path`
@@ -172,3 +180,7 @@ Lightning IT
 Run the three scenarios documented in
 [`docs/testing/keycloak.md`](../../docs/testing/keycloak.md). No external service
 credential is required; use ephemeral test credentials only.
+
+Pinned outbound CA inspection also runs in check mode on the controller. Invalid, future or mismatched CAs fail
+before host changes; directory and certificate tasks report prospective drift without writing. Runtime Pod and
+service deployment remain skipped in check mode.

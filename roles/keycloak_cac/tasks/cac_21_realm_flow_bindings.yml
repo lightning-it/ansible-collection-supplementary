@@ -1,6 +1,33 @@
 ---
 - name: Bind browser flows after flow and provider reconciliation
-  ansible.builtin.include_tasks: cac_11_realms.yml
-  vars:
-    keycloak_cac_realm_reconciliation_catalog: "{{ keycloak_cac_realm_flow_bindings }}"
   when: keycloak_cac_realm_flow_bindings | length > 0
+  block:
+    - name: Request a scoped admin session for browser-flow binding
+      ansible.builtin.uri:
+        url: "{{ keycloak_cac_url }}/realms/{{ keycloak_cac_realm }}/protocol/openid-connect/token"
+        method: POST
+        validate_certs: "{{ keycloak_cac_validate_certs }}"
+        timeout: "{{ keycloak_cac_request_timeout | int }}"
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: admin-cli
+          username: "{{ keycloak_cac_admin_user }}"
+          password: "{{ keycloak_cac_admin_password }}"
+        status_code: 200
+      register: keycloak_cac_flow_token
+      changed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Reconcile only the declared browser-flow field
+      ansible.builtin.include_tasks: realm_flow_binding.yml
+      loop: "{{ keycloak_cac_realm_flow_bindings }}"
+      loop_control:
+        loop_var: keycloak_cac_flow_binding
+        label: "{{ keycloak_cac_flow_binding.realm }}"
+  always:
+    - name: Forget the browser-flow admin session
+      ansible.builtin.set_fact:
+        keycloak_cac_flow_token: {}
+      no_log: true

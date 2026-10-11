@@ -136,6 +136,70 @@
     follow: false
   register: guacamole_deploy_legacy_unit_stat
 
+- name: Inspect the native Guacamole unit load state before recovery
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - "{{ guacamole_deploy_systemd_unit_name }}.service"
+      - --property=LoadState
+      - --value
+  register: guacamole_deploy_native_load_state
+  changed_when: false
+  failed_when: guacamole_deploy_native_load_state.rc != 0
+
+- name: Inspect the exact native Guacamole Quadlet before recovery
+  ansible.builtin.stat:
+    path: "{{ guacamole_deploy_quadlet_dir }}/{{ guacamole_deploy_systemd_unit_name }}.kube"
+    follow: false
+  register: guacamole_deploy_native_quadlet_before_recovery
+
+- name: Inspect the exact Guacamole pod before stale-unit recovery
+  ansible.builtin.command:
+    argv:
+      - podman
+      - pod
+      - exists
+      - "{{ guacamole_deploy_pod_name }}"
+  register: guacamole_deploy_pod_before_recovery
+  changed_when: false
+  failed_when: guacamole_deploy_pod_before_recovery.rc not in [0, 1]
+
+- name: Reset only an absent failed Guacamole unit left by an earlier rollback
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - reset-failed
+      - "{{ guacamole_deploy_systemd_unit_name }}.service"
+  register: guacamole_deploy_stale_failure_reset
+  changed_when: true
+  when:
+    - guacamole_deploy_native_systemd_active.stdout | trim == 'failed'
+    - guacamole_deploy_native_load_state.stdout | trim == 'not-found'
+    - guacamole_deploy_native_systemd_enabled.stdout | trim == 'not-found'
+    - guacamole_deploy_native_fragment_path.stdout | trim == ''
+    - guacamole_deploy_native_drop_in_paths.stdout | trim == ''
+    - not (guacamole_deploy_native_quadlet_before_recovery.stat.exists | default(false))
+    - guacamole_deploy_pod_before_recovery.rc == 1
+
+- name: Read native Guacamole activity after exact stale-unit reset
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - "{{ guacamole_deploy_systemd_unit_name }}.service"
+  register: guacamole_deploy_native_systemd_active_after_reset
+  changed_when: false
+  failed_when: false
+  when: guacamole_deploy_stale_failure_reset is not skipped
+
+- name: Use the verified post-reset native Guacamole activity
+  ansible.builtin.set_fact:
+    guacamole_deploy_native_systemd_active: >-
+      {{ guacamole_deploy_native_systemd_active_after_reset }}
+  changed_when: false
+  when: guacamole_deploy_stale_failure_reset is not skipped
+
 - name: Refuse unknown Guacamole lifecycle states
   ansible.builtin.assert:
     that:
@@ -606,7 +670,7 @@
             scope: "{{ guacamole_deploy_systemd_scope }}"
           when: >-
             guacamole_deploy_native_activity_before_rollback.stdout | trim
-            in ['active', 'failed']
+            == 'active'
 
         - name: Inspect native Guacamole activity after rollback stop
           ansible.builtin.command:

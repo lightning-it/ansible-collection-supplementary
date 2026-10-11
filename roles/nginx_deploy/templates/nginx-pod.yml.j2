@@ -5,15 +5,20 @@ metadata:
   labels:
     app: nginx
 spec:
+{% if nginx_deploy_host_network %}
+  hostNetwork: true
+{% endif %}
   containers:
     - name: nginx
       image: {{ nginx_deploy_image }}
+{% if not nginx_deploy_host_network %}
       ports:
 {% for binding in nginx_deploy_port_bindings %}
         - containerPort: {{ binding.container_port }}
           hostPort: {{ binding.host_port }}
           hostIP: {{ binding.host_ip | default(nginx_deploy_host_ip) }}
 {% endfor %}
+{% endif %}
       securityContext:
         runAsUser: {{ nginx_deploy_run_as_user }}
         runAsGroup: {{ nginx_deploy_run_as_group }}

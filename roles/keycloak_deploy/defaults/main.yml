@@ -90,6 +90,8 @@ keycloak_deploy_start_command: "start"
 keycloak_deploy_run_user_uid: "1000"
 keycloak_deploy_run_user_gid: "1000"
 keycloak_deploy_env_extra: {}
+keycloak_deploy_trust_ca_certificate: ""
+keycloak_deploy_trust_ca_sha256: ""
 keycloak_deploy_extra_start_args: []
 keycloak_deploy_hostname: ""
 keycloak_deploy_proxy_headers: ""

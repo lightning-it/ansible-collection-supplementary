@@ -1,0 +1,29 @@
+---
+- name: Prechecks
+  ansible.builtin.import_tasks: assert.yml
+  tags: always
+
+- name: Resolve the complete credential bundle as one RAM-only transaction
+  block:
+    - name: Initialize the RAM-only credential result
+      ansible.builtin.set_fact:
+        vault_connection_credentials_result: {}
+      no_log: true
+      changed_when: false
+
+    - name: Resolve only declared existing Vault credential sources
+      ansible.builtin.include_tasks: read_source.yml
+      loop: "{{ vault_connection_credentials_sources }}"
+      loop_control:
+        loop_var: vault_connection_credentials_source
+      no_log: true
+  rescue:
+    - name: Forget the partial bundle after any source or input failure
+      ansible.builtin.set_fact:
+        vault_connection_credentials_result: {}
+      changed_when: false
+      no_log: true
+
+    - name: Refuse an incomplete connection credential bundle
+      ansible.builtin.fail:
+        msg: Declared connection credential resolution failed.

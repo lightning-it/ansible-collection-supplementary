@@ -16,3 +16,15 @@ write fails closed and must be retried from a fresh read.
 
 Set `vault_secret_bundle_generate_missing=false` for read-only operational
 workflows such as backup and restore. Missing requested fields then fail closed.
+
+Optional `vault_secret_bundle_ssh_keypairs` entries contain distinct
+`private_field` and `public_field` names. The role reuses complete existing
+pairs, verifies public/private correspondence, and refuses partial pairs.
+Missing RSA-4096 PEM pairs are generated only when generation is enabled, in
+controller `/dev/shm` verified as tmpfs; temporary files are removed in an
+`always` block. The complete bundle is persisted using the existing KV v2 CAS.
+No key is rotated implicitly, and all key-bearing tasks suppress logging.
+
+Check mode verifies complete existing pairs in RAM using the controller's
+`cryptography` library. Missing pairs report a predicted change without generating
+keys, writing temporary files or updating Vault.

@@ -1,0 +1,3 @@
+---
+minor_changes:
+  - guacamole_deploy - add an explicit validated OIDC request scope while preserving the upstream default.

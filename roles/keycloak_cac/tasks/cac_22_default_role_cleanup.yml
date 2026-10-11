@@ -1,0 +1,17 @@
+---
+- name: Reconcile explicitly allowlisted Keycloak default-role children
+  lit.supplementary.keycloak_default_role_composites:
+    api_url: "{{ keycloak_cac_url }}"
+    auth_realm: "{{ keycloak_cac_realm }}"
+    auth_username: "{{ keycloak_cac_admin_user }}"
+    auth_password: "{{ keycloak_cac_admin_password }}"
+    validate_certs: "{{ keycloak_cac_validate_certs }}"
+    realm: "{{ keycloak_cac_default_cleanup_definition.realm }}"
+    allowed_removals: "{{ keycloak_cac_default_cleanup_definition.allowed_removals }}"
+    require_empty_realm: "{{ keycloak_cac_default_cleanup_definition.require_empty_realm | default(false) }}"
+  loop: "{{ keycloak_cac_default_role_cleanup }}"
+  loop_control:
+    loop_var: keycloak_cac_default_cleanup_definition
+    label: "{{ keycloak_cac_default_cleanup_definition.realm }}"
+  no_log: true
+  when: keycloak_cac_default_role_cleanup_enabled | default(false) | bool

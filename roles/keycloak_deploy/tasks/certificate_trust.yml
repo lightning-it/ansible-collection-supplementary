@@ -1,0 +1,37 @@
+---
+- name: Inspect the supplied Keycloak public CA
+  community.crypto.x509_certificate_info:
+    content: "{{ keycloak_deploy_trust_ca_certificate }}"
+    valid_at:
+      now: "+0s"
+  delegate_to: localhost
+  become: false
+  register: keycloak_deploy_trust_ca_info
+
+- name: Require the exact reviewed Keycloak CA fingerprint
+  ansible.builtin.assert:
+    that:
+      - keycloak_deploy_trust_ca_certificate | regex_findall('-----BEGIN CERTIFICATE-----') | length == 1
+      - keycloak_deploy_trust_ca_certificate | regex_findall('-----END CERTIFICATE-----') | length == 1
+      - keycloak_deploy_trust_ca_info.fingerprints.sha256 == keycloak_deploy_trust_ca_sha256
+      - "'CA:TRUE' in keycloak_deploy_trust_ca_info.basic_constraints"
+      - not keycloak_deploy_trust_ca_info.expired
+      - keycloak_deploy_trust_ca_info.valid_at.now
+    fail_msg: Keycloak outbound trust requires the exact unexpired reviewed CA certificate.
+    quiet: true
+
+- name: Prepare the Keycloak public trust directory
+  ansible.builtin.file:
+    path: "{{ keycloak_deploy_host_data_dir | dirname }}/java-trust"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Materialize only the reviewed public Keycloak CA
+  ansible.builtin.copy:
+    content: "{{ keycloak_deploy_trust_ca_certificate }}"
+    dest: "{{ keycloak_deploy_host_data_dir | dirname }}/java-trust/issuer-ca.pem"
+    owner: root
+    group: root
+    mode: "0644"

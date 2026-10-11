@@ -1,0 +1,34 @@
+---
+- name: Validate narrowly scoped PKI leaf role input
+  ansible.builtin.assert:
+    that:
+      - vault_pki_leaf_role_allow_change is boolean
+      - vault_pki_leaf_role_api_url is match('^https://')
+      - vault_pki_leaf_role_mount is match('^[a-z0-9-]+$')
+      - vault_pki_leaf_role_name is match('^[a-z0-9_-]+$')
+      - vault_pki_leaf_role_definition is mapping
+      - >-
+        vault_pki_leaf_role_definition.keys() | difference([
+        'issuer_ref', 'allowed_domains', 'allow_bare_domains', 'allow_subdomains',
+        'allow_glob_domains', 'allow_any_name', 'allow_ip_sans', 'allow_localhost',
+        'allow_wildcard_certificates', 'enforce_hostnames', 'server_flag', 'client_flag',
+        'key_type', 'key_bits', 'ttl', 'max_ttl']) | length == 0
+      - vault_pki_leaf_role_definition.allowed_domains is sequence
+      - vault_pki_leaf_role_definition.allowed_domains is not string
+      - vault_pki_leaf_role_definition.allowed_domains | length > 0
+      - vault_pki_leaf_role_definition.allow_wildcard_certificates | default(true) is sameas false
+      - vault_pki_leaf_role_definition.allow_bare_domains | default(false) is sameas true
+      - vault_pki_leaf_role_definition.allow_any_name | default(true) is sameas false
+      - vault_pki_leaf_role_definition.allow_subdomains | default(true) is sameas false
+      - vault_pki_leaf_role_definition.allow_glob_domains | default(true) is sameas false
+      - vault_pki_leaf_role_definition.allow_ip_sans | default(true) is sameas false
+      - vault_pki_leaf_role_definition.allow_localhost | default(true) is sameas false
+      - vault_pki_leaf_role_definition.issuer_ref | length > 0
+    quiet: true
+
+- name: Require literal DNS names in the exact allowed domain set
+  ansible.builtin.assert:
+    that:
+      - item is string and item is match('^[a-z0-9][a-z0-9.-]*[a-z0-9]$')
+    quiet: true
+  loop: "{{ vault_pki_leaf_role_definition.allowed_domains }}"
