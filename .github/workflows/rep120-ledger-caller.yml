@@ -1,0 +1,50 @@
+# Repository-local one-shot caller; empty Root bindings fail before any effect.
+# yamllint disable rule:truthy
+---
+name: REP120 ledger caller
+
+on:
+  workflow_dispatch:
+    inputs:
+      delivery:
+        description: Root-admitted nonsecret delivery JSON; empty means held
+        type: string
+        required: false
+        default: ''
+      envelope:
+        description: Exact nonsecret envelope WITHOUT oidc; request.run_id is null
+        type: string
+        required: false
+        default: ''
+
+permissions: {}
+
+jobs:
+  caller:
+    # No schedule, environment, reusable caller or automatic retry.
+    if: >-
+      github.repository == 'lightning-it/ansible-collection-supplementary' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.ref_protected == true &&
+      github.actor_id == '76040632' &&
+      github.actor == 'litroc' &&
+      github.triggering_actor == 'litroc' &&
+      github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out exact protected caller source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Send one bounded request or fail closed
+        env:
+          REP120_DELIVERY: ${{ inputs.delivery }}
+          REP120_ENVELOPE: ${{ inputs.envelope }}
+        run: python3 -m scripts.rep120_caller_sender

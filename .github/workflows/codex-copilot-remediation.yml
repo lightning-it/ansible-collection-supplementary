@@ -258,11 +258,7 @@ jobs:
             jq -e --argjson require_content "${1:-false}" '
               def normalize_review_text:
                 ascii_downcase | gsub("can[\u0027\u2019]t"; "cannot") | gsub("n[\u0027\u2019]t"; " not") | gsub("\\s"; "");
-              ["unabletoreviewthispullrequest", "cannotreviewthispullrequest", "notabletoreviewthispullrequest",
-               "wasnotabletoreviewthispullrequest", "nofilestoreview", "nofileswerereviewed",
-               "unabletoreviewanyfiles", "cannotreviewanyfiles", "notabletoreviewanyfiles", "wasnotabletoreviewanyfiles",
-               "quotaexhausted", "quotaexceeded", "premiumrequestquota", "premiumrequestsquota",
-               "suppressedcomment", "encounteredanerror"] as $markers |
+              ["unabletoreviewthispullrequest","cannotreviewthispullrequest","cannotreviewanyfiles","notabletoreviewthispullrequest","wasnotabletoreviewthispullrequest","nofilestoreview","nofileswerereviewed","unabletoreviewanyfiles","notabletoreviewanyfiles","wasnotabletoreviewanyfiles","quotaexhausted","quotaexceeded","premiumrequestquota","premiumrequestsquota","suppressedcomment","encounteredanerror"] as $markers |
               all(.[]; normalize_review_text as $text |
                 ($text | contains("unabletoreview") or contains("notabletoreview") | not)
                 and all($markers[]; . as $marker | $text | contains($marker) | not))

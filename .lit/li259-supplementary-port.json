@@ -1,0 +1,130 @@
+{
+  "schema": 1,
+  "repository": "lightning-it/ansible-collection-supplementary",
+  "target_base": "63baa487088c676bfc2ac40f78318deca1eeaa97",
+  "core_candidate": "aa45941e2d24194f29f480306bff39d27d7b4824",
+  "source_candidate": "5128b10bef931478541985d314293d879ea317be",
+  "protected_source_commit": "5b70bdaa4eaa9b0121545cb842eca8b3256e9cc3",
+  "activation": "disabled-until-native-acceptance",
+  "native_acceptance": false,
+  "assets": [
+    {
+      "path": "scripts/native_verifier_retry.py",
+      "source_blob": "ae7dd6b1643b57c470ff6f769a11e51faeaaeaf7",
+      "sha256": "627ffea4b615df7d4a4374038cc8aab8a8db4bc5b8cf5613ad20761145787a12",
+      "mode": "byte-identical",
+      "source_path": "default/scripts/native_verifier_retry.py",
+      "source_sha256": "627ffea4b615df7d4a4374038cc8aab8a8db4bc5b8cf5613ad20761145787a12"
+    },
+    {
+      "path": "scripts/run-native-verifier-retry.sh",
+      "source_blob": "1e3908021aa747a529931a8ef6741114d1f592c4",
+      "sha256": "afcff9889dcffb32a101aa2bfe8f9770c0f30bcab56e1261da0b061cb5b4a987",
+      "mode": "byte-identical",
+      "source_path": "default/scripts/run-native-verifier-retry.sh",
+      "source_sha256": "afcff9889dcffb32a101aa2bfe8f9770c0f30bcab56e1261da0b061cb5b4a987"
+    },
+    {
+      "path": ".github/workflows/review-infrastructure-retry.yml",
+      "source_blob": "21c0d4d54f06ec256fdf56c3b44b77e46556bfc2",
+      "sha256": "861f741f197c30805b9e8565fd085968657b8a3c3a4ada828196586fae81a6d6",
+      "mode": "byte-identical",
+      "source_path": "default/.github/workflows/review-infrastructure-retry.yml",
+      "source_sha256": "861f741f197c30805b9e8565fd085968657b8a3c3a4ada828196586fae81a6d6"
+    },
+    {
+      "path": "scripts/review_request_continuation.py",
+      "source_blob": "d3c1b154b163b4f814fe558ce6d9cab0c264a4aa",
+      "sha256": "71e062106e12759db9a8536306e02dcbc9bcb9950646d557339afe3e9daf6862",
+      "mode": "adapted-local",
+      "source_path": "default/scripts/review_request_continuation.py",
+      "source_sha256": "9b7a8ae25b0eb1981784de20aa326ece0ed149c2251c89583b515ba79b30d3ef"
+    },
+    {
+      "path": ".github/workflows/copilot-review.yml",
+      "source_blob": "79049ebdc3b28b4255f3ee547e77fce1db2de613",
+      "sha256": "636ce150d04f9f9e0f97dc598727cbf2060ba0fad3742d0da22d22177c30fd10",
+      "mode": "adapted-local",
+      "source_path": "default/.github/workflows/copilot-review.yml",
+      "source_sha256": "5c6318942c0aa07d46eb1c571aaad4aa770c1e8444d0db38b0247e09739f3a69"
+    },
+    {
+      "path": ".github/workflows/review-request-continuation.yml",
+      "source_blob": "4bf23ad623710390a3ecef9d9c1fc8dc6f71415a",
+      "sha256": "9bcc9996400f8b36398b30b911f0bddd0c51b872a12024b64c7d43d318a461e6",
+      "mode": "adapted-local",
+      "source_path": "default/.github/workflows/review-request-continuation.yml",
+      "source_sha256": "0e51ffc3d838fa3b32dd68e84c16dc01e7178df1ba3633241a787925c9e1fb46"
+    },
+    {
+      "path": ".github/workflows/current-revision-rerun.yml",
+      "source_blob": "0baf9fae40decd3db78fcfb70053b7b2f7333f75",
+      "sha256": "25013246f828c79fb35486b1aa373ac537d28adeab5162fde76bc7e8208891e4",
+      "mode": "adapted-local",
+      "source_path": "default/.github/workflows/current-revision-rerun.yml",
+      "source_sha256": "588fec3701b4bc6d863c78501eac18192e37669e5b090a4641bdebd55de6511c"
+    },
+    {
+      "path": "scripts/review_request_provenance.py",
+      "source_blob": "755519b1c64d68e4b34aeab818add53ed4d4eaca",
+      "sha256": "d20bfebbeeb7e2f08d5bb2604da6004f1d58d31fe2cf673ee221b9e1bbd519b1",
+      "mode": "adapted-local",
+      "source_path": "scripts/review_request_provenance.py",
+      "source_sha256": "c31d164c3c3acdf86913a6def846dd2653eb3147d1e7b620d9d58bfa16b69ebe"
+    },
+    {
+      "path": "scripts/review_content_markers.py",
+      "source_blob": "85bc7e4d6a32cac3dcd0b2345a2e62c4b235ecee",
+      "sha256": "aee6e43da9ee2eb4b17c79dd4d981294ae8f87cebe60aa502d2eca1c582dd622",
+      "mode": "adapted-local",
+      "source_path": "scripts/review_content_markers.py",
+      "source_sha256": "9e3b093a25e40832cb8414d5dd442cce3be585cb23e05afd51382601b1377d17"
+    },
+    {
+      "path": ".github/workflows/codex-copilot-remediation.yml",
+      "source_blob": "a467b576a7e17b05017371a914745bb0613d6850",
+      "sha256": "63338c28cf75b37a0082eefc57a06619c071a8643160f0ed18395e923f7ef20b",
+      "mode": "adapted-local",
+      "source_path": "default/.github/workflows/codex-copilot-remediation.yml",
+      "source_sha256": "b3014281804ae7e78899021d26bbc337dbd9597faafb934b6deedfab53e67e44"
+    }
+  ],
+  "preserved_local_assets": [
+    {
+      "path": "scripts/verify-dot-github-current-revision.py",
+      "sha256": "e478d450b162eefaa5bd8f65a88a73d89b01ddbcdfb9d1a753cdf173339757ba"
+    },
+    {
+      "path": ".github/workflows/dot-github-current-revision-required.yml",
+      "sha256": "bcbe9bac9e0c4d4151525853489807ccaf8da96ca20bff4d36d8a036bd524a7d"
+    },
+    {
+      "path": ".github/workflows/copilot-review-refresh.yml",
+      "sha256": "d0990effed093be2e9a64a1a2a9a0370d0683d8619297d28e22a759c9ed2f394"
+    },
+    {
+      "path": "scripts/review-event-reconcile.py",
+      "sha256": "d1c98071362e576e578fdfa1a215ad7bfb6bb0dde473518ae3caaddbf2f3291a"
+    },
+    {
+      "path": ".github/workflows/review-event-reconcile.yml",
+      "sha256": "84da713ab5a5b895cd02defe18faa1e7517229264d24708e51eb8da2584e47d4"
+    }
+  ],
+  "local_policy_assets": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "f43707e345a3cd7bbc31f21f744c167e1ec4a75fb046a45e45bb364ae41b9378"
+    },
+    {
+      "path": ".github/copilot-instructions.md",
+      "sha256": "7c2310c57395ab32eba2c34bd40bce67c7a06eff1a94ceca3109f1165b4cb270"
+    }
+  ],
+  "protected_source_tree": "02e51272db78684a92f1caac33fcec6e0a07a12f",
+  "protected_source_receipt": {
+    "id": "sha256:e57589b6c51a12a5699aaa6e18a0f18935fa38039ca7a4a7cf16ed3074586856",
+    "sha256": "e57589b6c51a12a5699aaa6e18a0f18935fa38039ca7a4a7cf16ed3074586856",
+    "schema": "li259-protected-main-assets-v1"
+  }
+}

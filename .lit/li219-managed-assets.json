@@ -12,7 +12,7 @@
     {
       "path": ".github/workflows/current-revision-rerun.yml",
       "category": "local-required",
-      "sha256": "fe0845c8e80c77b4284fdf3f5fdcb488ff4aa0f6e94c992011e74aec4c3b67fe",
+      "sha256": "25013246f828c79fb35486b1aa373ac537d28adeab5162fde76bc7e8208891e4",
       "source": "shared-assets-lit/default/.github/workflows/current-revision-rerun.yml",
       "owner": "ansible-collection-supplementary",
       "purpose": "Local Required-title label-action compatibility; authenticated labeled/unlabeled locator filters match the protected Required trigger and consumer allowlists."
@@ -28,7 +28,7 @@
     {
       "path": "scripts/review-event-reconcile.py",
       "category": "local-required",
-      "sha256": "218a5d1a045a69fb6b9013bfd34dc42f0f697ce1a311812833b7064ab3e700b1",
+      "sha256": "d1c98071362e576e578fdfa1a215ad7bfb6bb0dde473518ae3caaddbf2f3291a",
       "source": "shared-assets-lit/default/scripts/review-event-reconcile.py",
       "owner": "ansible-collection-supplementary",
       "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
@@ -51,7 +51,7 @@
     {
       "path": "scripts/review_content_markers.py",
       "category": "local-required",
-      "sha256": "0f3c112d70c16211a6947e593f6f6a315b22f5e8308dd76827e5d7de1e076dd8",
+      "sha256": "aee6e43da9ee2eb4b17c79dd4d981294ae8f87cebe60aa502d2eca1c582dd622",
       "source": "shared-assets-lit/scripts/review_content_markers.py",
       "owner": "ansible-collection-supplementary",
       "purpose": "Protected PR base-ref dispatch/consumer binding and native sanity source compatibility; strict schema types and runtime Unicode content semantics retained."
@@ -66,9 +66,9 @@
     {
       "path": ".github/workflows/copilot-review.yml",
       "category": "local-required",
-      "sha256": "89123e40f5566f1af9a4f493f6f42ba6501a056465a4af9d8aaf2130cc74d444",
+      "sha256": "636ce150d04f9f9e0f97dc598727cbf2060ba0fad3742d0da22d22177c30fd10",
       "owner": "ansible-collection-supplementary",
-      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+      "purpose": "Protected Source continuation with Supplementary-native E126 indentation adaptation; runtime behavior unchanged."
     },
     {
       "path": "scripts/lit-push-ready.py",
@@ -81,25 +81,43 @@
       "path": ".github/workflows/review-request-continuation.yml",
       "category": "local-required",
       "source": "shared-assets-lit/default/.github/workflows/review-request-continuation.yml",
-      "sha256": "d682a4d72847fbd74390a9abd8eea252218c5b89d19b1044b9b0873ab78216f9",
+      "sha256": "9bcc9996400f8b36398b30b911f0bddd0c51b872a12024b64c7d43d318a461e6",
       "owner": "ansible-collection-supplementary",
-      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+      "purpose": "Protected Source continuation with Supplementary-native E126 indentation adaptation; runtime behavior unchanged."
     },
     {
       "path": "scripts/review_request_continuation.py",
       "category": "local-required",
       "source": "shared-assets-lit/default/scripts/review_request_continuation.py",
-      "sha256": "44f52b8205008321c1c37212562d7f1b5bb50569602424fc047a5a92fc17ecf9",
+      "sha256": "71e062106e12759db9a8536306e02dcbc9bcb9950646d557339afe3e9daf6862",
       "owner": "ansible-collection-supplementary",
-      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+      "purpose": "Protected Source continuation with Supplementary-native E126 indentation adaptation; runtime behavior unchanged."
     },
     {
       "path": "scripts/review_request_provenance.py",
       "category": "local-required",
       "source": "shared-assets-lit/default/scripts/review_request_provenance.py",
-      "sha256": "8952688c647d6960cbe6e5715cd127fe6b8121d960895d8136819745180cba50",
+      "sha256": "d20bfebbeeb7e2f08d5bb2604da6004f1d58d31fe2cf673ee221b9e1bbd519b1",
       "owner": "ansible-collection-supplementary",
       "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
+    },
+    {
+      "path": "scripts/native_verifier_retry.py",
+      "category": "central-managed",
+      "source": "shared-assets-lit/default/scripts/native_verifier_retry.py",
+      "sha256": "627ffea4b615df7d4a4374038cc8aab8a8db4bc5b8cf5613ad20761145787a12"
+    },
+    {
+      "path": "scripts/run-native-verifier-retry.sh",
+      "category": "central-managed",
+      "source": "shared-assets-lit/default/scripts/run-native-verifier-retry.sh",
+      "sha256": "afcff9889dcffb32a101aa2bfe8f9770c0f30bcab56e1261da0b061cb5b4a987"
+    },
+    {
+      "path": ".github/workflows/review-infrastructure-retry.yml",
+      "category": "central-managed",
+      "source": "shared-assets-lit/default/.github/workflows/review-infrastructure-retry.yml",
+      "sha256": "861f741f197c30805b9e8565fd085968657b8a3c3a4ada828196586fae81a6d6"
     }
   ],
   "scope": "li219-three-pilot",

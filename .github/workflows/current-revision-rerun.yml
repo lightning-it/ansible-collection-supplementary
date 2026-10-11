@@ -78,6 +78,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  LI259_INFRA_RETRY: ${{ vars.LI259_INFRA_RETRY }}
   LI219_EVENT_MODE: ${{ (vars.LI219_EVENT_MODE == 'enabled' && contains(fromJSON('["lightning-it/.github","lightning-it/shared-assets-lit","lightning-it/ansible-collection-supplementary"]'), github.repository)) && 'enabled' || 'disabled' }}
 
 jobs:
@@ -242,6 +243,16 @@ jobs:
             done
             echo 'Consumed operation receipt not visible; no rerun sent.' >&2
             return 1
+          }
+          seal_native_retry_contract() {
+            [ "${LI219_EVENT_MODE:-disabled}" = enabled ] || return 0
+            [ "${LI259_INFRA_RETRY:-disabled}" = enabled ] || return 0
+            local launcher="${RUNNER_TEMP}/li259-launcher.sh"
+            if [ ! -s "${launcher}" ]; then
+              gh api "repos/${REPOSITORY}/contents/scripts/run-native-verifier-retry.sh?ref=${WORKFLOW_SHA}" \
+                --jq '.content' | base64 --decode >"${launcher}" || return 1
+            fi
+            bash "${launcher}" seal "${PR_NUMBER}" "${run_id}"
           }
           CLAIM
       - name: Validate the live binding and rerun exactly once
@@ -1413,10 +1424,12 @@ jobs:
             test "$(jq -cS . <<<"${event_jobs_latest}")" = "$(jq -cS . <<<"${event_producer_jobs}")"
             # shellcheck source=/dev/null
             source "${RUNNER_TEMP}/helper-operation.sh"
+            seal_native_retry_contract
             claim_review_operation "${run_id}" "${EXPECTED_HEAD}" "${EXPECTED_BASE}" "${PR_NUMBER}" || exit 0
             revalidate_pr_metadata
             event_producer_latest="$(gh api "repos/${REPOSITORY}/actions/runs/${producer_id}")"
             validate_event_producer "${event_producer_latest}" "${event_jobs_latest}"
+            seal_native_retry_contract
           fi
           if ! gh api --method POST \
               "repos/${REPOSITORY}/actions/jobs/${required_job_id}/rerun" >/dev/null; then

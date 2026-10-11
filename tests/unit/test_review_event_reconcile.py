@@ -1,6 +1,7 @@
 import datetime as dt
 import importlib.util
 import os
+import re
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -418,6 +419,102 @@ class ReviewEventTests(unittest.TestCase):
         self.assertTrue(calls[0][0].endswith("copilot-review-refresh.yml/dispatches"))
         self.assertEqual("main", calls[0][1]["ref"])
 
+    def test_ambiguous_first_pr_stays_closed_and_later_pr_dispatches(self):
+        prefix = "repos/lightning-it/.github"
+        pulls = [
+            {
+                "id": number,
+                "number": number,
+                "draft": False,
+                "state": "open",
+                "user": {"login": "litroc", "type": "User"},
+                "head": {"sha": head, "ref": f"fix/{number}", "repo": {"full_name": "lightning-it/.github"}},
+                "base": {"sha": self.base, "ref": "develop", "repo": {"full_name": "lightning-it/.github"}},
+            }
+            for number, head in ((23, self.head), (24, "c" * 40))
+        ]
+        inventories = {f"{prefix}/pulls?state=open": pulls}
+        for pr in pulls:
+            head = pr["head"]["sha"]
+            inventories[f"{prefix}/actions/runs?event=pull_request_target&head_sha={head}"] = {
+                "total_count": 1,
+                "workflow_runs": [
+                    {
+                        "id": 77 + pr["number"],
+                        "path": EVENT.PRODUCER,
+                        "event": "pull_request_target",
+                        "repository": pr["base"]["repo"],
+                        "head_repository": pr["head"]["repo"],
+                        "head_sha": head,
+                        "head_branch": pr["head"]["ref"],
+                        "pull_requests": [],
+                        "status": "completed",
+                        "created_at": self.now.isoformat(),
+                    }
+                ],
+            }
+            checks = (
+                [
+                    {
+                        "id": check_id,
+                        "name": "Current revision review",
+                        "app": {"id": 15368, "slug": "github-actions"},
+                        "status": "completed",
+                        "conclusion": "success",
+                    }
+                    for check_id in (79, 80)
+                ]
+                if pr["number"] == 23
+                else []
+            )
+            inventories[f"{prefix}/commits/{head}/check-runs?filter=all"] = {
+                "total_count": len(checks),
+                "check_runs": checks,
+            }
+        inventories[f"{prefix}/pulls/24/reviews"] = [self.review(commit_id="c" * 40)]
+        inventories[f"{prefix}/pulls/24/reviews/17/comments"] = []
+        mutations = []
+
+        def api(route, payload=None):
+            if payload is not None:
+                mutations.append((route, payload))
+                return None
+            if route == prefix:
+                return {"default_branch": "develop"}
+            if "/actions/workflows/" in route:
+                return self.inventory_response([], route)
+            if route == f"{prefix}/pulls/24":
+                return pulls[1]
+            inventory_route = re.sub(r"[?&]per_page=100&page=1$", "", route)
+            return inventories[inventory_route]
+
+        with (
+            patch.object(EVENT, "api", side_effect=api),
+            patch.dict(
+                os.environ, LI219_EVENT_MODE="enabled", GITHUB_REF="refs/heads/develop", GITHUB_REF_PROTECTED="true"
+            ),
+            patch("builtins.print") as log,
+        ):
+            EVENT.reconcile("lightning-it/.github", self.now)
+        self.assertEqual(
+            [
+                (
+                    f"{prefix}/actions/workflows/{EVENT.REFRESH}/dispatches",
+                    {
+                        "ref": "develop",
+                        "inputs": {
+                            "pr_number": "24",
+                            "expected_head": "c" * 40,
+                            "expected_base": self.base,
+                            "review_id": "17",
+                        },
+                    },
+                )
+            ],
+            mutations,
+        )
+        log.assert_any_call("PR 23: ambiguous neutral evidence; required failure remains blocking")
+
     def test_late_review_after_ten_minutes_dispatches_same_pr_without_review_request(self):
         for delay in (180, 601, 3600):
             calls = self.reconcile(delay=delay)
@@ -439,6 +536,35 @@ class ReviewEventTests(unittest.TestCase):
 
     def test_ambiguous_dispatch_response_is_not_retried(self):
         self.assertEqual(1, len(self.reconcile(uncertain=True)))
+
+    def test_completed_locator_cooldown_boundary_and_active_hold(self):
+        expected = [
+            (
+                "repos/lightning-it/.github/actions/workflows/copilot-review-refresh.yml/dispatches",
+                {
+                    "ref": "develop",
+                    "inputs": {
+                        "pr_number": "23",
+                        "expected_head": self.head,
+                        "expected_base": self.base,
+                        "review_id": "17",
+                    },
+                },
+            )
+        ]
+        for age in (599, 600, 601):
+            for status in ("completed", "queued", "in_progress"):
+                with self.subTest(age=age, status=status):
+                    locator = self.locator(
+                        0,
+                        pr=23,
+                        status=status,
+                        conclusion="failure" if status == "completed" else None,
+                        created_at=(self.now - dt.timedelta(seconds=1200)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        updated_at=(self.now - dt.timedelta(seconds=age)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    )
+                    calls = self.reconcile(delay=1800, history=[locator])
+                    self.assertEqual(expected if status == "completed" and age >= 600 else [], calls)
 
     def test_active_dispatch_is_deduplicated(self):
         run = {
