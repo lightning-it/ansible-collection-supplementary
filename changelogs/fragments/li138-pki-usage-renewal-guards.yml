@@ -1,0 +1,10 @@
+---
+bugfixes:
+  - >-
+    vault_pki_certificate - make the renewal window configurable and reject
+    effective lifetimes inside it before custody writes.
+  - vault_pki_certificate - require exactly ServerAuth on stored and issued leaves before materialization.
+  - vault_pki_leaf_cac - reject preserved token-display-name and entity-alias identity expansion.
+  - >-
+    keycloak_default_role_composites - reject malformed ports and whitespace
+    before creating the authentication transport.

@@ -7,6 +7,7 @@ vault_pki_certificate_issuing_identity: {}
 vault_pki_certificate_issue_path: ""
 vault_pki_certificate_common_name: ""
 vault_pki_certificate_ttl: 720h
+vault_pki_certificate_renewal_window_seconds: 604800
 vault_pki_certificate_cert_path: ""
 vault_pki_certificate_key_path: ""
 vault_pki_certificate_key_group: root

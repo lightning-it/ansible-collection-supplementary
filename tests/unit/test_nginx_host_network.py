@@ -1,5 +1,8 @@
 """Reject ambiguous host-network deployment and retain published-port isolation."""
 
+import os
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -67,3 +70,77 @@ class HostNetworkTests(unittest.TestCase):
         values = self.values()
         values.update(nginx_deploy_host_network=True, nginx_deploy_port_bindings=[], nginx_deploy_networks=[])
         self.assertFalse(self.accepts(values))
+
+    def test_real_transition_rejects_existing_and_linked_defaults_before_mutations(self):
+        tasks = yaml.safe_load((ROOT / "tasks/assert.yml").read_text())
+        selected = [
+            task
+            for task in tasks
+            if task["name"].startswith(("Inspect previous default-site", "Refuse a retained default-site"))
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            default = base / "default.conf"
+            retained = base / "retained.conf"
+            marker = base / "deployment-started"
+            config = base / "ansible.cfg"
+            config.write_text("[defaults]\n")
+            for kind in ("absent", "regular", "dangling-link", "alternate"):
+                if default.is_symlink() or default.exists():
+                    default.unlink()
+                if retained.exists():
+                    retained.unlink()
+                if kind == "regular":
+                    default.write_text("server { listen 80; }")
+                elif kind == "dangling-link":
+                    default.symlink_to(base / "missing")
+                elif kind == "alternate":
+                    retained.write_text("server { listen 80; }")
+                for check in (False, True):
+                    if marker.exists():
+                        marker.unlink()
+                    values = {
+                        "nginx_deploy_host_network": True,
+                        "nginx_deploy_host_conf_d_dir": str(base),
+                        "nginx_deploy_host_default_conf_path": str(retained),
+                    }
+                    source = base / "play.yml"
+                    source.write_text(
+                        yaml.safe_dump(
+                            [
+                                {
+                                    "hosts": "localhost",
+                                    "gather_facts": False,
+                                    "vars": values,
+                                    "tasks": selected
+                                    + [
+                                        {
+                                            "ansible.builtin.file": {
+                                                "path": str(marker),
+                                                "state": "touch",
+                                                "mode": "0600",
+                                            }
+                                        }
+                                    ],
+                                }
+                            ]
+                        )
+                    )
+                    command = ["ansible-playbook", "-i", "localhost,", "-c", "local", str(source)]
+                    if check:
+                        command.append("--check")
+                    result = subprocess.run(  # noqa: S603 - fixed local Ansible executable and controlled test fixture
+                        command,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                        env={**os.environ, "ANSIBLE_CONFIG": str(config), "ANSIBLE_LOCAL_TEMP": str(base / "ansible")},
+                    )
+                    self.assertEqual(result.returncode == 0, kind == "absent", result.stdout + result.stderr)
+                    self.assertEqual(marker.exists(), kind == "absent" and not check)
+                    if kind == "regular":
+                        self.assertEqual(default.read_text(), "server { listen 80; }")
+                    if kind == "dangling-link":
+                        self.assertTrue(default.is_symlink())
+                    if kind == "alternate":
+                        self.assertEqual(retained.read_text(), "server { listen 80; }")

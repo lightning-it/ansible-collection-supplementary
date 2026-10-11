@@ -20,7 +20,7 @@ if ANSIBLE_PLAYBOOK is None:
 
 
 class LeafValidationTest(unittest.TestCase):
-    def exercise(self, ca):
+    def exercise(self, ca, extra_usage=None, renewal_seconds=3600):
         root = Path(__file__).resolve().parents[2]
         tasks = yaml.safe_load((root / "roles/vault_pki_certificate/tasks/validate_document.yml").read_text())
         predicates = [t for t in tasks if "ansible.builtin.assert" in t]
@@ -52,7 +52,7 @@ class LeafValidationTest(unittest.TestCase):
                 .not_valid_before(now - datetime.timedelta(minutes=1))
                 .not_valid_after(now + datetime.timedelta(days=1))
                 .add_extension(x509.SubjectAlternativeName([x509.DNSName("fixture.example")]), False)
-                .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), False)
+                .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH, *(extra_usage or [])]), False)
             )
             if ca:
                 builder = builder.add_extension(x509.BasicConstraints(ca=True, path_length=None), True)
@@ -72,6 +72,7 @@ class LeafValidationTest(unittest.TestCase):
                     "gather_facts": False,
                     "vars": {
                         "vault_pki_certificate_common_name": "fixture.example",
+                        "vault_pki_certificate_renewal_window_seconds": renewal_seconds,
                         "vault_pki_certificate_issuer": {
                             "json": {
                                 "data": {
@@ -87,7 +88,7 @@ class LeafValidationTest(unittest.TestCase):
                             "name": "Inspect real public fixture",
                             "community.crypto.x509_certificate_info": {
                                 "path": str(directory / "certificate.pem"),
-                                "valid_at": {"now": "+0s"},
+                                "valid_at": {"now": "+0s", "renewal_check": f"+{renewal_seconds}s"},
                             },
                             "register": "vault_pki_certificate_info",
                         },
@@ -130,6 +131,22 @@ class LeafValidationTest(unittest.TestCase):
 
     def test_certificate_authority_is_rejected(self):
         code, output = self.exercise(True)
+        self.assertNotEqual(code, 0)
+        self.assertIn("Require the valid exact public DNS server identity", output)
+
+    def test_additional_extended_usages_are_rejected(self):
+        for usage in (
+            ExtendedKeyUsageOID.CLIENT_AUTH,
+            ExtendedKeyUsageOID.CODE_SIGNING,
+            ExtendedKeyUsageOID.EMAIL_PROTECTION,
+        ):
+            with self.subTest(usage=usage):
+                code, output = self.exercise(False, [usage])
+                self.assertNotEqual(code, 0)
+                self.assertIn("Require the valid exact public DNS server identity", output)
+
+    def test_effective_leaf_lifetime_must_outlive_configured_window(self):
+        code, output = self.exercise(False, renewal_seconds=604800)
         self.assertNotEqual(code, 0)
         self.assertIn("Require the valid exact public DNS server identity", output)
 

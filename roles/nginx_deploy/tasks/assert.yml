@@ -73,6 +73,29 @@
     fail_msg: "Nginx core variables are missing or invalid."
   tags: always
 
+- name: Inspect previous default-site files before permitting Nginx host networking
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: "{{ [nginx_deploy_host_conf_d_dir ~ '/default.conf', nginx_deploy_host_default_conf_path] | unique }}"
+  register: nginx_deploy_previous_default_site
+  when: nginx_deploy_host_network
+  tags: always
+
+- name: Refuse a retained default-site file before permitting Nginx host networking
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+      - not (item.stat.islnk | default(false))
+    fail_msg: >-
+      Host networking requires the previous default-site file to be absent.
+      Review and retire that exact file before changing the network mode;
+      this role does not delete caller-owned configuration implicitly.
+    quiet: true
+  loop: "{{ nginx_deploy_previous_default_site.results | default([]) }}"
+  when: nginx_deploy_host_network
+  tags: always
+
 - name: Validate static IPv4 addresses in Nginx Quadlet network entries
   ansible.builtin.command:
     argv:

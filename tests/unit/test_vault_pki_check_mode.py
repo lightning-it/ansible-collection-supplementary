@@ -45,6 +45,8 @@ class VaultPkiCheckModeTests(unittest.TestCase):
         nested_chain=False,
         incomplete_chain=False,
         stored_usage=None,
+        renewal_seconds=None,
+        repeat=False,
     ):
         ca, certificate, key = certificate_fixture()
         ca_chain = [ca.public_bytes(serialization.Encoding.PEM).decode()]
@@ -202,6 +204,10 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                     vault_pki_certificate_key_path=str(directory / "materialized.key"),
                     vault_pki_certificate_issuing_identity={"role_id": CANARY, "secret_id": CANARY},
                 )
+                if apply:
+                    values["vault_pki_certificate_renewal_window_seconds"] = (
+                        3600 if renewal_seconds is None else renewal_seconds
+                    )
             else:
                 values.update(
                     vault_pki_leaf_cac_mount="pki",
@@ -292,26 +298,49 @@ class VaultPkiCheckModeTests(unittest.TestCase):
             namespace.mkdir(parents=True)
             (namespace / "supplementary").symlink_to(ROOT, target_is_directory=True)
             try:
-                result = subprocess.run(  # noqa: S603 - controlled offline role fixture
+                command = (
                     [shutil.which("ansible-playbook"), "-i", "localhost,", "-c", "local"]
                     + ([] if apply else ["--check"])
-                    + [str(source)],
+                    + [str(source)]
+                )
+                environment = {
+                    **os.environ,
+                    "ANSIBLE_CONFIG": str(config),
+                    "ANSIBLE_NOCOLOR": "1",
+                    "ANSIBLE_COLLECTIONS_PATH": str(directory / "collections")
+                    + ":"
+                    + os.environ.get(
+                        "ANSIBLE_COLLECTIONS_PATH", "/opt/ansible/collections:/usr/share/ansible/collections"
+                    ),
+                    "ANSIBLE_LOCAL_TEMP": str(directory / "ansible"),
+                }
+                result = subprocess.run(  # noqa: S603 - controlled offline role fixture
+                    command,
                     capture_output=True,
                     text=True,
                     check=False,
                     timeout=45,
-                    env={
-                        **os.environ,
-                        "ANSIBLE_CONFIG": str(config),
-                        "ANSIBLE_NOCOLOR": "1",
-                        "ANSIBLE_COLLECTIONS_PATH": str(directory / "collections")
-                        + ":"
-                        + os.environ.get(
-                            "ANSIBLE_COLLECTIONS_PATH", "/opt/ansible/collections:/usr/share/ansible/collections"
-                        ),
-                        "ANSIBLE_LOCAL_TEMP": str(directory / "ansible"),
-                    },
+                    env=environment,
                 )
+                if repeat:
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    first_requests = list(requests)
+                    key_before = (directory / "materialized.key").read_bytes()
+                    result_repeat = subprocess.run(  # noqa: S603 - repeat the same controlled offline role fixture
+                        command, capture_output=True, text=True, check=False, timeout=45, env=environment
+                    )
+                    self.assertEqual(result_repeat.returncode, 0, result_repeat.stdout + result_repeat.stderr)
+                    self.assertRegex(result_repeat.stdout, r"changed=0(?:\s|$)")
+                    self.assertEqual(
+                        requests[len(first_requests) :],
+                        [
+                            ("GET", "/v1/pki/issuer/existing/json"),
+                            ("GET", "/v1/fixture/data/server"),
+                            ("GET", "/v1/fixture/data/server"),
+                        ],
+                    )
+                    self.assertEqual((directory / "materialized.key").read_bytes(), key_before)
+                    requests[:] = first_requests
             finally:
                 server.shutdown()
                 server.server_close()
@@ -347,6 +376,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 or stored_expansion
                 or authorization is not True
                 or incomplete_chain
+                or renewal_seconds == 604800
             ):
                 self.assertNotEqual(result.returncode, 0)
             else:
@@ -358,7 +388,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 self.assertEqual(requests, [])
             elif stored_expansion or authorization is False:
                 self.assertEqual([method for method, _path in requests], ["GET"])
-            elif bad_issuance:
+            elif bad_issuance or renewal_seconds == 604800:
                 self.assertIn(("POST", "/v1/pki/issuer/existing/issue/server"), requests)
                 self.assertNotIn(("POST", "/v1/fixture/data/server"), requests)
             elif failing_path:
@@ -383,7 +413,13 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                     [method for method, _path in requests],
                     ["GET", "GET"] if role == "vault_pki_certificate" else ["GET"],
                 )
-            if not (apply and role == "vault_pki_certificate" and not failing_path and not bad_issuance):
+            if not (
+                apply
+                and role == "vault_pki_certificate"
+                and not failing_path
+                and not bad_issuance
+                and renewal_seconds != 604800
+            ):
                 self.assertFalse((directory / "materialized.pem").exists())
                 self.assertFalse((directory / "materialized.key").exists())
 
@@ -465,9 +501,18 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 self.exercise("vault_pki_leaf_cac", True, apply=True, authorization=authorization)
 
     def test_preserved_identity_allowlists_cannot_broaden_an_existing_role(self):
-        for field in ("allowed_serial_numbers", "allowed_user_ids"):
+        for field in ("allowed_serial_numbers", "allowed_user_ids", "allowed_entity_aliases"):
             with self.subTest(field=field):
                 self.exercise("vault_pki_leaf_cac", True, apply=True, stored_expansion={field: ["*"]})
+
+    def test_token_display_name_cannot_broaden_an_existing_role(self):
+        self.exercise("vault_pki_leaf_cac", True, apply=True, stored_expansion={"allow_token_displayname": True})
+
+    def test_short_effective_issuance_is_rejected_before_custody_or_files(self):
+        self.exercise("vault_pki_certificate", False, apply=True, renewal_seconds=604800)
+
+    def test_short_lived_certificate_with_smaller_window_repeats_without_issuance(self):
+        self.exercise("vault_pki_certificate", False, apply=True, renewal_seconds=3600, repeat=True)
 
     def test_name_expansion_options_fail_before_api_access(self):
         for expansion in (

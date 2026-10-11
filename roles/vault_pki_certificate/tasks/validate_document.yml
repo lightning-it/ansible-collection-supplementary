@@ -4,6 +4,7 @@
     content: "{{ vault_pki_certificate_candidate.certificate }}"
     valid_at:
       now: "+0s"
+      renewal_check: "+{{ vault_pki_certificate_renewal_window_seconds }}s"
   register: vault_pki_certificate_info
   delegate_to: localhost
   become: false
@@ -21,6 +22,7 @@
   ansible.builtin.assert:
     that:
       - vault_pki_certificate_info.valid_at.now
+      - vault_pki_certificate_info.valid_at.renewal_check
       - >-
         vault_pki_certificate_candidate.certificate
         | lit.supplementary.vault_pki_direct_issuer_matches(vault_pki_certificate_issuer.json.data.certificate)
@@ -32,7 +34,7 @@
       - >-
         vault_pki_certificate_info.basic_constraints is none
         or 'CA:FALSE' in vault_pki_certificate_info.basic_constraints
-      - "'TLS Web Server Authentication' in vault_pki_certificate_info.extended_key_usage"
+      - vault_pki_certificate_info.extended_key_usage == ['TLS Web Server Authentication']
     quiet: true
 
 - name: Require the protected matching server key pair

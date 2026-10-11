@@ -154,7 +154,15 @@ class NoRedirect(HTTPRedirectHandler):
 
 class KeycloakAPI:
     def __init__(self, api_url, validate_certs, ca_cert):
-        parsed = urlsplit(api_url)
+        if not isinstance(api_url, str) or any(character.isspace() for character in api_url):
+            raise ValueError("api_url must be a valid origin URL without whitespace")
+        try:
+            parsed = urlsplit(api_url)
+            port = parsed.port
+        except ValueError:
+            raise ValueError("api_url must be a valid origin URL") from None
+        if not parsed.hostname or (port is not None and not 1 <= port <= 65535):
+            raise ValueError("api_url must be a valid origin URL")
         if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.path not in ("", "/"):
             raise ValueError("api_url must be an origin URL")
         if parsed.username or parsed.password or parsed.query or parsed.fragment:

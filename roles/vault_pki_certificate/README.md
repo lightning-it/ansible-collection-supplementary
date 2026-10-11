@@ -1,6 +1,6 @@
 # vault_pki_certificate
 
-Issue the declared DNS server identity from a specific existing Vault PKI issuer and role. Keep certificate/private-key custody in KV v2 with version-bound CAS and independent readback. Existing custody must match schema, subject and issue path; renew when less than seven days remain.
+Issue the declared DNS server identity from a specific existing Vault PKI issuer and role. Keep certificate/private-key custody in KV v2 with version-bound CAS and independent readback. Existing custody must match schema, subject and issue path; renew inside the configured renewal window (seven days by default).
 
 ## Requirements
 
@@ -11,6 +11,14 @@ A prepared PKI issuer/leaf role, dedicated issuing AppRole, KV token, verified T
 The role's `defaults/main.yml` lists the API URL/CA path, KV path/token, issuing identity, issue path, DNS common name and TTL. Set target certificate/key paths and restricted key ownership/mode explicitly. The role sets `vault_pki_certificate_changed`; restart the consumer when true. Check mode reads existing custody and predicts issuance without authentication, issuance or KV writes. An absent/expiring preview does not materialize an unavailable key.
 
 ## Dependencies
+
+`vault_pki_certificate_renewal_window_seconds` is a positive integer (default
+604800). Set it below the effective lifetime allowed by the Vault role and issuer,
+not merely below the requested TTL. A returned leaf that does not outlive this
+window is rejected before KV custody advances or service files are written. This
+prevents repeated renewal of an immediately expiring identity. Both existing and
+new leaves must have exactly the ServerAuth extended usage; additional usages are
+rejected.
 
 No dependent role. The caller prepares the service, destination directory, issuer and credentials.
 

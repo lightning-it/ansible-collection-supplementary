@@ -10,4 +10,7 @@
       - vault_pki_certificate_key_path is match('^/[a-zA-Z0-9_./-]+$')
       - vault_pki_certificate_cert_path != vault_pki_certificate_key_path
       - vault_pki_certificate_key_mode in ['0400', '0600', '0640']
+      - vault_pki_certificate_renewal_window_seconds is integer
+      - vault_pki_certificate_renewal_window_seconds is not boolean
+      - vault_pki_certificate_renewal_window_seconds > 0
     quiet: true

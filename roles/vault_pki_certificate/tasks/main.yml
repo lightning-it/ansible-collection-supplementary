@@ -71,7 +71,7 @@
       community.crypto.x509_certificate_info:
         content: "{{ vault_pki_certificate_existing.json.data.data.certificate }}"
         valid_at:
-          renewal_check: "+7d"
+          renewal_check: "+{{ vault_pki_certificate_renewal_window_seconds }}s"
       register: vault_pki_certificate_existing_info
       when: vault_pki_certificate_existing.status == 200
       delegate_to: localhost

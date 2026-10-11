@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 PATH = Path(__file__).resolve().parents[2] / "plugins/modules/keycloak_default_role_composites.py"
 SPEC = importlib.util.spec_from_file_location("keycloak_default_role_composites", PATH)
@@ -67,6 +68,21 @@ class FakeAPI:
 
 
 class KeycloakDefaultRoleTests(unittest.TestCase):
+    def test_malformed_origin_is_rejected_before_transport_or_authentication(self):
+        for origin in (
+            "https://keycloak.example:bad",
+            "https://keycloak.example:0",
+            "https://keycloak.example:65536",
+            "https:// keycloak.example",
+            "https://keycloak.example\n",
+            "https://[invalid",
+            "https://:8080",
+        ):
+            with self.subTest(origin=origin), patch.object(MODULE, "build_opener") as opener:
+                with self.assertRaisesRegex(ValueError, "valid origin URL"):
+                    MODULE.KeycloakAPI(origin, True, None)
+                opener.assert_not_called()
+
     def test_exact_stock_roles_are_removed_once(self):
         api = FakeAPI(
             [

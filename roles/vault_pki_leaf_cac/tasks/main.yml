@@ -51,6 +51,8 @@
       - vault_pki_leaf_cac_current.json.data.allowed_uri_sans | default([]) | length == 0
       - not vault_pki_leaf_cac_current.json.data.allow_uri_sans_template | default(false) | bool
       - not vault_pki_leaf_cac_current.json.data.allowed_domains_template | default(false) | bool
+      - not vault_pki_leaf_cac_current.json.data.allow_token_displayname | default(false) | bool
+      - vault_pki_leaf_cac_current.json.data.allowed_entity_aliases | default([]) | length == 0
     quiet: true
   when: vault_pki_leaf_cac_current.status == 200
   no_log: true
