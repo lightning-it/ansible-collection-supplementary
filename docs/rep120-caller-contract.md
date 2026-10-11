@@ -245,8 +245,8 @@ Run the repository's `pre-commit run --all-files` first. Focused tests use the
 existing pinned, offline, read-only, non-root Devtools boundary:
 
 ```sh
-bash scripts/devtools-local-quality.sh python3 -m unittest tests.unit.test_rep120_caller_contract -v
-bash scripts/devtools-local-quality.sh ruff check scripts/rep120_caller_contract.py tests/unit/test_rep120_caller_contract.py
+bash scripts/devtools-local-quality.sh python3 -m unittest tests.unit.test_rep120_caller_contract tests.unit.test_rep120_caller_sender -v
+bash scripts/devtools-local-quality.sh ruff check scripts/rep120_caller_contract.py scripts/rep120_caller_sender.py tests/unit/test_rep120_caller_contract.py tests/unit/test_rep120_caller_sender.py
 ```
 
 The focused suite is `tests.unit.test_rep120_caller_contract` plus
