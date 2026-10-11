@@ -6,6 +6,7 @@ import contextlib
 import io
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import yaml
@@ -45,7 +46,9 @@ class CallerContractTests(unittest.TestCase):
         self.assertFalse(result["hosted_acceptance"])
         for key in ("request", "oidc", "native_delivery", "observed_context"):
             self.assertIsNone(result[key])
-        self.assertEqual(result["candidate"]["workflow"], WORKFLOW)
+        candidate = result["candidate"]
+        assert isinstance(candidate, dict)
+        self.assertEqual(candidate["workflow"], WORKFLOW)
         self.assertEqual(
             result["root_binding_decisions"],
             {
@@ -66,7 +69,7 @@ class CallerContractTests(unittest.TestCase):
             self.assertIsNone(result["request"])
 
     def test_drift_and_malformed_metadata_fail_closed(self):
-        mutations = {
+        mutations: dict[str, list[Any]] = {
             "GITHUB_REPOSITORY": ["other/repository"],
             "GITHUB_REPOSITORY_ID": ["0", "1103407174", 1103407173],
             "GITHUB_REPOSITORY_OWNER_ID": ["54334172"],
@@ -83,10 +86,10 @@ class CallerContractTests(unittest.TestCase):
                 with self.subTest(key=key, value=value), self.assertRaises(HeldContext):
                     inspect_context(context() | {key: value})
         for key in context():
-            values = context()
-            del values[key]
+            missing = context()
+            del missing[key]
             with self.subTest(missing=key), self.assertRaises(HeldContext):
-                inspect_context(values)
+                inspect_context(missing)
 
     def test_ambient_credentials_never_enter_description_or_errors(self):
         values = context() | {"GH_TOKEN": "secret-canary", "ACTIONS_ID_TOKEN_REQUEST_TOKEN": "secret-canary"}
@@ -99,13 +102,21 @@ class CallerContractTests(unittest.TestCase):
         self.assertEqual(stdout.getvalue(), "")
         self.assertNotIn("secret-canary", stderr.getvalue())
 
-    def test_workflow_has_no_enable_input_permissions_or_effects(self):
+    def test_workflow_manual_main_attempt_one_and_default_empty_inputs(self):
         workflow = yaml.safe_load((ROOT / WORKFLOW).read_text())
-        self.assertEqual(workflow.get("on", workflow.get(True)), {"workflow_dispatch": None})
+        events = workflow.get("on", workflow.get(True))
+        self.assertEqual(set(events), {"workflow_dispatch"})
+        inputs = events["workflow_dispatch"]["inputs"]
+        self.assertEqual(set(inputs), {"delivery", "envelope"})
+        for value in inputs.values():
+            self.assertEqual(value["default"], "")
+            self.assertEqual(value["type"], "string")
+            self.assertIs(value["required"], False)
         self.assertEqual(workflow["permissions"], {})
         self.assertEqual(set(workflow["jobs"]), {"caller"})
         job = workflow["jobs"]["caller"]
-        self.assertEqual(set(job), {"if", "runs-on", "timeout-minutes", "steps"})
+        self.assertEqual(set(job), {"if", "runs-on", "timeout-minutes", "permissions", "steps"})
+        self.assertEqual(job["permissions"], {"contents": "read", "id-token": "write"})
         self.assertEqual(
             job["if"],
             "github.repository == 'lightning-it/ansible-collection-supplementary' && "
@@ -114,12 +125,15 @@ class CallerContractTests(unittest.TestCase):
         )
         self.assertNotIn("environment", job)
         self.assertNotIn("uses", job)
-        self.assertEqual(len(job["steps"]), 1)
-        self.assertEqual(set(job["steps"][0]), {"name", "run"})
+        self.assertEqual(len(job["steps"]), 2)
+        checkout, send = job["steps"]
+        self.assertEqual(checkout["uses"], "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1")
+        self.assertEqual(checkout["with"], {"ref": "${{ github.sha }}", "persist-credentials": False, "fetch-depth": 1})
         self.assertEqual(
-            job["steps"][0]["run"],
-            "printf '%s\\n' 'REP120 caller held: native transport and exact append approval are unbound.'\nexit 1\n",
+            send["env"], {"REP120_DELIVERY": "${{ inputs.delivery }}", "REP120_ENVELOPE": "${{ inputs.envelope }}"}
         )
+        self.assertEqual(send["run"], "python3 -m scripts.rep120_caller_sender")
+        self.assertNotIn("continue-on-error", job)
 
 
 if __name__ == "__main__":

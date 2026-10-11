@@ -1,18 +1,21 @@
-# LI-178 / Supplementary #974: held caller contract
+# Supplementary #974: default-held one-shot caller contract
 
-This repository-local candidate is preparation, not hosted acceptance. Its only
-job is guarded to the exact repository/Main/manual/first attempt; its sole step
-unconditionally exits held with `exit 1`. It has no permissions, environment,
-reusable workflow, checkout, token request or broker effect. No input or repository
-variable can enable a sender, and reruns are rejected. Existing promotion/release workflows,
+This repository-local candidate is implementation preparation, not activation or
+hosted acceptance. Its only job is guarded to the exact repository/Main/manual/
+first attempt. Workflow-wide permissions are empty; the single caller job has
+only `contents: read` and `id-token: write`. SHA-pinned checkout reads the exact
+event SHA without persisted credentials. There is no Environment, reusable job,
+schedule, dispatch, receiver deployment, retry or evidence upload. Empty inputs
+fail before transport or token retrieval. Existing promotion/release workflows,
 environments, scheduler containment and the completed #1205 collector are unchanged.
-It is not an executable append packet or production broker configuration.
+No endpoint, certificate, pin, source SHA, expiry or operation is supplied here.
 
 `python3 scripts/rep120_caller_contract.py` describes the held interface.
 `--inspect-context` additionally validates an allowlist of GitHub metadata, but
 these environment strings are untrusted observations, never signed OIDC evidence.
-Both modes retain `enabled=false`, `request=null`, `oidc=null`,
-`native_delivery=null` and `hosted_acceptance=false`. There is no enable option.
+Both description modes retain `enabled=false`, `request=null`, `oidc=null`,
+`native_delivery=null` and `hosted_acceptance=false`. They do not call the sender.
+The bounded sender entrypoint is `python3 -m scripts.rep120_caller_sender`.
 
 ## Protected source discovery
 
@@ -67,9 +70,10 @@ Completed, waiting, scheduled, reusable, rerun or drifted callers fail closed.
 GitHub's actual token request mechanism is job-scoped `id-token: write` plus its
 runner-provided `ACTIONS_ID_TOKEN_REQUEST_URL` and
 `ACTIONS_ID_TOKEN_REQUEST_TOKEN` (or toolkit `getIDToken(audience)`). The
-candidate neither grants that permission nor reads these values. Root has
-selected the audience; the narrowly scoped permission and private native delivery
-before a separately reviewed sender is implemented. Tokens must never enter
+sender reads these two runner-provided values after nonsecret preflight, and
+retrieves the JWT only after the receiver's TLS peer and leaf pin pass. Root
+selected the audience; permission is granted only to this guarded caller job.
+Tokens must never enter
 logs, command arguments, artifacts, Git or request/evidence JSON.
 An Environment job changes GitHub's subject; it cannot use this broker's
 branch subject. Do not weaken existing release Environment semantics to fit it.
@@ -114,7 +118,59 @@ at each effect fence. Root's nonsecret binding decision selects approval reposit
 `lightning-it/github-management-lit`, issue `721`, actor ID `76040632`. These
 routine bindings are not per-append approval or proof of live actor permissions.
 The caller may not fabricate a comment or approver.
-There is no request, run, deadline or approval ID in this candidate.
+No actual request, run, deadline or approval ID is invented by this candidate.
+
+## Bounded public dispatch input API
+
+The two optional string inputs default to empty and are **nonsecret JSON only**:
+
+- `delivery`: exactly `ipv4`, `port`, `public_pem`, `leaf_sha256`, `expires_at`.
+  IPv4 is canonical numeric text; port is an integer `1..65535`. PEM is one
+  public certificate, never a private key. The leaf pin is lowercase DER SHA256.
+  The owner-supplied integer expiry is future and at most 300 seconds away.
+  Root supplies the actual values after native admission, not this code.
+- `envelope`: exactly `schema`, `nonce`, `operation_key`, `config_sha256`,
+  `source_sha`, `resource_sha256`, `request`. Schema is
+  `lit-li178-one-shot-transport/v1`; nonce/op/config/resource are exact lowercase
+  64-hex owner bindings; source is the actual protected caller Main 40-hex SHA.
+  `request` has exactly the seven broker fields above, with `run_id: null`.
+  The sender fills **only** that null field with actual integer `GITHUB_RUN_ID`
+  after first-attempt context validation. No other field changes.
+  Root binds the actual request digest after live run-ID readback, before its one
+  accept. Supplied `oidc` or a prepopulated run ID fails before transport.
+
+Neither input is authority proof. The admitted receiver independently binds nonce,
+operation, config, Source, resource and canonical actual request digest. Its
+native callback authenticates real JWT/JWKS, current protected source/run, exact
+append approval, persistent claim and resource policies before credentials.
+Sender shape checks do not replace native authorization or ledger-core replay.
+
+Root prepares the listener before dispatch and activates accept only after actual
+run-ID binding. The sender performs one connection, no readiness polling, sleep
+or second attempt after an uncertain outcome. TLS verification uses only the
+supplied public CA, fixed hostname `li178-one-shot`, TLS1.3 minimum and exact
+DER SHA256 pin before obtaining or sending OIDC. No DNS or proxy is used for
+receiver delivery. Binary framing matches Root's `send_once`: `LIT178T1`,
+network-order uint32 length, canonical compact sorted ASCII JSON plus newline,
+then `LIT178END`; body at most 1 MiB and OIDC at most 16 KiB.
+
+OIDC retrieval is one direct HTTPS GET using actual runner URL/bearer, fixed
+audience, compiled system trust locations and no proxy, redirect or retry.
+Ambient `SSLKEYLOGFILE` and certificate environment overrides are not consumed.
+URL must be a subdomain of `actions.githubusercontent.com`, path ending
+`/idtoken`, and exactly `api-version=2.0`; no userinfo, fragment or non-443 port.
+Unknown routing/query changes hold. Root verifies actual runner routing at
+activation; synthetic test URLs are not actual hosted URL evidence.
+The JWT remains in process memory/encrypted frame, never argv, extra env, logs,
+input/artifacts. Core dumps are disabled; Python heap zeroing is not claimed.
+
+One monotonic deadline bounds transport to at most 120 seconds and delivery expiry;
+OIDC connect/read socket timeouts are additionally at most ten seconds. OS DNS
+resolution of the official OIDC service is not claimed preemptible; the
+three-minute job timeout is the outer process bound. Expiry is rechecked before
+sending. The sole accepted ACK is exact fixed transport metadata with Boolean
+`hosted_acceptance: false`; ACK reads are bounded to 4096 bytes. Errors print one
+fixed held message, never the underlying exception, response, request or token.
 
 ## Root-owned interface fields still required
 
@@ -133,7 +189,7 @@ exist; this candidate requests no App, key, installation or credential change.
 Root must still supply/approve these exact integration fields:
 
 1. The future protected caller Main SHA, accountable `owner_sha256`,
-   `policy_epoch` and job OIDC permission. Audience and approval location/actor
+   `policy_epoch` and activation of the narrow job OIDC permission. Audience and approval location/actor
    are already selected above; do not reopen those routine decisions.
 2. The complete authenticated binding, including writer/signer user IDs,
    platform signer fingerprint and fresh effective-policy hash. Existing resource
@@ -142,7 +198,7 @@ Root must still supply/approve these exact integration fields:
    exact immutable request-byte acquisition and protected source binding. No
    HTTPS endpoint, SSH credential, socket path, bearer-token exchange or host
    access route is invented here. The Python broker exposes no accepted hosted API.
-   Root reports preparation of a private short-lived one-shot TLS receiver;
+   Root supplies a concrete private short-lived one-shot TLS transport contract;
    actual origin/port, certificate trust or pin, peer/OIDC admission, byte framing,
    deadline and response/readback semantics remain Root-owned fields, not facts
    supplied or enabled by this candidate. `native_delivery` remains null.
@@ -155,14 +211,14 @@ Root must still supply/approve these exact integration fields:
    trusted timestamp, prepared GraphQL bytes, full canonical settings and exact
    per-append issue-comment approval while the first-attempt caller is running.
 
-Review this local held source now so Root can prepare the receiver and proposed
-caller path without waiting for hosted acceptance. When Root supplies the
-approved private transport and identity fields, integrate the narrowly bounded
-sender into this same candidate/path and publish through existing gates; bind
+The concrete sender is integrated into the same local candidate/path. It does
+not wait for hosted acceptance merely to prepare source. No publication or
+dispatch occurred; Root owns actual transport/identity admission. Publish only
+when the complete combined candidate passes existing gates; bind
 the actual resulting protected Main SHA, never this local draft or a prior SHA.
 No extra cumulative AI review or optional intermediate publication is requested.
-Sender/receiver integration and permission remain a separately bounded
-nonoverlapping next step. Acceptance requires actual positive/negative,
+Actual sender/receiver activation remains a separately bounded nonoverlapping
+next step. Acceptance requires actual positive/negative,
 race/crash, lifecycle/drain/revocation and readback evidence; this description,
 fixtures and GitHub artifacts are not WORM/CAS, attestations, R8 or a canary.
 Nothing activates #974, changes the scheduler, closes LI-178/LI-206 or starts a
@@ -178,6 +234,11 @@ bash scripts/devtools-local-quality.sh python3 -m unittest tests.unit.test_rep12
 bash scripts/devtools-local-quality.sh ruff check scripts/rep120_caller_contract.py tests/unit/test_rep120_caller_contract.py
 ```
 
-These tests validate held defaults, metadata drift/malformed inputs, credential
-canary exclusion and the guarded/always-held/no-permission workflow. They do not
-execute a hosted caller, obtain OIDC, exercise native transport or prove adoption.
+The focused suite is `tests.unit.test_rep120_caller_contract` plus
+`tests.unit.test_rep120_caller_sender`. It validates default-held inputs, exact
+workflow permission/trigger scope, run-ID-only substitution, malformed/drift
+rejection before network/token, no redirects/proxy/retries, bounded frames/ACK,
+expiry and secret-safe errors. Real Linux loopback TLS tests generate fixture
+keys only in memfds, prove compatible framing and reject hostname/pin mismatch
+before even the mocked OIDC callback. They do not obtain real OIDC, exercise an
+actual hosted receiver/Broker, prove adoption or count as native acceptance.
