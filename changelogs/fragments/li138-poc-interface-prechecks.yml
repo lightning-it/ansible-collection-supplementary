@@ -1,0 +1,4 @@
+---
+bugfixes:
+  - Validate explicit Vault namespaces, certificate CA paths and tokens before secret or PKI API access.
+  - Reject malformed or duplicate default-role cleanup identities before any Keycloak reconciliation taskset.

@@ -132,6 +132,7 @@ class CredentialCleanupTests(unittest.TestCase):
                         "vault_connection_credentials_sources": sources,
                         "vault_connection_credentials_kv_mount": "fixture",
                         "vault_connection_credentials_auth": {
+                            "namespace": "",
                             "url": "https://fixture",
                             "ca_cert": "/fixture.pem",
                             "role_id": "fixture",

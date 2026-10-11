@@ -4,6 +4,8 @@
     that:
       - vault_pki_leaf_cac_allow_change is boolean
       - vault_pki_leaf_cac_api_url is match('^https://')
+      - vault_pki_leaf_cac_ca_path is string and vault_pki_leaf_cac_ca_path is match('^/')
+      - vault_pki_leaf_cac_admin_token is string and vault_pki_leaf_cac_admin_token | trim | length > 0
       - vault_pki_leaf_cac_mount is match('^[a-z0-9-]+$')
       - vault_pki_leaf_cac_name is match('^[a-z0-9_-]+$')
       - vault_pki_leaf_cac_definition is mapping
@@ -27,6 +29,7 @@
       - vault_pki_leaf_cac_definition.client_flag | default(true) is sameas false
       - vault_pki_leaf_cac_definition.issuer_ref | length > 0
     quiet: true
+  no_log: true
 
 - name: Require literal DNS names in the exact allowed domain set
   ansible.builtin.assert:

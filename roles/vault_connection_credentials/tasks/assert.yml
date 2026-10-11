@@ -4,6 +4,8 @@
     that:
       - vault_connection_credentials_sources is sequence and vault_connection_credentials_sources is not string
       - vault_connection_credentials_auth is mapping
+      - vault_connection_credentials_auth.namespace is defined
+      - vault_connection_credentials_auth.namespace is string
       - vault_connection_credentials_auth.url is match('^https://')
       - vault_connection_credentials_auth.ca_cert is match('^/')
       - vault_connection_credentials_auth.role_id | length > 0

@@ -78,6 +78,26 @@
   no_log: true
   tags: always
 
+- name: Validate every default-role cleanup allowlist entry before any taskset
+  ansible.builtin.assert:
+    that:
+      - item.1 is mapping
+      - item.1.keys() | difference(['name', 'client_id']) | length == 0
+      - item.1.name is defined and item.1.name is string and item.1.name | trim | length > 0
+      - >-
+        'client_id' not in item.1 or
+        (item.1.client_id is string and item.1.client_id | trim | length > 0)
+      - >-
+        (item.0.allowed_removals | selectattr('name', 'equalto', item.1.name)
+        | selectattr('client_id', 'defined') | selectattr('client_id', 'equalto', item.1.client_id)
+        | list | length == 1) if 'client_id' in item.1 else
+        (item.0.allowed_removals | selectattr('name', 'equalto', item.1.name)
+        | rejectattr('client_id', 'defined') | list | length == 1)
+    fail_msg: Cleanup entries require unique nonempty role identities and no unexpected fields.
+  loop: "{{ keycloak_cac_default_role_cleanup | subelements('allowed_removals') }}"
+  no_log: true
+  tags: always
+
 - name: Validate explicit authentication flow targets and object-only options
   ansible.builtin.assert:
     that:
