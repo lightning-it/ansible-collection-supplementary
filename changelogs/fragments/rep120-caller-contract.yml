@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    Add a held, credential-free REP120 caller source candidate and document the exact
+    broker admission contract without enabling promotion or token delivery.

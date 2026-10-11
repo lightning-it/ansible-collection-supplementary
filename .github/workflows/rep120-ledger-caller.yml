@@ -1,0 +1,26 @@
+# Repository-local LI-178 caller source candidate; not an activation route.
+# yamllint disable rule:truthy
+---
+name: REP120 ledger caller (held)
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  caller:
+    # No enable input or variable. The sole step always exits held before effects.
+    # A separately reviewed implementation must bind the native transport first.
+    if: >-
+      github.repository == 'lightning-it/ansible-collection-supplementary' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Fail closed without credentials or broker effects
+        run: |
+          printf '%s\n' 'REP120 caller held: native transport and exact append approval are unbound.'
+          exit 1
