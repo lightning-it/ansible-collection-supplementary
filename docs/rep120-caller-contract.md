@@ -2,8 +2,10 @@
 
 This repository-local candidate is implementation preparation, not activation or
 hosted acceptance. Its only job is guarded to the exact repository/Main/manual/
-first attempt. Workflow-wide permissions are empty; the single caller job has
-only `contents: read` and `id-token: write`. SHA-pinned checkout reads the exact
+first attempt, `github.ref_protected == true`, actor ID `76040632`, and both
+`github.actor` and `github.triggering_actor` exactly `litroc`. Workflow-wide
+permissions are empty; the single caller job has only `contents: read` and
+`id-token: write`. SHA-pinned checkout reads the exact
 event SHA without persisted credentials. There is no Environment, reusable job,
 schedule, dispatch, receiver deployment, retry or evidence upload. Empty inputs
 fail before transport or token retrieval. Existing promotion/release workflows,
@@ -73,6 +75,18 @@ runner-provided `ACTIONS_ID_TOKEN_REQUEST_URL` and
 sender reads these two runner-provided values after nonsecret preflight, and
 retrieves the JWT only after the receiver's TLS peer and leaf pin pass. Root
 selected the audience; permission is granted only to this guarded caller job.
+Root separately admitted the dispatch identity `litroc` / user ID `76040632`;
+an actual public GitHub user GET confirmed this exact pair. This is a distinct
+dispatch decision, not inferred authority from the same ID's approval role.
+The job predicate applies before its OIDC permission is granted. The sender
+also requires exact `GITHUB_ACTOR`, string `GITHUB_ACTOR_ID`,
+`GITHUB_TRIGGERING_ACTOR` and string `GITHUB_REF_PROTECTED=true` metadata before
+opening any socket or retrieving OIDC. Both login fields bind to the same
+fixed, read-back identity on attempt 1; no unsupported triggering-actor-ID
+context is invented. Aliases, case changes, leading-zero IDs, missing metadata,
+another trigger actor or an unprotected ref are held. These environment
+observations remain untrusted outside the guarded hosted job and do not replace
+the receiver's authenticated live run/source/identity/permission readback.
 Tokens must never enter
 logs, command arguments, artifacts, Git or request/evidence JSON.
 An Environment job changes GitHub's subject; it cannot use this broker's
@@ -211,9 +225,10 @@ Root must still supply/approve these exact integration fields:
    trusted timestamp, prepared GraphQL bytes, full canonical settings and exact
    per-append issue-comment approval while the first-attempt caller is running.
 
-The concrete sender is integrated into the same local candidate/path. It does
-not wait for hosted acceptance merely to prepare source. No publication or
-dispatch occurred; Root owns actual transport/identity admission. Publish only
+The concrete sender is integrated into the same candidate/path. It does
+not wait for hosted acceptance merely to prepare source. The combined candidate
+was published as PR #1210, not promoted to protected Main or dispatched;
+Root owns actual transport/identity admission. Publish only
 when the complete combined candidate passes existing gates; bind
 the actual resulting protected Main SHA, never this local draft or a prior SHA.
 No extra cumulative AI review or optional intermediate publication is requested.

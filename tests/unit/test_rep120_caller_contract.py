@@ -36,6 +36,10 @@ def context() -> dict[str, str]:
         "GITHUB_RUN_ID": "123",
         "GITHUB_RUN_ATTEMPT": "1",
         "GITHUB_EVENT_NAME": "workflow_dispatch",
+        "GITHUB_ACTOR": "litroc",
+        "GITHUB_ACTOR_ID": "76040632",
+        "GITHUB_TRIGGERING_ACTOR": "litroc",
+        "GITHUB_REF_PROTECTED": "true",
     }
 
 
@@ -56,6 +60,8 @@ class CallerContractTests(unittest.TestCase):
                 "approval_repository": "lightning-it/github-management-lit",
                 "approval_issue": 721,
                 "approval_actor_id": 76040632,
+                "dispatch_actor": "litroc",
+                "dispatch_actor_id": 76040632,
             },
         )
 
@@ -80,6 +86,10 @@ class CallerContractTests(unittest.TestCase):
             "GITHUB_RUN_ID": ["0", "01", "9007199254740992", "1; command"],
             "GITHUB_RUN_ATTEMPT": ["2", "01"],
             "GITHUB_EVENT_NAME": ["schedule", "pull_request", "workflow_call"],
+            "GITHUB_ACTOR": ["other", "Litroc", "litroc ", "litroc[bot]"],
+            "GITHUB_ACTOR_ID": ["76040633", "076040632", 76040632],
+            "GITHUB_TRIGGERING_ACTOR": ["other", "Litroc", "litroc ", "litroc[bot]"],
+            "GITHUB_REF_PROTECTED": ["false", "True", "1", True],
         }
         for key, values in mutations.items():
             for value in values:
@@ -121,7 +131,9 @@ class CallerContractTests(unittest.TestCase):
             job["if"],
             "github.repository == 'lightning-it/ansible-collection-supplementary' && "
             "github.event_name == 'workflow_dispatch' && "
-            "github.ref == 'refs/heads/main' && github.run_attempt == 1",
+            "github.ref == 'refs/heads/main' && github.ref_protected == true && "
+            "github.actor_id == '76040632' && github.actor == 'litroc' && "
+            "github.triggering_actor == 'litroc' && github.run_attempt == 1",
         )
         self.assertNotIn("environment", job)
         self.assertNotIn("uses", job)

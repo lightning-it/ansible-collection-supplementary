@@ -20,6 +20,8 @@ AUDIENCE = "lit-rep120-ledger:1413923700:operation-ledger-core"
 APPROVAL_REPOSITORY = "lightning-it/github-management-lit"
 APPROVAL_ISSUE = 721
 APPROVAL_ACTOR_ID = 76040632
+DISPATCH_ACTOR = "litroc"
+DISPATCH_ACTOR_ID = "76040632"
 REQUEST_FIELDS = ("expected_head", "operation_key", "path", "contents", "run_id", "approval_id", "expires_at")
 ROOT_FIELDS = (
     "caller.source_sha",
@@ -45,6 +47,10 @@ CONTEXT_FIELDS = (
     "GITHUB_RUN_ID",
     "GITHUB_RUN_ATTEMPT",
     "GITHUB_EVENT_NAME",
+    "GITHUB_ACTOR",
+    "GITHUB_ACTOR_ID",
+    "GITHUB_TRIGGERING_ACTOR",
+    "GITHUB_REF_PROTECTED",
 )
 
 
@@ -64,6 +70,10 @@ def inspect_context(environ: Mapping[str, str]) -> dict[str, str]:
         "GITHUB_REF": REF,
         "GITHUB_WORKFLOW_REF": f"{REPOSITORY}/{WORKFLOW}@{REF}",
         "GITHUB_RUN_ATTEMPT": "1",
+        "GITHUB_ACTOR": DISPATCH_ACTOR,
+        "GITHUB_ACTOR_ID": DISPATCH_ACTOR_ID,
+        "GITHUB_TRIGGERING_ACTOR": DISPATCH_ACTOR,
+        "GITHUB_REF_PROTECTED": "true",
     }
     if any(context[key] != value for key, value in expected.items()):
         raise HeldContext("caller metadata identity mismatch")
@@ -99,6 +109,8 @@ def describe(context: Mapping[str, str] | None = None) -> dict[str, object]:
             "approval_repository": APPROVAL_REPOSITORY,
             "approval_issue": APPROVAL_ISSUE,
             "approval_actor_id": APPROVAL_ACTOR_ID,
+            "dispatch_actor": DISPATCH_ACTOR,
+            "dispatch_actor_id": int(DISPATCH_ACTOR_ID),
         },
         "observed_context": None if context is None else inspect_context(context),
         "request_fields": list(REQUEST_FIELDS),

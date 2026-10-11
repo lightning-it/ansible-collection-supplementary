@@ -75,6 +75,29 @@ def frame(value):
 
 
 class InputTests(unittest.TestCase):
+    def test_unadmitted_dispatcher_and_unprotected_ref_have_no_effects(self):
+        mutations: dict[str, list[Any]] = {
+            "GITHUB_ACTOR": ["other", "Litroc", "litroc ", "litroc[bot]", ""],
+            "GITHUB_ACTOR_ID": ["76040633", "076040632", 76040632, ""],
+            "GITHUB_TRIGGERING_ACTOR": ["other", "Litroc", "litroc ", "litroc[bot]", ""],
+            "GITHUB_REF_PROTECTED": ["false", "True", "1", True, ""],
+        }
+        with (
+            patch.object(sender.ssl, "SSLContext"),
+            patch.object(sender.socket, "socket") as connect,
+            patch.object(sender, "fetch_oidc") as fetch,
+        ):
+            for key, values in mutations.items():
+                for value in values:
+                    with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                        sender.send_once(delivery(), envelope(), environment() | {key: value})
+                missing = environment()
+                del missing[key]
+                with self.subTest(missing=key), self.assertRaises(ValueError):
+                    sender.send_once(delivery(), envelope(), missing)
+            connect.assert_not_called()
+            fetch.assert_not_called()
+
     def test_valid_inputs_and_only_actual_run_id_is_filled(self):
         original = envelope()
         original["request"]["run_id"] = None
