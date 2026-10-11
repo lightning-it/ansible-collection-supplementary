@@ -400,8 +400,12 @@ class VaultPkiCheckModeTests(unittest.TestCase):
             self.exercise("vault_pki_leaf_role", existing, apply=True)
 
     def test_numeric_inventory_templates_match_canonical_vault_readback(self):
-        self.exercise("vault_pki_leaf_role", True, apply=True,
-                      numeric_fields={"ttl": "1800", "max_ttl": "3600", "key_bits": "256"})
+        self.exercise(
+            "vault_pki_leaf_role",
+            True,
+            apply=True,
+            numeric_fields={"ttl": "1800", "max_ttl": "3600", "key_bits": "256"},
+        )
 
     def test_invalid_numeric_fields_fail_before_api_access(self):
         for field in ("ttl", "max_ttl", "key_bits"):
