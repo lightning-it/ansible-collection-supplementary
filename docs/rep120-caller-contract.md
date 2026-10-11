@@ -241,6 +241,15 @@ Nothing activates #974, changes the scheduler, closes LI-178/LI-206 or starts a
 
 ## Local verification
 
+Failed caller commands report exactly one fixed stage code: `INPUT_CONTEXT`,
+`OIDC_CAPABILITY`, `TCP`, `TLS`, `OIDC_GET`, `SEND`, or `ACK`. These codes identify
+the active phase only, not a verified underlying cause or evidence of acceptance.
+Post-OIDC input revalidation still reports `INPUT_CONTEXT`; cleanup failures retain
+the active phase. No exception text, traceback, URL, token, payload or environment
+value is printed. A missing or invalid internal stage falls back to `INPUT_CONTEXT`.
+All existing admission, source, run, expiry, TLS, OIDC and ACK guards remain
+unchanged. There is still no retry, dispatch or activation authority in this sender.
+
 Run the repository's `pre-commit run --all-files` first. Focused tests use the
 existing pinned, offline, read-only, non-root Devtools boundary:
 

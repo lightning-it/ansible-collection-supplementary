@@ -182,7 +182,7 @@ class InputTests(unittest.TestCase):
                         self.assertEqual(sender.main(), 2)
                     send.assert_not_called()
             self.assertEqual(out.getvalue(), "")
-            self.assertEqual(error.getvalue(), "REP120 one-shot caller held; no retry or acceptance.\n")
+            self.assertEqual(error.getvalue(), "REP120 one-shot caller held [INPUT_CONTEXT]; no retry or acceptance.\n")
             self.assertNotIn(JWT_CANARY, error.getvalue())
 
 
@@ -263,6 +263,114 @@ class OidcTests(unittest.TestCase):
 
 
 class TransportTests(unittest.TestCase):
+    def test_untrusted_or_missing_stage_never_enters_main_output(self):
+        for malformed in (False, True):
+            error = sender.StageHeld(sender.HoldStage.ACK) if malformed else RuntimeError(JWT_CANARY)
+            if malformed:
+                error.__dict__["stage"] = JWT_CANARY
+            message = envelope()
+            message["request"]["run_id"] = None
+            values = environment() | {
+                "REP120_DELIVERY": json.dumps(delivery()),
+                "REP120_ENVELOPE": json.dumps(message),
+            }
+            out, stderr = io.StringIO(), io.StringIO()
+            with (
+                self.subTest(malformed=malformed),
+                patch.dict(os.environ, values, clear=True),
+                patch.object(sender.sys, "argv", ["sender"]),
+                patch.object(sender.resource, "setrlimit"),
+                patch.object(sender, "send_once", side_effect=error) as send,
+                contextlib.redirect_stdout(out),
+                contextlib.redirect_stderr(stderr),
+            ):
+                self.assertEqual(sender.main(), 2)
+                send.assert_called_once()
+            self.assertEqual(out.getvalue(), "")
+            self.assertEqual(
+                stderr.getvalue(), "REP120 one-shot caller held [INPUT_CONTEXT]; no retry or acceptance.\n"
+            )
+            self.assertNotIn(JWT_CANARY, stderr.getvalue())
+
+    def test_main_reports_only_fixed_stage_codes_without_retry_or_disclosure(self):
+        for stage, failing_point in (
+            ("INPUT_CONTEXT", "context"),
+            ("OIDC_CAPABILITY", "capability"),
+            ("TCP", "connect"),
+            ("TLS", "certificate"),
+            ("TLS", "handshake"),
+            ("OIDC_GET", "fetch"),
+            ("INPUT_CONTEXT", "revalidation"),
+            ("SEND", "send"),
+            ("ACK", "ack"),
+            ("ACK", "cleanup"),
+        ):
+            with self.subTest(stage=stage, failing_point=failing_point):
+                raw, secure, context_mock = MagicMock(), MagicMock(), MagicMock()
+                secure.getpeercert.return_value = b"test leaf"
+                secure.version.return_value = "TLSv1.3"
+                context_mock.wrap_socket.return_value = secure
+                supplied = delivery() | {"leaf_sha256": hashlib.sha256(b"test leaf").hexdigest()}
+                message = envelope()
+                message["request"]["run_id"] = None
+                values = environment() | {
+                    "REP120_DELIVERY": json.dumps(supplied),
+                    "REP120_ENVELOPE": json.dumps(message),
+                }
+                error = RuntimeError(JWT_CANARY + OIDC_URL + json.dumps(message))
+                out, stderr = io.StringIO(), io.StringIO()
+                with (
+                    patch.dict(os.environ, values, clear=True),
+                    patch.object(sender.sys, "argv", ["sender"]),
+                    patch.object(sender.resource, "setrlimit"),
+                    patch.object(sender.ssl, "SSLContext", return_value=context_mock),
+                    patch.object(sender.socket, "socket", return_value=raw) as factory,
+                    patch.object(
+                        sender, "oidc_capability", return_value=("host", "path", "runner-canary")
+                    ) as capability,
+                    patch.object(sender, "fetch_oidc", return_value=JWT_CANARY) as fetch,
+                    patch.object(sender, "read_ack", return_value=ack()) as read,
+                    patch.object(sender, "validate_inputs", wraps=sender.validate_inputs) as validate,
+                ):
+                    if failing_point == "context":
+                        values["GITHUB_ACTOR"] = JWT_CANARY
+                        os.environ["GITHUB_ACTOR"] = JWT_CANARY
+                    elif failing_point == "capability":
+                        capability.side_effect = error
+                    elif failing_point == "connect":
+                        raw.connect.side_effect = error
+                    elif failing_point == "certificate":
+                        context_mock.load_verify_locations.side_effect = error
+                    elif failing_point == "handshake":
+                        secure.do_handshake.side_effect = error
+                    elif failing_point == "fetch":
+                        fetch.side_effect = error
+                    elif failing_point == "revalidation":
+                        validate.side_effect = [None, error]
+                    elif failing_point == "send":
+                        secure.sendall.side_effect = error
+                    elif failing_point == "cleanup":
+                        raw.close.side_effect = error
+                    else:
+                        read.side_effect = error
+                    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(stderr):
+                        self.assertEqual(sender.main(), 2)
+                    self.assertLessEqual(factory.call_count, 1)
+                    self.assertLessEqual(raw.connect.call_count, 1)
+                    self.assertLessEqual(fetch.call_count, 1)
+                    self.assertLessEqual(secure.sendall.call_count, 1)
+                    if failing_point in {"context", "capability", "connect", "certificate", "handshake"}:
+                        fetch.assert_not_called()
+                        secure.sendall.assert_not_called()
+                    if failing_point in {"context", "capability"}:
+                        factory.assert_not_called()
+                    if factory.called:
+                        raw.close.assert_called_once()
+                self.assertEqual(out.getvalue(), "")
+                self.assertEqual(stderr.getvalue(), f"REP120 one-shot caller held [{stage}]; no retry or acceptance.\n")
+                for private in (JWT_CANARY, OIDC_URL, "runner-canary", json.dumps(message)):
+                    self.assertNotIn(private, out.getvalue() + stderr.getvalue())
+
     def test_bad_pin_and_handshake_never_request_token_or_send_application_bytes(self):
         for fail_handshake in (False, True):
             raw, secure, context_mock = MagicMock(), MagicMock(), MagicMock()
