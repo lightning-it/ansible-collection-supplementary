@@ -282,10 +282,11 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                     for previous_path, previous_pem in snapshots:
                         self.assertEqual(previous_path.read_text(), previous_pem)
                     snapshots.append((path, pem))
+                    fixture_credential = "offline-fixture-only"
                     values.update(
-                        guacamole_deploy_secrets={"db_password": "offline-fixture-only"},
-                        keycloak_deploy_db_password_effective="offline-fixture-only",
-                        keycloak_deploy_admin_password_effective="offline-fixture-only",
+                        guacamole_deploy_secrets={"db_password": fixture_credential},
+                        keycloak_deploy_db_password_effective=fixture_credential,
+                        keycloak_deploy_admin_password_effective=fixture_credential,
                     )
                     pod = self.render(role, values)
                     volume_name = "keycloak-trust" if role == "keycloak_deploy" else basename
