@@ -2505,7 +2505,7 @@ roles:
       tiny: []
       heavy: []
       application_acceptance: []
-  vault_pki_leaf_role:
+  vault_pki_leaf_cac:
     component: "vault"
     classification: "secret_management"
     maturity: "experimental"

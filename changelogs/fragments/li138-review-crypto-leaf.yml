@@ -1,4 +1,4 @@
 ---
 bugfixes:
   - guacamole_deploy - inspect public trust material on the controller rather than requiring target cryptography.
-  - vault_pki_leaf_role - explicitly close client, code-signing and email-protection usages for server-only leaves.
+  - vault_pki_leaf_cac - explicitly close client, code-signing and email-protection usages for server-only leaves.

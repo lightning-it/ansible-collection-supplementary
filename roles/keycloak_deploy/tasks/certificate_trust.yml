@@ -22,16 +22,43 @@
 
 - name: Prepare the Keycloak public trust directory
   ansible.builtin.file:
-    path: "{{ keycloak_deploy_host_data_dir | dirname }}/java-trust"
+    path: >-
+      {{ keycloak_deploy_host_data_dir | dirname }}/java-trust/{{ keycloak_deploy_trust_ca_sha256
+      | replace(':', '') }}
     state: directory
     owner: root
     group: root
     mode: "0755"
 
+- name: Inspect existing public CA for a write-free preview
+  ansible.builtin.stat:
+    path: >-
+      {{ keycloak_deploy_host_data_dir | dirname }}/java-trust/{{ keycloak_deploy_trust_ca_sha256
+      | replace(':', '') }}/issuer-ca.pem
+    follow: false
+    checksum_algorithm: sha1
+  register: keycloak_deploy_trust_ca_preview
+  when: ansible_check_mode
+
+- name: Report public CA content and custody drift without creating files
+  ansible.builtin.debug:
+    msg: Public CA materialization would be reconciled.
+  changed_when: >-
+    not keycloak_deploy_trust_ca_preview.stat.exists
+    or keycloak_deploy_trust_ca_preview.stat.checksum
+      | default('') != keycloak_deploy_trust_ca_certificate | hash('sha1')
+    or keycloak_deploy_trust_ca_preview.stat.uid | default(-1) != 0
+    or keycloak_deploy_trust_ca_preview.stat.gid | default(-1) != 0
+    or keycloak_deploy_trust_ca_preview.stat.mode | default('') != '0644'
+  when: ansible_check_mode
+
 - name: Materialize only the reviewed public Keycloak CA
   ansible.builtin.copy:
     content: "{{ keycloak_deploy_trust_ca_certificate }}"
-    dest: "{{ keycloak_deploy_host_data_dir | dirname }}/java-trust/issuer-ca.pem"
+    dest: >-
+      {{ keycloak_deploy_host_data_dir | dirname }}/java-trust/{{ keycloak_deploy_trust_ca_sha256
+      | replace(':', '') }}/issuer-ca.pem
     owner: root
     group: root
     mode: "0644"
+  when: not ansible_check_mode

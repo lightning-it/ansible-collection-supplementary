@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import datetime
 import os
 import shutil
@@ -169,10 +170,11 @@ class ApplicationJavaTrustTests(unittest.TestCase):
         for role, prefix, filename in (
             ("guacamole_deploy", "java", "java_trust.yml"),
             ("keycloak_deploy", "trust", "certificate_trust.yml"),
+            ("guacamole_deploy", "guacd", "guacd_trust.yml"),
         ):
             with self.subTest(role=role), tempfile.TemporaryDirectory() as temporary:
                 directory = Path(temporary)
-                (directory / "java-trust").mkdir()
+
                 base_var = (
                     "guacamole_deploy_base_dir" if role == "guacamole_deploy" else "keycloak_deploy_host_data_dir"
                 )
@@ -219,10 +221,76 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                     )
                     if matched:
                         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertNotIn("changed=0", result.stdout.split("PLAY RECAP")[-1])
                     else:
                         self.assertNotEqual(result.returncode, 0)
                         self.assertIn("exact unexpired reviewed CA", result.stdout)
-                    self.assertFalse((directory / "java-trust/issuer-ca.pem").exists())
+                    self.assertFalse((directory / "java-trust").exists())
+                    self.assertFalse((directory / "guacd-trust").exists())
+
+    def test_ca_rotation_keeps_the_previous_manifest_trust_available_for_rollback(self):
+        for role, prefix, filename, basename in (
+            ("guacamole_deploy", "java", "java_trust.yml", "java-trust"),
+            ("guacamole_deploy", "guacd", "guacd_trust.yml", "guacd-trust"),
+            ("keycloak_deploy", "trust", "certificate_trust.yml", "java-trust"),
+        ):
+            with self.subTest(role=role, prefix=prefix), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                snapshots = []
+                for _ in range(2):
+                    ca, _, _ = certificate_fixture()
+                    pem = ca.public_bytes(serialization.Encoding.PEM).decode()
+                    pin = fingerprint(ca)
+                    values = {
+                        f"{role}_{prefix}_ca_certificate": pem,
+                        f"{role}_{prefix}_ca_sha256": pin,
+                        "guacamole_deploy_base_dir": str(directory),
+                        "keycloak_deploy_host_data_dir": str(directory / "data"),
+                    }
+                    # Exercise CA byte/path rollback in a capability-free fixture;
+                    # production container UID ownership is tested separately.
+                    fixture_tasks = copy.deepcopy(
+                        yaml.safe_load((ROOT / "roles" / role / "tasks" / filename).read_text())
+                    )
+                    for task in fixture_tasks:
+                        for module in ("ansible.builtin.file", "ansible.builtin.copy"):
+                            if module in task:
+                                task[module]["owner"] = str(os.getuid())
+                                task[module]["group"] = str(os.getgid())
+                    source = directory / "apply.yml"
+                    source.write_text(
+                        yaml.safe_dump(
+                            [{"hosts": "localhost", "gather_facts": False, "vars": values, "tasks": fixture_tasks}]
+                        )
+                    )
+                    config = directory / "ansible.cfg"
+                    config.write_text("[defaults]\n")
+                    result = subprocess.run(  # noqa: S603 - controlled public CA rotation fixture
+                        [shutil.which("ansible-playbook"), "-i", "localhost,", "-c", "local", str(source)],
+                        capture_output=True,
+                        text=True,
+                        timeout=45,
+                        env={
+                            **os.environ,
+                            "ANSIBLE_CONFIG": str(config),
+                            "ANSIBLE_LOCAL_TEMP": str(directory / "ansible"),
+                        },
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    path = directory / basename / pin.replace(":", "") / "issuer-ca.pem"
+                    self.assertEqual(path.read_text(), pem)
+                    for previous_path, previous_pem in snapshots:
+                        self.assertEqual(previous_path.read_text(), previous_pem)
+                    snapshots.append((path, pem))
+                    values.update(
+                        guacamole_deploy_secrets={"db_password": "offline-fixture-only"},
+                        keycloak_deploy_db_password_effective="offline-fixture-only",
+                        keycloak_deploy_admin_password_effective="offline-fixture-only",
+                    )
+                    pod = self.render(role, values)
+                    volume_name = "keycloak-trust" if role == "keycloak_deploy" else basename
+                    volume = next(v for v in pod["spec"]["volumes"] if v["name"] == volume_name)
+                    self.assertEqual(Path(volume["hostPath"]["path"]) / "issuer-ca.pem", path)
 
     def test_keycloak_deploy_check_mode_validates_ca_and_plans_rotation_without_writes(self):
         ca, _leaf, _key = certificate_fixture()

@@ -97,7 +97,7 @@ spec:
     - name: keycloak-trust
       selinuxRelabel: true
       hostPath:
-        path: {{ ((keycloak_deploy_host_data_dir | dirname) ~ '/java-trust') | to_json }}
+        path: {{ ((keycloak_deploy_host_data_dir | dirname) ~ '/java-trust/' ~ (keycloak_deploy_trust_ca_sha256 | replace(':', ''))) | to_json }}
         type: Directory
 {% endif %}
     - name: keycloak-data

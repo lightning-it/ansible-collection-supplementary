@@ -582,7 +582,7 @@ synthesized as passes.
 | vault_foundational | experimental | — | experimental | experimental | not-applicable |
 | vault_ops | experimental | — | experimental | experimental | experimental |
 | vault_pki_certificate | experimental | — | experimental | blocked-external-infrastructure | blocked-external-infrastructure |
-| vault_pki_leaf_role | experimental | — | experimental | blocked-external-infrastructure | blocked-external-infrastructure |
+| vault_pki_leaf_cac | experimental | — | experimental | blocked-external-infrastructure | blocked-external-infrastructure |
 | vault_raft_snapshot | experimental | — | experimental | experimental | experimental |
 | vault_scoped_approle | experimental | — | experimental | experimental | experimental |
 | vault_secret_bundle | experimental | — | experimental | experimental | experimental |

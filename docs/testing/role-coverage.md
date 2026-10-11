@@ -123,7 +123,7 @@ promotion input only and never satisfy the release-required supported-target mat
 | vault_foundational | vault | helper | experimental | — | rhel-9 | experimental | experimental | not-applicable | parent_component_helper | — | — | Current scenario is a syntax stub. | vault-foundational-basic |
 | vault_ops | vault | infrastructure | experimental | — | rhel-9 | experimental | experimental | experimental | restart_unseal_recovery_and_authenticated_read | vault_deploy, vault_validate, lit.foundational.kubeplay | — | Current scenario uses fake Podman and a fake Vault API. | vault-ops-basic |
 | vault_pki_certificate | vault | secret_management | experimental | — | ubuntu-24.04 | experimental | blocked-external-infrastructure | blocked-external-infrastructure | issue_reuse_and_verify_service_certificate | community.crypto | Reachable certificate-validated Vault with scoped authentication and declared existing paths | No standalone protected Molecule application acceptance scenario exists yet. | — |
-| vault_pki_leaf_role | vault | secret_management | experimental | — | ubuntu-24.04 | experimental | blocked-external-infrastructure | blocked-external-infrastructure | reconcile_and_readback_leaf_issuer_role | — | Reachable certificate-validated Vault with scoped authentication and declared existing paths | No standalone protected Molecule application acceptance scenario exists yet. | — |
+| vault_pki_leaf_cac | vault | secret_management | experimental | — | ubuntu-24.04 | experimental | blocked-external-infrastructure | blocked-external-infrastructure | reconcile_and_readback_leaf_issuer_role | — | Reachable certificate-validated Vault with scoped authentication and declared existing paths | No standalone protected Molecule application acceptance scenario exists yet. | — |
 | vault_raft_snapshot | vault | backup_component | experimental | — | rhel-9 | experimental | experimental | experimental | snapshot_modify_restore_and_verify_exact_state | — | — | Current scenario uses a fake Vault API rather than an integrated-Raft cluster., Tiny explicitly proves numeric ownership in a canonical owner-only local test root; production retains /run with root ownership. | vault-raft-snapshot-basic, vault-security-lifecycle-basic |
 | vault_scoped_approle | vault | secret_management | experimental | — | rhel-9 | experimental | experimental | experimental | authenticate_positive_and_negative_policy_workflows | — | — | Current scenario uses a fake Vault API. | vault-bootstrap-basic, vault-scoped-approle-basic, vault-security-lifecycle-basic |
 | vault_secret_bundle | vault | secret_management | experimental | — | ubuntu-24.04, rhel-9 | experimental | experimental | experimental | read_before_generate_persist_and_reuse_secret_fields | community.crypto, community.hashi_vault | Reachable HashiCorp Vault KV v2 service and scoped authentication | No standalone Molecule scenario exists yet. | — |
@@ -1715,7 +1715,7 @@ promotion input only and never satisfy the release-required supported-target mat
 - Backup/restore and upgrade behavior are support claims only when the acceptance surface or an executed scenario proves them.
 - Known limitations: No standalone protected Molecule application acceptance scenario exists yet.
 
-### `vault_pki_leaf_role`
+### `vault_pki_leaf_cac`
 
 - Purpose/classification: `secret_management` in component `vault`.
 - Maturity/deprecation: `experimental` / `active`.

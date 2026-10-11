@@ -44,6 +44,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
         authorization=True,
         nested_chain=False,
         incomplete_chain=False,
+        stored_usage=None,
     ):
         ca, certificate, key = certificate_fixture()
         ca_chain = [ca.public_bytes(serialization.Encoding.PEM).decode()]
@@ -91,13 +92,14 @@ class VaultPkiCheckModeTests(unittest.TestCase):
             ).decode()
         if foreign_issuer:
             payload["data"]["data"]["issue_path"] = "pki/issuer/foreign/issue/server"
-        if role == "vault_pki_leaf_role":
+        if role == "vault_pki_leaf_cac":
             payload = {
                 "data": {
                     "allowed_domains": ["other.example"],
                     "max_ttl": 3600,
                     "key_type": "ec",
                     **(stored_expansion or {}),
+                    **(stored_usage or {}),
                 }
             }
 
@@ -147,7 +149,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                     self.end_headers()
                     self.wfile.write(json.dumps(response).encode())
                     return
-                if apply and role == "vault_pki_leaf_role" and not existing:
+                if apply and role == "vault_pki_leaf_cac" and not existing:
                     payload = {"data": incoming}
                     existing = True
                     self.send_response(204)
@@ -202,11 +204,11 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 )
             else:
                 values.update(
-                    vault_pki_leaf_role_mount="pki",
-                    vault_pki_leaf_role_name="server",
-                    vault_pki_leaf_role_admin_token=CANARY,
-                    vault_pki_leaf_role_allow_change=authorization,
-                    vault_pki_leaf_role_definition={
+                    vault_pki_leaf_cac_mount="pki",
+                    vault_pki_leaf_cac_name="server",
+                    vault_pki_leaf_cac_admin_token=CANARY,
+                    vault_pki_leaf_cac_allow_change=authorization,
+                    vault_pki_leaf_cac_definition={
                         "allowed_domains": ["localhost"],
                         "allow_bare_domains": bare_domains,
                         "allow_wildcard_certificates": False,
@@ -221,11 +223,11 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                     },
                 )
             if numeric_fields:
-                values["vault_pki_leaf_role_definition"].update(numeric_fields)
+                values["vault_pki_leaf_cac_definition"].update(numeric_fields)
             if omitted:
-                del values["vault_pki_leaf_role_definition"][omitted]
+                del values["vault_pki_leaf_cac_definition"][omitted]
             if expansion:
-                values["vault_pki_leaf_role_definition"].update(expansion)
+                values["vault_pki_leaf_cac_definition"].update(expansion)
             task_path = ROOT / "roles" / role / "tasks/main.yml"
             if apply and role == "vault_pki_certificate":
                 # Keep actual issuance/validation/copy behavior while adapting only
@@ -373,6 +375,9 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 if original_existing:
                     self.assertEqual(payload["data"]["max_ttl"], 3600)
                     self.assertEqual(payload["data"]["key_type"], "ec")
+                self.assertEqual(payload["data"]["ext_key_usage"], ["ServerAuth"])
+                self.assertEqual(payload["data"]["ext_key_usage_oids"], [])
+                self.assertEqual(payload["data"]["key_usage"], ["DigitalSignature", "KeyAgreement", "KeyEncipherment"])
             else:
                 self.assertEqual(
                     [method for method, _path in requests],
@@ -393,28 +398,40 @@ class VaultPkiCheckModeTests(unittest.TestCase):
     def test_missing_and_changed_leaf_role_previews_are_read_only(self):
         for existing in (False, True):
             with self.subTest(existing=existing):
-                self.exercise("vault_pki_leaf_role", existing)
+                self.exercise("vault_pki_leaf_cac", existing)
 
     def test_existing_role_patch_preserves_undeclared_restrictions_and_new_role_uses_post(self):
         for existing in (True, False):
-            self.exercise("vault_pki_leaf_role", existing, apply=True)
+            self.exercise("vault_pki_leaf_cac", existing, apply=True)
 
     def test_numeric_inventory_templates_match_canonical_vault_readback(self):
         self.exercise(
-            "vault_pki_leaf_role",
+            "vault_pki_leaf_cac",
             True,
             apply=True,
             numeric_fields={"ttl": "1800", "max_ttl": "3600", "key_bits": "256"},
+        )
+
+    def test_existing_custom_usage_is_closed_to_server_leaf_usage(self):
+        self.exercise(
+            "vault_pki_leaf_cac",
+            True,
+            apply=True,
+            stored_usage={
+                "key_usage": ["CertSign"],
+                "ext_key_usage": ["ClientAuth"],
+                "ext_key_usage_oids": ["1.2.3.4"],
+            },
         )
 
     def test_invalid_numeric_fields_fail_before_api_access(self):
         for field in ("ttl", "max_ttl", "key_bits"):
             for value in (0, True, "1h", "-1", "not-a-number"):
                 with self.subTest(field=field, value=value):
-                    self.exercise("vault_pki_leaf_role", True, expansion={field: value})
+                    self.exercise("vault_pki_leaf_cac", True, expansion={field: value})
 
     def test_exact_domains_require_bare_domain_issuance_before_api_access(self):
-        self.exercise("vault_pki_leaf_role", True, bare_domains=False)
+        self.exercise("vault_pki_leaf_cac", True, bare_domains=False)
 
     def test_forged_custody_with_copied_metadata_cannot_pass_issuer_verification(self):
         self.exercise("vault_pki_certificate", True, forged=True)
@@ -439,18 +456,18 @@ class VaultPkiCheckModeTests(unittest.TestCase):
             "allow_wildcard_certificates",
         ):
             with self.subTest(field=field):
-                self.exercise("vault_pki_leaf_role", False, omitted=field)
-                self.exercise("vault_pki_leaf_role", False, expansion={field: "false"})
+                self.exercise("vault_pki_leaf_cac", False, omitted=field)
+                self.exercise("vault_pki_leaf_cac", False, expansion={field: "false"})
 
     def test_explicit_change_authorization_rejects_coercible_nonbooleans(self):
         for authorization in ("yes", 1, None, False):
             with self.subTest(authorization=authorization):
-                self.exercise("vault_pki_leaf_role", True, apply=True, authorization=authorization)
+                self.exercise("vault_pki_leaf_cac", True, apply=True, authorization=authorization)
 
     def test_preserved_identity_allowlists_cannot_broaden_an_existing_role(self):
         for field in ("allowed_serial_numbers", "allowed_user_ids"):
             with self.subTest(field=field):
-                self.exercise("vault_pki_leaf_role", True, apply=True, stored_expansion={field: ["*"]})
+                self.exercise("vault_pki_leaf_cac", True, apply=True, stored_expansion={field: ["*"]})
 
     def test_name_expansion_options_fail_before_api_access(self):
         for expansion in (
@@ -459,7 +476,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
             {"allowed_other_sans": ["*"]},
             {"allowed_domains_template": True},
         ):
-            self.exercise("vault_pki_leaf_role", True, expansion=expansion)
+            self.exercise("vault_pki_leaf_cac", True, expansion=expansion)
 
     def test_complete_nested_chain_materializes_for_root_only_clients(self):
         self.exercise("vault_pki_certificate", existing=False, apply=True, nested_chain=True)

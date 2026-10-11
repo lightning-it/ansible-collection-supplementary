@@ -1,6 +1,6 @@
 ---
 galaxy_info:
-  role_name: vault_pki_leaf_role
+  role_name: vault_pki_leaf_cac
   namespace: lit
   author: Lightning IT
   description: Reconcile one narrowly scoped leaf issuance role against an existing Vault PKI issuer.
