@@ -17,6 +17,7 @@ import struct
 import sys
 import time
 from collections.abc import Mapping
+from enum import Enum
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
@@ -35,6 +36,26 @@ DELIVERY_FIELDS = {"ipv4", "port", "public_pem", "leaf_sha256", "expires_at"}
 
 class Held(ValueError):
     """Only fixed safe errors cross the command boundary."""
+
+
+class HoldStage(Enum):
+    """Finite source-owned codes, never derived from exception or input text."""
+
+    INPUT_CONTEXT = "INPUT_CONTEXT"
+    OIDC_CAPABILITY = "OIDC_CAPABILITY"
+    TCP = "TCP"
+    TLS = "TLS"
+    OIDC_GET = "OIDC_GET"
+    SEND = "SEND"
+    ACK = "ACK"
+
+
+class StageHeld(Held):
+    """Preserve only the active fixed stage across the outer error mask."""
+
+    def __init__(self, stage: HoldStage) -> None:
+        super().__init__("one-shot caller held; no retry")
+        self.stage = stage
 
 
 def canonical(value: object) -> bytes:
@@ -270,18 +291,23 @@ def read_ack(stream: ssl.SSLSocket, operation_key: str, deadline: float) -> dict
 
 def send_once(delivery: dict[str, Any], envelope: dict[str, Any], environ: Mapping[str, str]) -> dict[str, Any]:
     """Validate TLS1.3, hostname and leaf pin before obtaining or sending OIDC."""
-    validate_inputs(delivery, envelope, environ, time.time())
-    oidc_capability(environ)  # Check routing/capability before consuming the slot.
-    deadline = time.monotonic() + min(120, delivery["expires_at"] - time.time())
+    stage = HoldStage.INPUT_CONTEXT
     raw = secure = None
     message = None
     try:
+        validate_inputs(delivery, envelope, environ, time.time())
+        stage = HoldStage.OIDC_CAPABILITY
+        oidc_capability(environ)  # Check routing/capability before consuming the slot.
+        deadline = time.monotonic() + min(120, delivery["expires_at"] - time.time())
+        stage = HoldStage.TLS
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         context.minimum_version = ssl.TLSVersion.TLSv1_3
         context.load_verify_locations(cadata=delivery["public_pem"])
+        stage = HoldStage.TCP
         raw = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         raw.settimeout(remaining(deadline))
         raw.connect((delivery["ipv4"], delivery["port"]))
+        stage = HoldStage.TLS
         secure = context.wrap_socket(raw, server_hostname=PEER_NAME, do_handshake_on_connect=False)
         secure.settimeout(remaining(deadline))
         secure.do_handshake()
@@ -291,21 +317,28 @@ def send_once(delivery: dict[str, Any], envelope: dict[str, Any], environ: Mappi
         actual = hashlib.sha256(certificate).hexdigest()
         if secure.version() != "TLSv1.3" or not hmac.compare_digest(actual, delivery["leaf_sha256"]):
             raise Held("TLS peer held")
+        stage = HoldStage.OIDC_GET
         message = envelope | {"oidc": fetch_oidc(environ, deadline)}
+        stage = HoldStage.INPUT_CONTEXT
         validate_inputs(delivery, envelope, environ, time.time())
+        stage = HoldStage.SEND
         data = canonical(message)
         secure.settimeout(remaining(deadline))
         secure.sendall(MAGIC + struct.pack("!I", len(data)) + data + TRAILER)
+        stage = HoldStage.ACK
         return read_ack(secure, envelope["operation_key"], deadline)
     except Exception:
-        raise Held("one-shot caller held; no retry") from None
+        raise StageHeld(stage) from None
     finally:
-        if message is not None:
-            message.pop("oidc", None)
-        if secure is not None:
-            secure.close()
-        if raw is not None:
-            raw.close()
+        try:
+            if message is not None:
+                message.pop("oidc", None)
+            if secure is not None:
+                secure.close()
+            if raw is not None:
+                raw.close()
+        except Exception:
+            raise StageHeld(stage) from None
 
 
 def main() -> int:
@@ -320,8 +353,10 @@ def main() -> int:
             raise Held("missing bounded nonsecret inputs")
         envelope = bind_run(decode(raw_envelope.encode()), os.environ)
         send_once(decode(raw_delivery.encode()), envelope, os.environ)
-    except Exception:
-        print("REP120 one-shot caller held; no retry or acceptance.", file=sys.stderr)
+    except Exception as error:
+        failed_stage = error.stage if isinstance(error, StageHeld) else HoldStage.INPUT_CONTEXT
+        code = next((stage.value for stage in HoldStage if stage is failed_stage), HoldStage.INPUT_CONTEXT.value)
+        print(f"REP120 one-shot caller held [{code}]; no retry or acceptance.", file=sys.stderr)
         return 2
     print("REP120 transport complete; hosted acceptance remains false.")
     return 0

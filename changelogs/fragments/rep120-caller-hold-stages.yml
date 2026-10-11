@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Report only finite source-owned REP120 caller hold stages without exception text
+    or credential disclosure; retain all admission guards and one-shot behavior.
