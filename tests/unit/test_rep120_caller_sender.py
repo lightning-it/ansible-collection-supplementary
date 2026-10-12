@@ -187,6 +187,69 @@ class InputTests(unittest.TestCase):
 
 
 class OidcTests(unittest.TestCase):
+    def test_capability_predicates_emit_only_fixed_reason_before_any_effect(self):
+        url_key, bearer_key = "ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_TOKEN"
+        cases = (
+            ("URL_MISSING", url_key, ""),
+            ("URL_FORMAT", url_key, OIDC_URL + "\n" + JWT_CANARY),
+            ("URL_FORMAT", url_key, "https://[invalid"),
+            ("URL_FORMAT", url_key, "x" * 4097),
+            ("URL_HTTPS", url_key, OIDC_URL.replace("https:", "http:")),
+            ("URL_USERINFO", url_key, OIDC_URL.replace("https://", "https://" + JWT_CANARY + "@")),
+            ("URL_PORT", url_key, OIDC_URL.replace(".com/", ".com:444/")),
+            ("URL_PORT", url_key, OIDC_URL.replace(".com/", ".com:invalid/")),
+            ("URL_FRAGMENT", url_key, OIDC_URL + "#" + JWT_CANARY),
+            ("URL_HOST", url_key, OIDC_URL.replace(".com/", ".com.evil/")),
+            ("URL_PATH", url_key, OIDC_URL.replace("/idtoken?", "/" + JWT_CANARY + "?")),
+            ("URL_QUERY", url_key, OIDC_URL + "&" + JWT_CANARY),
+            ("URL_QUERY", url_key, OIDC_URL + "&audience=" + JWT_CANARY),
+            ("URL_QUERY", url_key, OIDC_URL.replace("?api-version=2.0", "?api-version=1.0")),
+            ("BEARER_MISSING", bearer_key, ""),
+            ("BEARER_LENGTH", bearer_key, "x" * (sender.MAX_OIDC + 1)),
+            ("BEARER_ASCII", bearer_key, JWT_CANARY + "\n"),
+            ("BEARER_ASCII", bearer_key, JWT_CANARY + "é"),
+        )
+        for code, key, value in cases:
+            message = envelope()
+            message["request"]["run_id"] = None
+            values = environment() | {
+                key: value,
+                "REP120_DELIVERY": json.dumps(delivery()),
+                "REP120_ENVELOPE": json.dumps(message),
+            }
+            out, stderr = io.StringIO(), io.StringIO()
+            with (
+                self.subTest(code=code),
+                patch.dict(os.environ, values, clear=True),
+                patch.object(sender.sys, "argv", ["sender"]),
+                patch.object(sender.resource, "setrlimit"),
+                patch.object(sender.ssl, "SSLContext") as tls,
+                patch.object(sender.socket, "socket") as connect,
+                patch.object(sender, "fetch_oidc") as fetch,
+                contextlib.redirect_stdout(out),
+                contextlib.redirect_stderr(stderr),
+            ):
+                self.assertEqual(sender.main(), 2)
+                tls.assert_not_called()
+                connect.assert_not_called()
+                fetch.assert_not_called()
+            self.assertEqual(out.getvalue(), "")
+            self.assertEqual(
+                stderr.getvalue(), f"REP120 one-shot caller held [OIDC_CAPABILITY:{code}]; no retry or acceptance.\n"
+            )
+            for private in (JWT_CANARY, OIDC_URL, "runner-canary", json.dumps(message), "4097", "16385"):
+                self.assertNotIn(private, stderr.getvalue())
+
+    def test_capability_nonstring_values_remain_rejected_with_fixed_reason(self):
+        for key, code in (
+            ("ACTIONS_ID_TOKEN_REQUEST_URL", sender.OidcHoldReason.URL_FORMAT),
+            ("ACTIONS_ID_TOKEN_REQUEST_TOKEN", sender.OidcHoldReason.BEARER_FORMAT),
+        ):
+            with self.subTest(key=key), self.assertRaises(sender.OidcHeld) as held:
+                sender.oidc_capability(environment() | {key: None})
+            self.assertIs(held.exception.reason, code)
+            self.assertEqual(str(held.exception), "runner OIDC capability held")
+
     def test_fixed_audience_and_strict_official_endpoint(self):
         host, path = sender.oidc_endpoint(OIDC_URL)
         self.assertEqual(host, "fixture.actions.githubusercontent.com")
@@ -263,6 +326,41 @@ class OidcTests(unittest.TestCase):
 
 
 class TransportTests(unittest.TestCase):
+    def test_missing_forged_or_wrong_stage_reason_never_enters_output(self):
+        for stage, reason in (
+            (sender.HoldStage.OIDC_CAPABILITY, None),
+            (sender.HoldStage.OIDC_CAPABILITY, JWT_CANARY),
+            (sender.HoldStage.OIDC_CAPABILITY, sender.HoldStage.TLS),
+            (sender.HoldStage.ACK, sender.OidcHoldReason.URL_HOST),
+        ):
+            error = sender.StageHeld(stage)
+            if reason is None:
+                del error.reason
+            else:
+                error.__dict__["reason"] = reason
+            message = envelope()
+            message["request"]["run_id"] = None
+            values = environment() | {
+                "REP120_DELIVERY": json.dumps(delivery()),
+                "REP120_ENVELOPE": json.dumps(message),
+            }
+            out, stderr = io.StringIO(), io.StringIO()
+            with (
+                self.subTest(stage=stage),
+                patch.dict(os.environ, values, clear=True),
+                patch.object(sender.sys, "argv", ["sender"]),
+                patch.object(sender.resource, "setrlimit"),
+                patch.object(sender, "send_once", side_effect=error),
+                contextlib.redirect_stdout(out),
+                contextlib.redirect_stderr(stderr),
+            ):
+                self.assertEqual(sender.main(), 2)
+            self.assertEqual(out.getvalue(), "")
+            self.assertEqual(
+                stderr.getvalue(), f"REP120 one-shot caller held [{stage.value}]; no retry or acceptance.\n"
+            )
+            self.assertNotIn(JWT_CANARY, stderr.getvalue())
+
     def test_untrusted_or_missing_stage_never_enters_main_output(self):
         for malformed in (False, True):
             error = sender.StageHeld(sender.HoldStage.ACK) if malformed else RuntimeError(JWT_CANARY)
