@@ -95,6 +95,14 @@ LDAP provider in the target realm. Override `keycloak_cac_samba_ldap_provider`
 for site-specific DNs, bind credentials, and connection URLs. Additional LDAP
 providers can be supplied through `keycloak_cac_ldap_providers`.
 
+The Tiny, Heavy and Application Acceptance verification paths share a real-Keycloak
+cleanup case using a uniquely owned disposable realm. It checks default-off behavior,
+check-mode drift without deletion, refusal of a non-allowlisted child, actual removal
+and independent readback, a second unchanged apply, preservation of the role
+definitions and deletion of the test realm. The role retains its default-off cleanup
+switch; these tests do not authorize removing existing live default-role assignments.
+Each scenario writes a separate seven-case JUnit cleanup report from actual observations.
+
 ## Dependencies
 
 `community.general` provides the Keycloak API modules declared in `galaxy.yml`.

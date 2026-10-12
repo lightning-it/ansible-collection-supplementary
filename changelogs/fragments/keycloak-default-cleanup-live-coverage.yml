@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    keycloak_cac - exercise default-role cleanup through the real role in each
+    Keycloak profile using an isolated disposable realm, independent API
+    readback, check-mode, refusal, idempotence and preserved-role checks.

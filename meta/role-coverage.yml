@@ -972,6 +972,9 @@ roles:
     external_dependencies: []
     known_limitations:
       - >-
+        Default-role cleanup is tested only in disposable scenario-owned realms;
+        it is default-off and never authorizes cleanup of existing live realm defaults.
+      - >-
         Tiny exercises real flow, provider, required-action and deferred-binding
         API lifecycle and idempotency; a complete upstream broker login remains unproven.
       - "Current scenarios do not prove deletion reconciliation for every managed object type."

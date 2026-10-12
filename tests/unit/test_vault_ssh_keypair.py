@@ -27,6 +27,11 @@ SAFE_FAILURE_CATEGORY = (
     "is search('Failed to import|required Python|ImportError|No module named') else "
     "'filesystem_permission' if fixture_failure_text "
     "is search('Permission denied|Read-only file system') else "
+    "'unsupported_parameters' if fixture_failure_text is search('Unsupported parameters for') else "
+    "'unsupported_algorithm' if fixture_failure_text is search('UnsupportedAlgorithm') else "
+    "'invalid_private_key' if fixture_failure_text "
+    "is search('not a supported private key type|InvalidPrivateKeyFileError') else "
+    "'unsupported_key_type' if fixture_failure_text is search('Key type .* is not supported|InvalidKeyTypeError') else "
     "'unsupported_key' if fixture_failure_text "
     "is search('not supported|Unsupported|invalid key') else "
     "'module_resolution' if fixture_failure_text is search('could not resolve|module_utils') else "
@@ -97,8 +102,15 @@ class VaultKeypairTests(unittest.TestCase):
                     {"ansible.builtin.import_tasks": PREFLIGHT},
                     {"ansible.builtin.import_tasks": TASKS},
                 ]
-            if scenario == "diagnostic":
-                tasks = [{"ansible.builtin.fail": {"msg": "PARTIAL_CANARY"}, "no_log": True}]
+            diagnostic_messages = {
+                "diagnostic": "PARTIAL_CANARY",
+                "diagnostic_parameters": "Unsupported parameters for (module): PARTIAL_CANARY",
+                "diagnostic_algorithm": "UnsupportedAlgorithm: PARTIAL_CANARY",
+                "diagnostic_private_key": "PARTIAL_CANARY is not a supported private key type",
+                "diagnostic_key_type": "Key type PARTIAL_CANARY is not supported",
+            }
+            if scenario in diagnostic_messages:
+                tasks = [{"ansible.builtin.fail": {"msg": diagnostic_messages[scenario]}, "no_log": True}]
             if scenario == "diagnostic_stderr":
                 tasks = [
                     {
@@ -167,6 +179,18 @@ class VaultKeypairTests(unittest.TestCase):
         code, output = self.execute("diagnostic")
         self.assertNotEqual(code, 0)
         self.assertIn("Keypair fixture failure category: other_censored_failure", output)
+
+    def test_key_diagnostic_distinguishes_known_causes_without_disclosing_messages(self):
+        for scenario, category in (
+            ("diagnostic_parameters", "unsupported_parameters"),
+            ("diagnostic_algorithm", "unsupported_algorithm"),
+            ("diagnostic_private_key", "invalid_private_key"),
+            ("diagnostic_key_type", "unsupported_key_type"),
+        ):
+            with self.subTest(category=category):
+                code, output = self.execute(scenario)
+                self.assertNotEqual(code, 0)
+                self.assertIn("Keypair fixture failure category: " + category, output)
 
     def test_stderr_diagnostic_reports_only_an_allowlisted_exception_category(self):
         code, output = self.execute("diagnostic_stderr")

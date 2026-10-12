@@ -7,6 +7,15 @@
     keycloak_tiny_admin_password: "{{ lookup('env', 'KEYCLOAK_TEST_ADMIN_PASSWORD') }}"
     keycloak_tiny_junit_dir: "{{ lookup('env', 'KEYCLOAK_JUNIT_DIR') | default('artifacts/junit', true) }}"
   tasks:
+    - name: Verify optional default-role cleanup against an isolated real realm
+      ansible.builtin.import_tasks: ../shared/keycloak/default-role-cleanup.yml
+      vars:
+        keycloak_cleanup_probe_url: http://127.0.0.1:18080
+        keycloak_cleanup_probe_password: "{{ keycloak_tiny_admin_password }}"
+        keycloak_cleanup_probe_scenario: keycloak-tiny
+        keycloak_cleanup_probe_junit_dir: >-
+          {{ keycloak_tiny_junit_dir }}
+
     - name: Verify Keycloak readiness endpoint
       ansible.builtin.uri:
         url: http://127.0.0.1:19000/health/ready

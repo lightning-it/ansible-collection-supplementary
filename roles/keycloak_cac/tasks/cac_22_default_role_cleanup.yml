@@ -9,6 +9,7 @@
     realm: "{{ keycloak_cac_default_cleanup_definition.realm }}"
     allowed_removals: "{{ keycloak_cac_default_cleanup_definition.allowed_removals }}"
     require_empty_realm: "{{ keycloak_cac_default_cleanup_definition.require_empty_realm | default(false) }}"
+  register: keycloak_cac_default_cleanup_reconciliation
   loop: "{{ keycloak_cac_default_role_cleanup }}"
   loop_control:
     loop_var: keycloak_cac_default_cleanup_definition
