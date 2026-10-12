@@ -61,6 +61,13 @@ class OidcHoldReason(Enum):
     URL_FRAGMENT = "URL_FRAGMENT"
     URL_HOST = "URL_HOST"
     URL_PATH = "URL_PATH"
+    URL_PATH_ORIGIN_FORM = "URL_PATH_ORIGIN_FORM"
+    URL_PATH_ESCAPE = "URL_PATH_ESCAPE"
+    URL_PATH_SYNTAX = "URL_PATH_SYNTAX"
+    URL_PATH_DOT_SEGMENT = "URL_PATH_DOT_SEGMENT"
+    URL_PATH_CONTROL = "URL_PATH_CONTROL"
+    URL_PATH_SEPARATOR = "URL_PATH_SEPARATOR"
+    URL_PATH_DOUBLE_ENCODING = "URL_PATH_DOUBLE_ENCODING"
     URL_QUERY = "URL_QUERY"
     BEARER_MISSING = "BEARER_MISSING"
     BEARER_FORMAT = "BEARER_FORMAT"
@@ -207,23 +214,39 @@ def validate_inputs(delivery: dict[str, Any], envelope: dict[str, Any], context:
     canonical(envelope | {"oidc": "x" * MAX_OIDC})
 
 
-def oidc_idtoken_path(path: str) -> bool:
-    """RFC3986 routing segments, unchanged on the wire; literal endpoint only."""
+def oidc_path_hold_reason(path: str) -> OidcHoldReason | None:
+    """Validate opaque runner routing without inventing an endpoint name."""
     # Runner supplies server-generated routing, not a UUID/ASCII-identifier schema.
     # Only its path syntax is checked here; this never authenticates the caller.
     pchar = r"(?:[A-Za-z0-9._~!$&'()*+,;=:@-]|%[0-9A-Fa-f]{2})"
-    if re.fullmatch(rf"/(?:{pchar}+/)*idtoken", path) is None:
-        return False
-    for segment in path.split("/")[1:-1]:
+    # Keep origin-form unambiguous to recipients; never accept authority-form //.
+    if not path.startswith("/") or path.startswith("//"):
+        return OidcHoldReason.URL_PATH_ORIGIN_FORM
+    if re.fullmatch(rf"/(?:{pchar}|/)*", path) is None:
+        if re.search(r"%(?![0-9A-Fa-f]{2})", path):
+            return OidcHoldReason.URL_PATH_ESCAPE
+        return OidcHoldReason.URL_PATH_SYNTAX
+    for segment in path.split("/")[1:]:
         decoded = unquote_to_bytes(segment)
         # No normalization, traversal, hidden separator/control or double decoding.
-        if decoded in (b".", b"..") or any(byte < 33 or byte in (37, 47, 92, 127) for byte in decoded):
-            return False
-    return True
+        if decoded in (b".", b".."):
+            return OidcHoldReason.URL_PATH_DOT_SEGMENT
+        if any(byte < 33 or byte == 127 for byte in decoded):
+            return OidcHoldReason.URL_PATH_CONTROL
+        if any(byte in (47, 92) for byte in decoded):
+            return OidcHoldReason.URL_PATH_SEPARATOR
+        if 37 in decoded:
+            return OidcHoldReason.URL_PATH_DOUBLE_ENCODING
+    return None
+
+
+def oidc_idtoken_path(path: str) -> bool:
+    """Legacy helper name; validate opaque routing, not a literal endpoint."""
+    return oidc_path_hold_reason(path) is None
 
 
 def oidc_endpoint(value: str) -> tuple[str, str]:
-    """Only the runner's GitHub HTTPS idtoken URL; no audience override."""
+    """Only the runner's GitHub HTTPS provider URL; no audience override."""
     if exact_type(value, str) and not value:
         raise OidcHeld(OidcHoldReason.URL_MISSING)
     if not exact_type(value, str) or not 1 <= len(value) <= 4096 or any(ord(c) < 33 or ord(c) > 126 for c in value):
@@ -251,8 +274,9 @@ def oidc_endpoint(value: str) -> tuple[str, str]:
         raise OidcHeld(OidcHoldReason.URL_FRAGMENT)
     if re.fullmatch(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*\.actions\.githubusercontent\.com", host) is None:
         raise OidcHeld(OidcHoldReason.URL_HOST)
-    if not oidc_idtoken_path(url.path):
-        raise OidcHeld(OidcHoldReason.URL_PATH)
+    path_reason = oidc_path_hold_reason(url.path)
+    if path_reason is not None:
+        raise OidcHeld(path_reason)
     if query != [("api-version", "2.0")]:
         raise OidcHeld(OidcHoldReason.URL_QUERY)
     return host, url.path + "?" + urlencode(query + [("audience", AUDIENCE)])
