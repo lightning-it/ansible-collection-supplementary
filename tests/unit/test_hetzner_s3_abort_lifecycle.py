@@ -160,10 +160,6 @@ class HetznerAbortLifecycleTests(unittest.TestCase):
         self.assertEqual(client.put_calls, 0)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TransportFailureTests(unittest.TestCase):
     def test_transport_failures_are_sanitized_at_every_client_boundary(self):
         class TransportError(Exception):
@@ -193,3 +189,7 @@ class TransportFailureTests(unittest.TestCase):
                         MODULE.main()
                 self.assertNotIn("SENSITIVE-CANARY", str(outcome.exception.result))
                 self.assertIn("transport failure", outcome.exception.result["msg"])
+
+
+if __name__ == "__main__":
+    unittest.main()
