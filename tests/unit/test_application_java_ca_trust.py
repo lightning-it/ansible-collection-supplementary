@@ -22,7 +22,7 @@ from jinja2 import Environment, StrictUndefined
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def certificate_fixture(hostname="localhost", future_ca=False, expired_ca=False):
+def certificate_fixture(hostname="localhost", future_ca=False, expired_ca=False, signing_usage=None):
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Offline regression CA")])
     now = datetime.datetime.now(datetime.UTC)
@@ -35,7 +35,23 @@ def certificate_fixture(hostname="localhost", future_ca=False, expired_ca=False)
         .not_valid_before(now + datetime.timedelta(days=1) if future_ca else now - datetime.timedelta(days=2))
         .not_valid_after(now - datetime.timedelta(minutes=1) if expired_ca else now + datetime.timedelta(days=2))
     )
-    ca = builder.add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True).sign(key, hashes.SHA256())
+    builder = builder.add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+    if signing_usage is not None:
+        builder = builder.add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=signing_usage,
+                crl_sign=signing_usage,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+    ca = builder.sign(key, hashes.SHA256())
     leaf_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     leaf = (
         x509.CertificateBuilder()
@@ -62,12 +78,14 @@ class ApplicationJavaTrustTests(unittest.TestCase):
     def test_invalid_guacamole_ca_prevents_all_apply_mutations(self):
         ca, leaf, _key = certificate_fixture()
         expired, _leaf, _key = certificate_fixture(expired_ca=True)
+        non_signing, _leaf, _key = certificate_fixture(signing_usage=False)
         role = ROOT / "roles/guacamole_deploy"
         for kind in ("java", "guacd"):
             for label, certificate, pin in (
                 ("wrong-pin", ca, ":".join(["00"] * 32)),
                 ("expired", expired, fingerprint(expired)),
                 ("non-ca", leaf, fingerprint(leaf)),
+                ("no-cert-sign", non_signing, fingerprint(non_signing)),
             ):
                 with self.subTest(kind=kind, label=label), tempfile.TemporaryDirectory() as temporary:
                     directory = Path(temporary)
@@ -132,6 +150,59 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                     self.assertFalse(package_marker.exists(), result.stdout + result.stderr)
                     self.assertFalse(base.exists(), result.stdout + result.stderr)
                     self.assertIn("exact unexpired reviewed CA", result.stdout)
+
+    def test_all_trust_boundaries_require_cert_sign_when_key_usage_is_present(self):
+        for role, prefix, filename in (
+            ("guacamole_deploy", "java", "java_trust_validate.yml"),
+            ("guacamole_deploy", "guacd", "guacd_trust_validate.yml"),
+            ("keycloak_deploy", "trust", "certificate_trust.yml"),
+        ):
+            for signing_usage in (None, True, False):
+                with (
+                    self.subTest(role=role, prefix=prefix, usage=signing_usage),
+                    tempfile.TemporaryDirectory() as temporary,
+                ):
+                    directory = Path(temporary)
+                    ca, _leaf, _key = certificate_fixture(signing_usage=signing_usage)
+                    marker = directory / "accepted"
+                    tasks = yaml.safe_load((ROOT / "roles" / role / "tasks" / filename).read_text())[:2]
+                    tasks.append(
+                        {"ansible.builtin.copy": {"dest": str(marker), "content": "validated", "mode": "0600"}}
+                    )
+                    source = directory / "precheck.yml"
+                    source.write_text(
+                        yaml.safe_dump(
+                            [
+                                {
+                                    "hosts": "localhost",
+                                    "gather_facts": False,
+                                    "vars": {
+                                        f"{role}_{prefix}_ca_certificate": ca.public_bytes(
+                                            serialization.Encoding.PEM
+                                        ).decode(),
+                                        f"{role}_{prefix}_ca_sha256": fingerprint(ca),
+                                    },
+                                    "tasks": tasks,
+                                }
+                            ]
+                        )
+                    )
+                    config = directory / "ansible.cfg"
+                    config.write_text("[defaults]\nstdout_callback=default\n")
+                    result = subprocess.run(  # noqa: S603 - generated public CA and offline Ansible task fixture
+                        [shutil.which("ansible-playbook"), "-i", "localhost,", "-c", "local", str(source)],
+                        env={**os.environ, "ANSIBLE_CONFIG": str(config), "ANSIBLE_LOCAL_TEMP": str(directory / "tmp")},
+                        capture_output=True,
+                        text=True,
+                        timeout=45,
+                        check=False,
+                    )
+                    if signing_usage is False:
+                        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertFalse(marker.exists(), result.stdout + result.stderr)
+                    else:
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        self.assertEqual(marker.read_text(), "validated")
 
     def render(self, role, extra):
         location = ROOT / "roles" / role
@@ -311,8 +382,8 @@ class ApplicationJavaTrustTests(unittest.TestCase):
             with self.subTest(role=role, prefix=prefix), tempfile.TemporaryDirectory() as temporary:
                 directory = Path(temporary)
                 snapshots = []
-                for _ in range(2):
-                    ca, _, _ = certificate_fixture()
+                for _rotation in range(2):
+                    ca, _leaf, _key = certificate_fixture()
                     pem = ca.public_bytes(serialization.Encoding.PEM).decode()
                     pin = fingerprint(ca)
                     values = {
@@ -347,6 +418,7 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                         [shutil.which("ansible-playbook"), "-i", "localhost,", "-c", "local", str(source)],
                         capture_output=True,
                         text=True,
+                        check=False,
                         timeout=45,
                         env={
                             **os.environ,

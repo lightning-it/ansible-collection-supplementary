@@ -133,6 +133,7 @@ class HostNetworkTests(unittest.TestCase):
                         command,
                         capture_output=True,
                         text=True,
+                        check=False,
                         timeout=30,
                         env={**os.environ, "ANSIBLE_CONFIG": str(config), "ANSIBLE_LOCAL_TEMP": str(base / "ansible")},
                     )

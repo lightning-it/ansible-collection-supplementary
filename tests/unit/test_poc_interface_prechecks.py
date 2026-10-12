@@ -93,6 +93,7 @@ class PocInterfacePrecheckTests(unittest.TestCase):
                 "vault_pki_certificate_common_name": "fixture.example",
                 "vault_pki_certificate_cert_path": "/fixture/cert.pem",
                 "vault_pki_certificate_key_path": "/fixture/key.pem",
+                "vault_pki_certificate_issuing_identity": {"role_id": "fixture", "secret_id": CANARY},
             },
             "kv_token",
         )

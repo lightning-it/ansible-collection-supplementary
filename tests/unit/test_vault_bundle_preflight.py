@@ -28,11 +28,13 @@ class BundlePreflightTests(unittest.TestCase):
                 requests = []
 
                 class Handler(BaseHTTPRequestHandler):
+                    request_log = requests
+
                     def log_message(self, *args):
                         pass
 
-                    def do_GET(self, requests=requests):
-                        requests.append(self.path)
+                    def do_GET(self):
+                        self.request_log.append(self.path)
                         self.send_response(500)
                         self.end_headers()
 

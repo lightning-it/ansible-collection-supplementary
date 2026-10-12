@@ -27,6 +27,21 @@ certificate_fixture = FIXTURE.certificate_fixture
 
 
 class VaultPkiCheckModeTests(unittest.TestCase):
+    def test_invalid_issuing_identity_is_rejected_before_any_vault_access(self):
+        valid = {"role_id": CANARY, "secret_id": CANARY}
+        malformed = [{}, None, [], "invalid"]
+        for field in ("role_id", "secret_id"):
+            malformed.append({key: value for key, value in valid.items() if key != field})
+            malformed.extend({**valid, field: value} for value in ("", " ", None, False, []))
+        for identity in malformed:
+            with self.subTest(identity_type=type(identity).__name__):
+                self.exercise(
+                    "vault_pki_certificate",
+                    existing=False,
+                    apply=True,
+                    input_overrides={"vault_pki_certificate_issuing_identity": identity},
+                )
+
     def exercise(
         self,
         role,
@@ -47,6 +62,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
         stored_usage=None,
         renewal_seconds=None,
         repeat=False,
+        input_overrides=None,
     ):
         ca, certificate, key = certificate_fixture()
         ca_chain = [ca.public_bytes(serialization.Encoding.PEM).decode()]
@@ -234,6 +250,8 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 del values["vault_pki_leaf_cac_definition"][omitted]
             if expansion:
                 values["vault_pki_leaf_cac_definition"].update(expansion)
+            if input_overrides is not None:
+                values.update(input_overrides)
             task_path = ROOT / "roles" / role / "tasks/main.yml"
             if apply and role == "vault_pki_certificate":
                 # Keep actual issuance/validation/copy behavior while adapting only
@@ -377,12 +395,17 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 or authorization is not True
                 or incomplete_chain
                 or renewal_seconds == 604800
+                or input_overrides
             ):
                 self.assertNotEqual(result.returncode, 0)
             else:
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertRegex(result.stdout, r"changed=[1-9][0-9]*(?:\s|$)" if apply else r"changed=1(?:\s|$)")
-            if incomplete_chain:
+            if input_overrides:
+                self.assertEqual(requests, [])
+                self.assertFalse((directory / "materialized.pem").exists())
+                self.assertFalse((directory / "materialized.key").exists())
+            elif incomplete_chain:
                 self.assertEqual(requests, [("GET", "/v1/pki/issuer/existing/json")])
             elif not bare_domains or expansion or omitted or not isinstance(authorization, bool):
                 self.assertEqual(requests, [])

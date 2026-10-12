@@ -17,13 +17,27 @@ All defaults are defined in `defaults/main.yml`.
 
 - `guacamole_deploy_java_ca_certificate` supplies one public PEM CA and
   `guacamole_deploy_java_ca_sha256` pins its colon-separated DER fingerprint.
-  The role rejects an expired, non-CA or mismatched certificate. An init
+  The role rejects an expired, non-CA or mismatched certificate, and requires
+  certificate-signing usage when the KeyUsage extension is present. An init
   container extends the pinned image's stock Java CA store with that CA;
   the application mounts the resulting store read-only. The standard
   `changeit` integrity password protects no private key or authentication
   credential. Certificate and hostname verification remain enabled.
   Empty inputs retain the stock Java truststore. Runtime acceptance of
   the consumer's issuer and rejection of an unrelated CA remain mandatory.
+- `guacamole_deploy_guacd_ca_certificate` supplies one public PEM CA and
+  `guacamole_deploy_guacd_ca_sha256` pins its colon-separated DER fingerprint.
+  The same fingerprint, CA, signing-usage and validity checks apply before
+  host mutation. An init container appends the pinned CA to the stock bundle
+  selected by `guacamole_deploy_guacd_stock_ca_bundle` (default
+  `/etc/ssl/certs/ca-certificates.crt`); guacd mounts the combined bundle
+  read-only. An empty CA retains stock trust. TLS and hostname checks remain
+  enabled; the bundle contains no private key.
+- `guacamole_deploy_host_aliases` declares exact pod-local hostname/IP mappings
+  for Kubernetes `hostAliases`, for example
+  `[{ip: "10.20.30.1", hostnames: ["rdp.example.com"]}]`. It changes name
+  resolution inside the pod, without changing host DNS or creating routes.
+  A connection's TLS hostname must still match its server certificate.
 - `guacamole_deploy_connections` declares credential-free RDP, SSH, or VNC
   connections.
 - `guacamole_deploy_network_name` and `guacamole_deploy_network_ipv4` optionally
