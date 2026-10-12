@@ -173,7 +173,17 @@ audience, compiled system trust locations and no proxy, redirect or retry.
 Ambient `SSLKEYLOGFILE` and certificate environment overrides are not consumed.
 URL must be a subdomain of `actions.githubusercontent.com`, path ending
 `/idtoken`, and exactly `api-version=2.0`; no userinfo, fragment or non-443 port.
-Unknown routing/query changes hold. Root verifies actual runner routing at
+Opaque routing segments use RFC3986 `pchar` syntax, not a handcrafted identifier
+alphabet. The terminal segment remains literal `idtoken`; empty and dot segments,
+malformed escapes, escaped separators/control bytes and double decoding hold.
+The sender preserves the accepted path bytes without decoding or normalization.
+The [official runner](https://github.com/actions/runner/blob/main/src/Runner.Worker/Handlers/ScriptHandler.cs)
+exports the service's `GenerateIdTokenUrl`; the
+[official toolkit](https://github.com/actions/toolkit/blob/main/packages/core/src/oidc-utils.ts)
+consumes that generated URL without specifying its opaque segment values.
+[RFC3986 section 3.3](https://www.rfc-editor.org/rfc/rfc3986#section-3.3)
+defines path syntax, not GitHub route semantics or native authorization.
+Invalid routing or changed endpoint/query holds. Root verifies actual runner routing at
 activation; synthetic test URLs are not actual hosted URL evidence.
 The JWT remains in process memory/encrypted frame, never argv, extra env, logs,
 input/artifacts. Core dumps are disabled; Python heap zeroing is not claimed.

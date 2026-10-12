@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    REP120 caller validates opaque runner OIDC routing segments with RFC3986 syntax while preserving the literal
+    idtoken endpoint, origin, audience, query, one-shot transport and native authorization boundaries.
