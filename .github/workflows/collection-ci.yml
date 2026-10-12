@@ -297,6 +297,8 @@ jobs:
             "$GITHUB_WORKSPACE/" "$collection_root/"
           cd "$collection_root"
           ansible-test sanity --requirements --python "$PYTHON_VERSION"
+      - name: Install metadata-declared controller Python requirements
+        run: python -m pip install --disable-pip-version-check -r meta/ee-requirements.txt
       - name: Install the metadata-declared executable unit-fixture dependency
         run: |
           set -euo pipefail

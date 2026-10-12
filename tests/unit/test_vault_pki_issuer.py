@@ -52,7 +52,7 @@ class IssuerLifetimeTests(unittest.TestCase):
                 self.assertEqual(MODULE.vault_pki_direct_issuer_matches(leaf, issuer), accepted)
 
 
-def chain_fixture():
+def chain_fixture(direct_signing_usage=None):
     now = datetime.datetime.now(datetime.UTC)
     certificates, keys = [], []
     for index, common_name in enumerate(["Root", "Parent intermediate", "Direct issuer", "localhost"]):
@@ -68,6 +68,10 @@ def chain_fixture():
             .not_valid_after(now + datetime.timedelta(days=2))
             .add_extension(x509.BasicConstraints(ca=index < 3, path_length=2 - index if index < 3 else None), True)
         )
+        if index == 2 and direct_signing_usage is not None:
+            builder = builder.add_extension(
+                x509.KeyUsage(True, False, False, False, False, direct_signing_usage, False, False, False), True
+            )
         if index == 3:
             from cryptography.x509.oid import ExtendedKeyUsageOID
 
@@ -81,6 +85,12 @@ def chain_fixture():
 
 
 class CompleteChainTests(unittest.TestCase):
+    def test_declared_direct_authority_requires_signing_usage_even_without_a_leaf(self):
+        for signing_usage in (None, True, False):
+            with self.subTest(signing_usage=signing_usage):
+                _root, _leaf, _key, chain = chain_fixture(signing_usage)
+                self.assertEqual(MODULE.vault_pki_chain_is_valid(chain, chain[0]), signing_usage is not False)
+
     def test_nested_chain_requires_every_parent_in_order_and_no_duplicates(self):
         _root, leaf, _key, chain = chain_fixture()
         pem = leaf.public_bytes(serialization.Encoding.PEM).decode()

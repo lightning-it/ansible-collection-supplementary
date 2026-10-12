@@ -69,6 +69,11 @@ def vault_pki_chain_is_valid(chain, issuer):
             constraints = authority.extensions.get_extension_for_class(x509.BasicConstraints).value
             if not constraints.ca or (constraints.path_length is not None and index > constraints.path_length):
                 return False
+            try:
+                if not authority.extensions.get_extension_for_class(x509.KeyUsage).value.key_cert_sign:
+                    return False
+            except x509.ExtensionNotFound:
+                pass
             parent = chain[index + 1] if index + 1 < len(chain) else chain[index]
             if not vault_pki_direct_issuer_matches(chain[index], parent):
                 return False

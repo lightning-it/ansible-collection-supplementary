@@ -63,6 +63,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
         renewal_seconds=None,
         repeat=False,
         input_overrides=None,
+        direct_signing_usage=None,
     ):
         ca, certificate, key = certificate_fixture()
         ca_chain = [ca.public_bytes(serialization.Encoding.PEM).decode()]
@@ -74,6 +75,9 @@ class VaultPkiCheckModeTests(unittest.TestCase):
             chain_spec.loader.exec_module(chain_module)
             ca, certificate, key, ca_chain = chain_module.chain_fixture()
         server_ca_chain = list(ca_chain)
+        if direct_signing_usage is False:
+            # Transport trust stays valid; only the authenticated issuer payload is invalid.
+            ca_chain = chain_module.chain_fixture(False)[3]
         if incomplete_chain:
             ca_chain = [ca_chain[0], ca_chain[-1]]
         pem = certificate.public_bytes(serialization.Encoding.PEM).decode()
@@ -394,6 +398,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 or stored_expansion
                 or authorization is not True
                 or incomplete_chain
+                or direct_signing_usage is False
                 or renewal_seconds == 604800
                 or input_overrides
             ):
@@ -405,7 +410,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 self.assertEqual(requests, [])
                 self.assertFalse((directory / "materialized.pem").exists())
                 self.assertFalse((directory / "materialized.key").exists())
-            elif incomplete_chain:
+            elif incomplete_chain or direct_signing_usage is False:
                 self.assertEqual(requests, [("GET", "/v1/pki/issuer/existing/json")])
             elif not bare_domains or expansion or omitted or not isinstance(authorization, bool):
                 self.assertEqual(requests, [])
@@ -441,6 +446,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 and role == "vault_pki_certificate"
                 and not failing_path
                 and not bad_issuance
+                and direct_signing_usage is not False
                 and renewal_seconds != 604800
             ):
                 self.assertFalse((directory / "materialized.pem").exists())
@@ -549,6 +555,9 @@ class VaultPkiCheckModeTests(unittest.TestCase):
     def test_complete_nested_chain_materializes_for_root_only_clients(self):
         with patch("grp.getgrgid", side_effect=KeyError("fixture GID has no group name")):
             self.exercise("vault_pki_certificate", existing=False, apply=True, nested_chain=True)
+
+    def test_nonsigning_direct_issuer_preview_stops_before_custody_or_issuance(self):
+        self.exercise("vault_pki_certificate", existing=False, nested_chain=True, direct_signing_usage=False)
 
     def test_missing_parent_ca_is_refused_before_custody_or_issuance(self):
         self.exercise("vault_pki_certificate", existing=False, apply=True, nested_chain=True, incomplete_chain=True)

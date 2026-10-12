@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - vault_pki_certificate - reject a declared direct CA without certificate-signing KeyUsage
+    before read-only issuance previews.
+  - Collection CI - install metadata-declared controller Python requirements before dependency-backed unit tests.
