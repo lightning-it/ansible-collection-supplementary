@@ -60,7 +60,11 @@
         keycloak_cac_realms | selectattr('realm', 'defined')
         | selectattr('realm', 'equalto', keycloak_cac_default_cleanup_definition.realm)
         | list | length == 1
-    fail_msg: Default-role cleanup needs one declared realm and an explicit removal allowlist.
+      - >-
+        (keycloak_cac_realms | selectattr('realm', 'defined')
+        | selectattr('realm', 'equalto', keycloak_cac_default_cleanup_definition.realm)
+        | first).state | default('present') == 'present'
+    fail_msg: Default-role cleanup needs one declared present realm and an explicit removal allowlist.
   loop: "{{ keycloak_cac_default_role_cleanup }}"
   loop_control:
     loop_var: keycloak_cac_default_cleanup_definition

@@ -93,7 +93,7 @@ def is_owned_rule(rule, days=None):
     """Accept only the exact cleanup action, including Hetzner's Prefix form."""
     if not isinstance(rule, dict) or set(rule) - ALLOWED_RULE_KEYS:
         return False
-    if rule.get("Status") != "Enabled" or rule.get("Prefix", "") != "":
+    if rule.get("Status") not in ("Enabled", "Disabled") or rule.get("Prefix", "") != "":
         return False
     if rule.get("Filter", {"Prefix": ""}) not in ({"Prefix": ""}, {}):
         return False
@@ -104,6 +104,11 @@ def is_owned_rule(rule, days=None):
     return (
         isinstance(current, int) and not isinstance(current, bool) and current > 0 and (days is None or current == days)
     )
+
+
+def is_desired_rule(rule, days):
+    """Ownership alone does not prove the declared enabled state."""
+    return is_owned_rule(rule, days) and rule["Status"] == "Enabled"
 
 
 def s3_error_code(error):
@@ -174,7 +179,7 @@ def main():
     rules = read_rules(client, p["bucket"], module)
     if any(not is_owned_rule(rule) for rule in rules):
         module.fail_json(msg="An unrelated lifecycle rule exists; refusing to replace it")
-    if len(rules) == 1 and is_owned_rule(rules[0], p["abort_days"]):
+    if len(rules) == 1 and is_desired_rule(rules[0], p["abort_days"]):
         module.exit_json(changed=False, rules_before=1, rules_after=1)
     if module.check_mode:
         module.exit_json(changed=True, rules_before=len(rules), rules_after=1)
@@ -192,7 +197,7 @@ def main():
     except BotoCoreError:
         module.fail_json(msg="Cannot reconcile bucket lifecycle: transport failure")
     verified = read_rules(client, p["bucket"], module)
-    if len(verified) != 1 or not is_owned_rule(verified[0], p["abort_days"]):
+    if len(verified) != 1 or not is_desired_rule(verified[0], p["abort_days"]):
         module.fail_json(msg="Bucket lifecycle readback did not match the declared rule")
     module.exit_json(changed=True, rules_before=len(rules), rules_after=1)
 

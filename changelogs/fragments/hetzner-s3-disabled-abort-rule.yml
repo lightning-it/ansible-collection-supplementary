@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    - hetzner_s3_abort_lifecycle - Restore disabled owned abort-only rules to the declared enabled state while
+    rejecting unrelated actions and disabled readback.

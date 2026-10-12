@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    - keycloak_cac rejects a default-role cleanup catalog targeting a realm declared absent before any
+    reconciliation taskset can run.

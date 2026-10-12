@@ -1,6 +1,5 @@
 """Real HTTPS previews may read custody but must never issue or write."""
 
-import grp
 import importlib.util
 import json
 import os
@@ -12,6 +11,7 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 from cryptography.hazmat.primitives import serialization
@@ -257,7 +257,7 @@ class VaultPkiCheckModeTests(unittest.TestCase):
                 adapt_fixture_ownership(fixture_tasks)
                 task_path = fixture_role / "main.yml"
                 task_path.write_text(yaml.safe_dump(fixture_tasks))
-                values["vault_pki_certificate_key_group"] = grp.getgrgid(os.getegid()).gr_name
+                values["vault_pki_certificate_key_group"] = str(os.getegid())
             play = [
                 {
                     "hosts": "localhost",
@@ -524,7 +524,8 @@ class VaultPkiCheckModeTests(unittest.TestCase):
             self.exercise("vault_pki_leaf_cac", True, expansion=expansion)
 
     def test_complete_nested_chain_materializes_for_root_only_clients(self):
-        self.exercise("vault_pki_certificate", existing=False, apply=True, nested_chain=True)
+        with patch("grp.getgrgid", side_effect=KeyError("fixture GID has no group name")):
+            self.exercise("vault_pki_certificate", existing=False, apply=True, nested_chain=True)
 
     def test_missing_parent_ca_is_refused_before_custody_or_issuance(self):
         self.exercise("vault_pki_certificate", existing=False, apply=True, nested_chain=True, incomplete_chain=True)

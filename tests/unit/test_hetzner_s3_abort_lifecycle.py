@@ -134,6 +134,47 @@ class HetznerAbortLifecycleTests(unittest.TestCase):
         self.assertEqual(client.put_calls, 1)
         self.assertEqual(len(client.rules), 1)
 
+    def test_disabled_owned_rule_is_enabled_once_and_then_converges(self):
+        outcome, client = self.run_module([rule(MODULE.RULE_ID, extra={"Status": "Disabled"})])
+        self.assertIsInstance(outcome, Completed)
+        self.assertTrue(outcome.result["changed"])
+        self.assertEqual(client.put_calls, 1)
+        self.assertEqual(client.rules[0]["Status"], "Enabled")
+        repeated, client = self.run_module(client.rules)
+        self.assertFalse(repeated.result["changed"])
+        self.assertEqual(client.put_calls, 0)
+
+    def test_disabled_owned_rule_preview_never_writes(self):
+        outcome, client = self.run_module([rule(MODULE.RULE_ID, extra={"Status": "Disabled"})], check_mode=True)
+        self.assertIsInstance(outcome, Completed)
+        self.assertTrue(outcome.result["changed"])
+        self.assertEqual(client.put_calls, 0)
+        self.assertEqual(client.rules[0]["Status"], "Disabled")
+
+    def test_disabled_rule_with_extra_action_is_not_owned(self):
+        outcome, client = self.run_module(
+            [rule(MODULE.RULE_ID, extra={"Status": "Disabled", "Expiration": {"Days": 30}})]
+        )
+        self.assertIsInstance(outcome, Rejected)
+        self.assertEqual(client.put_calls, 0)
+
+    def test_disabled_readback_does_not_prove_enabled_state(self):
+        module = FakeModule()
+        client = FakeS3([])
+        disabled = rule(MODULE.RULE_ID, extra={"Status": "Disabled"})
+        with (
+            patch.object(MODULE, "AnsibleModule", return_value=module),
+            patch.object(MODULE, "boto3", SimpleNamespace(client=lambda *args, **kwargs: client)),
+            patch.object(MODULE, "Config", lambda **kwargs: kwargs, create=True),
+            patch.object(
+                client, "get_bucket_lifecycle_configuration", side_effect=[{"Rules": []}, {"Rules": [disabled]}]
+            ),
+        ):
+            with self.assertRaises(Rejected) as outcome:
+                MODULE.main()
+        self.assertIn("readback", outcome.exception.result["msg"])
+        self.assertEqual(client.put_calls, 1)
+
     def test_changed_days_update_once_and_then_converge(self):
         outcome, client = self.run_module([rule(MODULE.RULE_ID)], abort_days=14)
         self.assertIsInstance(outcome, Completed)

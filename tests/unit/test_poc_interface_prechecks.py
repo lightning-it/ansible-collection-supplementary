@@ -147,3 +147,15 @@ class PocInterfacePrecheckTests(unittest.TestCase):
             case["keycloak_cac_default_role_cleanup"][0]["allowed_removals"] = entries
             invalid.append(case)
         self.exercise("keycloak_cac", valid, invalid)
+
+    def test_cleanup_rejects_absent_realm_before_reconciliation(self):
+        valid = {
+            "keycloak_cac_realms": [{"realm": "fixture", "state": "present"}],
+            "keycloak_cac_default_role_cleanup_enabled": True,
+            "keycloak_cac_default_role_cleanup": [{"realm": "fixture", "allowed_removals": []}],
+        }
+        invalid = [
+            {**valid, "keycloak_cac_realms": [{"realm": "fixture", "state": state}]}
+            for state in ("absent", None, False, ["present"])
+        ]
+        self.exercise("keycloak_cac", valid, invalid)

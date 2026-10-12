@@ -281,3 +281,11 @@
     fail_msg: Guacamole OIDC authorization group names must be unique.
     quiet: true
   no_log: true
+
+- name: Validate pinned Guacamole Java CA before host mutations
+  ansible.builtin.import_tasks: java_trust_validate.yml
+  when: guacamole_deploy_java_ca_certificate | length > 0
+
+- name: Validate pinned guacd CA before host mutations
+  ansible.builtin.import_tasks: guacd_trust_validate.yml
+  when: guacamole_deploy_guacd_ca_certificate | length > 0

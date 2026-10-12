@@ -22,7 +22,7 @@ from jinja2 import Environment, StrictUndefined
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def certificate_fixture(hostname="localhost", future_ca=False):
+def certificate_fixture(hostname="localhost", future_ca=False, expired_ca=False):
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Offline regression CA")])
     now = datetime.datetime.now(datetime.UTC)
@@ -32,8 +32,8 @@ def certificate_fixture(hostname="localhost", future_ca=False):
         .issuer_name(name)
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(now + datetime.timedelta(days=1) if future_ca else now - datetime.timedelta(minutes=1))
-        .not_valid_after(now + datetime.timedelta(days=2))
+        .not_valid_before(now + datetime.timedelta(days=1) if future_ca else now - datetime.timedelta(days=2))
+        .not_valid_after(now - datetime.timedelta(minutes=1) if expired_ca else now + datetime.timedelta(days=2))
     )
     ca = builder.add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True).sign(key, hashes.SHA256())
     leaf_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -59,6 +59,80 @@ def fingerprint(certificate):
 
 
 class ApplicationJavaTrustTests(unittest.TestCase):
+    def test_invalid_guacamole_ca_prevents_all_apply_mutations(self):
+        ca, leaf, _key = certificate_fixture()
+        expired, _leaf, _key = certificate_fixture(expired_ca=True)
+        role = ROOT / "roles/guacamole_deploy"
+        for kind in ("java", "guacd"):
+            for label, certificate, pin in (
+                ("wrong-pin", ca, ":".join(["00"] * 32)),
+                ("expired", expired, fingerprint(expired)),
+                ("non-ca", leaf, fingerprint(leaf)),
+            ):
+                with self.subTest(kind=kind, label=label), tempfile.TemporaryDirectory() as temporary:
+                    directory = Path(temporary)
+                    package_marker = directory / "package-install"
+                    base = directory / "persistent"
+                    values = yaml.safe_load((role / "defaults/main.yml").read_text())
+                    values.update(
+                        guacamole_deploy_base_dir=str(base),
+                        guacamole_deploy_manifest_path=str(base / "pod.yml"),
+                        guacamole_deploy_skip_runtime=True,
+                        guacamole_deploy_secrets={
+                            "db_password": "offline-fixture-only",
+                            "breakglass_password": "offline-fixture-only",
+                            "breakglass_salt": "offline-fixture-only",
+                        },
+                        guacamole_deploy_java_ca_certificate=ca.public_bytes(serialization.Encoding.PEM).decode(),
+                        guacamole_deploy_java_ca_sha256=fingerprint(ca),
+                        guacamole_deploy_guacd_ca_certificate=ca.public_bytes(serialization.Encoding.PEM).decode(),
+                        guacamole_deploy_guacd_ca_sha256=fingerprint(ca),
+                    )
+                    values[f"guacamole_deploy_{kind}_ca_certificate"] = certificate.public_bytes(
+                        serialization.Encoding.PEM
+                    ).decode()
+                    values[f"guacamole_deploy_{kind}_ca_sha256"] = pin
+                    tasks = []
+                    for original in yaml.safe_load((role / "tasks/main.yml").read_text()):
+                        if original["name"] == "Render the private Guacamole pod manifest outside managed runtime":
+                            break
+                        task = copy.deepcopy(original)
+                        for module in ("ansible.builtin.import_tasks", "ansible.builtin.include_tasks"):
+                            if module in task:
+                                task[module] = str(role / "tasks" / task[module])
+                        if "ansible.builtin.package" in task:
+                            del task["ansible.builtin.package"]
+                            task["ansible.builtin.copy"] = {
+                                "dest": str(package_marker),
+                                "content": "package install attempted",
+                                "mode": "0600",
+                            }
+                        if "ansible.builtin.file" in task:
+                            task["ansible.builtin.file"].update(owner=str(os.getuid()), group=str(os.getgid()))
+                        tasks.append(task)
+                    source = directory / "apply.yml"
+                    source.write_text(
+                        yaml.safe_dump([{"hosts": "localhost", "gather_facts": False, "vars": values, "tasks": tasks}])
+                    )
+                    config = directory / "ansible.cfg"
+                    config.write_text("[defaults]\nstdout_callback=default\n")
+                    result = subprocess.run(  # noqa: S603 - actual task ordering with an offline package-write witness
+                        [shutil.which("ansible-playbook"), "-i", "localhost,", "-c", "local", str(source)],
+                        env={
+                            **os.environ,
+                            "ANSIBLE_CONFIG": str(config),
+                            "ANSIBLE_LOCAL_TEMP": str(directory / "ansible"),
+                        },
+                        capture_output=True,
+                        text=True,
+                        timeout=45,
+                        check=False,
+                    )
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertFalse(package_marker.exists(), result.stdout + result.stderr)
+                    self.assertFalse(base.exists(), result.stdout + result.stderr)
+                    self.assertIn("exact unexpired reviewed CA", result.stdout)
+
     def render(self, role, extra):
         location = ROOT / "roles" / role
         values = yaml.safe_load((location / "defaults/main.yml").read_text())
@@ -253,6 +327,10 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                         yaml.safe_load((ROOT / "roles" / role / "tasks" / filename).read_text())
                     )
                     for task in fixture_tasks:
+                        if "ansible.builtin.import_tasks" in task:
+                            task["ansible.builtin.import_tasks"] = str(
+                                ROOT / "roles" / role / "tasks" / task["ansible.builtin.import_tasks"]
+                            )
                         for module in ("ansible.builtin.file", "ansible.builtin.copy"):
                             if module in task:
                                 task[module]["owner"] = str(os.getuid())
@@ -359,7 +437,12 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                     ca, _leaf, _key = certificate_fixture(future_ca=future)
                     pem = ca.public_bytes(serialization.Encoding.PEM).decode()
                     marker = directory / "write-boundary"
-                    tasks = yaml.safe_load((ROOT / "roles" / role / "tasks" / filename).read_text())[:2]
+                    validation = (
+                        filename.replace("_trust.yml", "_trust_validate.yml")
+                        if role == "guacamole_deploy"
+                        else filename
+                    )
+                    tasks = yaml.safe_load((ROOT / "roles" / role / "tasks" / validation).read_text())[:2]
                     tasks += [
                         {"ansible.builtin.copy": {"dest": str(marker), "content": "public fixture", "mode": "0600"}}
                     ]
@@ -494,7 +577,12 @@ class ApplicationJavaTrustTests(unittest.TestCase):
                 ):
                     directory = Path(temporary)
                     marker = directory / "write-boundary"
-                    tasks = yaml.safe_load((ROOT / "roles" / role / "tasks" / filename).read_text())[:2]
+                    validation = (
+                        filename.replace("_trust.yml", "_trust_validate.yml")
+                        if role == "guacamole_deploy"
+                        else filename
+                    )
+                    tasks = yaml.safe_load((ROOT / "roles" / role / "tasks" / validation).read_text())[:2]
                     tasks += [
                         {"ansible.builtin.copy": {"dest": str(marker), "content": "public fixture", "mode": "0600"}}
                     ]
