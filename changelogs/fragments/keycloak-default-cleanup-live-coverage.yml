@@ -4,3 +4,8 @@ minor_changes:
     keycloak_cac - exercise default-role cleanup through the real role in each
     Keycloak profile using an isolated disposable realm, independent API
     readback, check-mode, refusal, idempotence and preserved-role checks.
+bugfixes:
+  - >-
+    keycloak_cac - write the independent cleanup JUnit report on the controller
+    that owns its artifact directory, including when the tested service runs
+    on a remote Molecule host.

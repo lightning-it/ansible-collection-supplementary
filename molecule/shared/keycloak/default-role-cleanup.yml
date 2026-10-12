@@ -273,6 +273,8 @@
       become: false
 
     - name: Write observed cleanup JUnit results on success or failure
+      delegate_to: localhost
+      become: false
       ansible.builtin.copy:
         dest: "{{ keycloak_cleanup_probe_junit_dir }}/{{ keycloak_cleanup_probe_scenario }}-default-cleanup.xml"
         mode: "0640"

@@ -32,14 +32,14 @@ SAFE_FAILURE_CATEGORY = (
     "'invalid_private_key' if fixture_failure_text "
     "is search('not a supported private key type|InvalidPrivateKeyFileError') else "
     "'unsupported_key_type' if fixture_failure_text is search('Key type .* is not supported|InvalidKeyTypeError') else "
-    "'unsupported_key' if fixture_failure_text "
-    "is search('not supported|Unsupported|invalid key') else "
     "'module_resolution' if fixture_failure_text is search('could not resolve|module_utils') else "
     "'attribute_error' if fixture_failure_text is search('AttributeError:') else "
     "'type_error' if fixture_failure_text is search('TypeError:') else "
     "'value_error' if fixture_failure_text is search('ValueError:') else "
     "'runtime_error' if fixture_failure_text is search('RuntimeError:') else "
     "'os_error' if fixture_failure_text is search('OSError:|FileNotFoundError:') else "
+    "'unsupported_key' if fixture_failure_text "
+    "is search('not supported|Unsupported|invalid key') else "
     "'other_censored_failure' }}"
 )
 
@@ -108,6 +108,8 @@ class VaultKeypairTests(unittest.TestCase):
                 "diagnostic_algorithm": "UnsupportedAlgorithm: PARTIAL_CANARY",
                 "diagnostic_private_key": "PARTIAL_CANARY is not a supported private key type",
                 "diagnostic_key_type": "Key type PARTIAL_CANARY is not supported",
+                "diagnostic_os_error": "OSError: [Errno 95] Operation not supported PARTIAL_CANARY",
+                "diagnostic_value_error": "ValueError: invalid key PARTIAL_CANARY",
             }
             if scenario in diagnostic_messages:
                 tasks = [{"ansible.builtin.fail": {"msg": diagnostic_messages[scenario]}, "no_log": True}]
@@ -186,6 +188,8 @@ class VaultKeypairTests(unittest.TestCase):
             ("diagnostic_algorithm", "unsupported_algorithm"),
             ("diagnostic_private_key", "invalid_private_key"),
             ("diagnostic_key_type", "unsupported_key_type"),
+            ("diagnostic_os_error", "os_error"),
+            ("diagnostic_value_error", "value_error"),
         ):
             with self.subTest(category=category):
                 code, output = self.execute(scenario)
