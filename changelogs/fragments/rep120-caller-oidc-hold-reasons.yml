@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    REP120 one-shot caller - distinguish rejected OIDC capability predicates using only finite value-free reason codes
+    without changing admission or transport checks.

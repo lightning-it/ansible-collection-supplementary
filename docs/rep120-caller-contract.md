@@ -247,6 +247,15 @@ the active phase only, not a verified underlying cause or evidence of acceptance
 Post-OIDC input revalidation still reports `INPUT_CONTEXT`; cleanup failures retain
 the active phase. No exception text, traceback, URL, token, payload or environment
 value is printed. A missing or invalid internal stage falls back to `INPUT_CONTEXT`.
+Only a known `OIDC_CAPABILITY` predicate failure adds one finite suffix:
+`URL_MISSING`, `URL_FORMAT`, `URL_HTTPS`, `URL_USERINFO`, `URL_PORT`,
+`URL_FRAGMENT`, `URL_HOST`, `URL_PATH`, `URL_QUERY`, `BEARER_MISSING`,
+`BEARER_FORMAT`, `BEARER_LENGTH`, or `BEARER_ASCII`. This names the first rejected
+existing predicate, never a value, measured length, header hash or exception.
+Missing, forged or wrong-stage reason metadata adds no suffix. Unexpected failures
+retain the stage-only message; the suffix does not establish actual hosted cause
+until observed in the corresponding native run. Existing unknown URL routing/query
+changes still hold; no endpoint or credential rule is relaxed.
 All existing admission, source, run, expiry, TLS, OIDC and ACK guards remain
 unchanged. There is still no retry, dispatch or activation authority in this sender.
 
