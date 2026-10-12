@@ -1,5 +1,11 @@
 # guacamole_deploy
 
+`guacamole_deploy_webapp_context` defaults to `guacamole`. Set it to `ROOT`
+to serve the actual application at `/`; the default health and API URLs follow
+the selected context. Update the reverse proxy and exact OIDC redirect URI in
+the same reviewed migration. No response-body or cookie-path rewrite is required.
+See the [upstream Docker configuration](https://guacamole.apache.org/doc/gug/guacamole-docker.html).
+
 Deploys digest-pinned Guacamole, guacd, and PostgreSQL containers in one private
 Podman pod. Only the web application is bound to the host (loopback by default);
 guacd and PostgreSQL remain pod-internal.

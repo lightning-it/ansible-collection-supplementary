@@ -45,8 +45,15 @@ guacamole_deploy_oidc_groups_claim_type: "groups"
 guacamole_deploy_oidc_scope: "openid email profile"
 guacamole_deploy_oidc_group_connections: []
 guacamole_deploy_api_session_timeout_minutes: 60
-guacamole_deploy_health_url: "http://{{ guacamole_deploy_host_ip }}:{{ guacamole_deploy_port }}/guacamole/"
-guacamole_deploy_api_url: "http://{{ guacamole_deploy_host_ip }}:{{ guacamole_deploy_port }}/guacamole/api"
+# ROOT serves the application at '/', without a proxy path rewrite.
+# Preserve the historical application context by default.
+guacamole_deploy_webapp_context: "guacamole"
+guacamole_deploy_health_url: >-
+  http://{{ guacamole_deploy_host_ip }}:{{ guacamole_deploy_port
+  }}/{{ '' if guacamole_deploy_webapp_context == 'ROOT' else guacamole_deploy_webapp_context ~ '/' }}
+guacamole_deploy_api_url: >-
+  http://{{ guacamole_deploy_host_ip }}:{{ guacamole_deploy_port
+  }}{{ '' if guacamole_deploy_webapp_context == 'ROOT' else '/' ~ guacamole_deploy_webapp_context }}/api
 guacamole_deploy_connections: []
 guacamole_deploy_validate_certs: true
 guacamole_deploy_install_packages: true

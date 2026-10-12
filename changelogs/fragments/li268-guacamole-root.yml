@@ -1,0 +1,5 @@
+---
+minor_changes:
+  - >-
+    guacamole_deploy - support an explicit ROOT webapp context with matching
+    health and API URLs; retain the historical context by default.

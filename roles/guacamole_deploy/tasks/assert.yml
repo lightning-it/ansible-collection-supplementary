@@ -25,6 +25,8 @@
       - guacamole_deploy_port is not boolean
       - guacamole_deploy_port > 0
       - guacamole_deploy_port <= 65535
+      - guacamole_deploy_webapp_context is string
+      - guacamole_deploy_webapp_context is match('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}\\Z')
       - guacamole_deploy_network_name is string
       - guacamole_deploy_network_ipv4 is string
       - guacamole_deploy_manage_systemd is boolean

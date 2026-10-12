@@ -113,6 +113,7 @@ spec:
         - {containerPort: 8080, hostPort: {{ guacamole_deploy_port }}, hostIP: {{ guacamole_deploy_host_ip }}}
       env:
         - {name: GUACD_HOSTNAME, value: "127.0.0.1"}
+        - {name: WEBAPP_CONTEXT, value: {{ guacamole_deploy_webapp_context | to_json }}}
         - {name: POSTGRESQL_ENABLED, value: "true"}
         - {name: POSTGRESQL_HOSTNAME, value: "127.0.0.1"}
         - {name: POSTGRESQL_DATABASE, value: {{ guacamole_deploy_db_name | to_json }}}
