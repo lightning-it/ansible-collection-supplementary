@@ -8,8 +8,10 @@
       - vault_connection_credentials_auth.namespace is string
       - vault_connection_credentials_auth.url is match('^https://')
       - vault_connection_credentials_auth.ca_cert is match('^/')
-      - vault_connection_credentials_auth.role_id | length > 0
-      - vault_connection_credentials_auth.secret_id | length > 0
+      - vault_connection_credentials_auth.role_id | default(none) is string
+      - vault_connection_credentials_auth.role_id | trim | length > 0
+      - vault_connection_credentials_auth.secret_id | default(none) is string
+      - vault_connection_credentials_auth.secret_id | trim | length > 0
       - vault_connection_credentials_auth.auth_mount_point is match('^[A-Za-z0-9_-]+$')
       - vault_connection_credentials_kv_mount is match('^[A-Za-z0-9_-]+$')
       - >-

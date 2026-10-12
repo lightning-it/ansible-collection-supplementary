@@ -14,11 +14,24 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 ROOT = Path(__file__).resolve().parents[2]
 TASKS = str(ROOT / "roles/vault_secret_bundle/tasks/ssh_keypair.yml")
+PREFLIGHT = str(ROOT / "roles/vault_secret_bundle/tasks/keypair_preflight.yml")
 
 
 ANSIBLE_PLAYBOOK = shutil.which("ansible-playbook")
 if ANSIBLE_PLAYBOOK is None:
     raise RuntimeError("The pinned Ansible test runtime is required")
+
+SAFE_FAILURE_CATEGORY = (
+    "Keypair fixture failure category: {{ "
+    "'python_dependency' if ansible_failed_result.msg | default('') "
+    "is search('Failed to import|required Python|ImportError|No module named') else "
+    "'filesystem_permission' if ansible_failed_result.msg | default('') "
+    "is search('Permission denied|Read-only file system') else "
+    "'unsupported_key' if ansible_failed_result.msg | default('') "
+    "is search('not supported|Unsupported|invalid key') else "
+    "'module_resolution' if ansible_failed_result.msg | default('') is search('could not resolve|module_utils') else "
+    "'other_censored_failure' }}"
+)
 
 
 class VaultKeypairTests(unittest.TestCase):
@@ -48,10 +61,11 @@ class VaultKeypairTests(unittest.TestCase):
                         .public_bytes(serialization.Encoding.OpenSSH, serialization.PublicFormat.OpenSSH)
                         .decode()
                     )
-            tasks = [{"ansible.builtin.import_tasks": TASKS}]
+            tasks = [{"ansible.builtin.import_tasks": PREFLIGHT}, {"ansible.builtin.import_tasks": TASKS}]
             if scenario == "reuse":
                 tasks += [
                     {"ansible.builtin.set_fact": {"first_pair": "{{ vault_secret_bundle_effective }}"}, "no_log": True},
+                    {"ansible.builtin.import_tasks": PREFLIGHT},
                     {"ansible.builtin.import_tasks": TASKS},
                     {
                         "ansible.builtin.assert": {"that": ["vault_secret_bundle_effective == first_pair"]},
@@ -68,8 +82,11 @@ class VaultKeypairTests(unittest.TestCase):
                         },
                         "no_log": True,
                     },
+                    {"ansible.builtin.import_tasks": PREFLIGHT},
                     {"ansible.builtin.import_tasks": TASKS},
                 ]
+            if scenario == "diagnostic":
+                tasks = [{"ansible.builtin.fail": {"msg": "PARTIAL_CANARY"}, "no_log": True}]
             play = [
                 {
                     "hosts": "localhost",
@@ -81,7 +98,7 @@ class VaultKeypairTests(unittest.TestCase):
                         else existing,
                         "vault_secret_bundle_generate_missing": scenario != "readonly",
                     },
-                    "tasks": tasks,
+                    "tasks": [{"block": tasks, "rescue": [{"ansible.builtin.fail": {"msg": SAFE_FAILURE_CATEGORY}}]}],
                 }
             ]
             (path / "play.yml").write_text(yaml.safe_dump(play))
@@ -111,6 +128,11 @@ class VaultKeypairTests(unittest.TestCase):
         code, output = self.execute("reuse")
         self.assertEqual(code, 0, output)
 
+    def test_failure_diagnostic_never_discloses_the_protected_module_message(self):
+        code, output = self.execute("diagnostic")
+        self.assertNotEqual(code, 0)
+        self.assertIn("Keypair fixture failure category: other_censored_failure", output)
+
     def test_check_mode_missing_pair_previews_without_generating_files(self):
         code, output = self.execute("missing", check=True)
         self.assertEqual(code, 0, output)
@@ -136,8 +158,9 @@ class VaultKeypairTests(unittest.TestCase):
         self.assertNotEqual(code, 0)
 
     def test_partial_pair_fails_before_generation(self):
-        code, _output = self.execute("partial")
+        code, output = self.execute("partial")
         self.assertNotEqual(code, 0)
+        self.assertNotIn("Create a private volatile keypair directory", output)
 
     def test_wrong_public_key_fails_and_cleans_up_volatile_private_file(self):
         code, _output = self.execute("mismatch")

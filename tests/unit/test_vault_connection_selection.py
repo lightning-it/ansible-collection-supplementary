@@ -37,6 +37,33 @@ class CredentialSelectionTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, output)
         else:
             self.assertNotEqual(result.returncode, 0)
+        return output
+
+    def test_approle_credentials_are_typed_before_the_ram_transaction(self):
+        tasks = [{"ansible.builtin.import_tasks": str(ROOT / "roles/vault_connection_credentials/tasks/main.yml")}]
+        auth = {
+            "namespace": "",
+            "url": "https://vault.example.test",
+            "ca_cert": "/fixture/public-ca.pem",
+            "role_id": CANARY,
+            "secret_id": CANARY,
+            "auth_mount_point": "approle",
+        }
+        values = {
+            "vault_connection_credentials_sources": [],
+            "vault_connection_credentials_auth": auth,
+            "vault_connection_credentials_kv_mount": "service-secrets",
+        }
+        self.execute(tasks, values)
+        for field in ("role_id", "secret_id"):
+            for invalid in (None, True, 1, [], [CANARY], {}, {"value": CANARY}, "", "   "):
+                with self.subTest(field=field, invalid_type=type(invalid).__name__):
+                    output = self.execute(
+                        tasks,
+                        {**values, "vault_connection_credentials_auth": {**auth, field: invalid}},
+                        success=False,
+                    )
+                    self.assertNotIn("Initialize the RAM-only credential result", output)
 
     def test_same_username_in_two_tiers_selects_only_exact_tier(self):
         sequence = yaml.safe_load((ROOT / "roles/vault_connection_credentials/tasks/read_source.yml").read_text())[1]
