@@ -269,7 +269,9 @@ the active phase. No exception text, traceback, URL, token, payload or environme
 value is printed. A missing or invalid internal stage falls back to `INPUT_CONTEXT`.
 Only a known `OIDC_CAPABILITY` predicate failure adds one finite suffix:
 `URL_MISSING`, `URL_FORMAT`, `URL_HTTPS`, `URL_USERINFO`, `URL_PORT`,
-`URL_FRAGMENT`, `URL_HOST`, `URL_PATH`, `URL_QUERY`, `BEARER_MISSING`,
+`URL_FRAGMENT`, `URL_HOST`, `URL_PATH`, `URL_PATH_ORIGIN_FORM`, `URL_PATH_ESCAPE`,
+`URL_PATH_SYNTAX`, `URL_PATH_DOT_SEGMENT`, `URL_PATH_CONTROL`, `URL_PATH_SEPARATOR`,
+`URL_PATH_DOUBLE_ENCODING`, `URL_QUERY`, `BEARER_MISSING`,
 `BEARER_FORMAT`, `BEARER_LENGTH`, or `BEARER_ASCII`. This names the first rejected
 existing predicate, never a value, measured length, header hash or exception.
 Missing, forged or wrong-stage reason metadata adds no suffix. Unexpected failures
