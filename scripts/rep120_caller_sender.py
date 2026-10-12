@@ -50,12 +50,39 @@ class HoldStage(Enum):
     ACK = "ACK"
 
 
+class OidcHoldReason(Enum):
+    """Finite predicate names only; never routing, credential or exception data."""
+
+    URL_MISSING = "URL_MISSING"
+    URL_FORMAT = "URL_FORMAT"
+    URL_HTTPS = "URL_HTTPS"
+    URL_USERINFO = "URL_USERINFO"
+    URL_PORT = "URL_PORT"
+    URL_FRAGMENT = "URL_FRAGMENT"
+    URL_HOST = "URL_HOST"
+    URL_PATH = "URL_PATH"
+    URL_QUERY = "URL_QUERY"
+    BEARER_MISSING = "BEARER_MISSING"
+    BEARER_FORMAT = "BEARER_FORMAT"
+    BEARER_LENGTH = "BEARER_LENGTH"
+    BEARER_ASCII = "BEARER_ASCII"
+
+
+class OidcHeld(Held):
+    """Carry a source-owned predicate, never its failing value."""
+
+    def __init__(self, reason: OidcHoldReason) -> None:
+        super().__init__("runner OIDC capability held")
+        self.reason = reason
+
+
 class StageHeld(Held):
     """Preserve only the active fixed stage across the outer error mask."""
 
-    def __init__(self, stage: HoldStage) -> None:
+    def __init__(self, stage: HoldStage, reason: OidcHoldReason | None = None) -> None:
         super().__init__("one-shot caller held; no retry")
         self.stage = stage
+        self.reason = reason
 
 
 def canonical(value: object) -> bytes:
@@ -182,37 +209,51 @@ def validate_inputs(delivery: dict[str, Any], envelope: dict[str, Any], context:
 
 def oidc_endpoint(value: str) -> tuple[str, str]:
     """Only the runner's GitHub HTTPS idtoken URL; no audience override."""
+    if exact_type(value, str) and not value:
+        raise OidcHeld(OidcHoldReason.URL_MISSING)
+    if not exact_type(value, str) or not 1 <= len(value) <= 4096 or any(ord(c) < 33 or ord(c) > 126 for c in value):
+        raise OidcHeld(OidcHoldReason.URL_FORMAT)
     try:
-        if not exact_type(value, str) or not 1 <= len(value) <= 4096 or any(ord(c) < 33 or ord(c) > 126 for c in value):
-            raise ValueError
         url = urlsplit(value)
         host = url.hostname or ""
-        query = parse_qsl(url.query, keep_blank_values=True, strict_parsing=True)
-        if (
-            url.scheme != "https"
-            or url.username is not None
-            or url.password is not None
-            or url.port not in (None, 443)
-            or url.fragment
-            or re.fullmatch(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*\.actions\.githubusercontent\.com", host) is None
-            or not re.fullmatch(r"/[A-Za-z0-9_/-]+/idtoken", url.path)
-            or query != [("api-version", "2.0")]
-        ):
-            raise ValueError
-        return host, url.path + "?" + urlencode(query + [("audience", AUDIENCE)])
     except (ValueError, TypeError):
-        raise Held("invalid GitHub OIDC endpoint") from None
+        raise OidcHeld(OidcHoldReason.URL_FORMAT) from None
+    try:
+        query = parse_qsl(url.query, keep_blank_values=True, strict_parsing=True)
+    except (ValueError, TypeError):
+        raise OidcHeld(OidcHoldReason.URL_QUERY) from None
+    if url.scheme != "https":
+        raise OidcHeld(OidcHoldReason.URL_HTTPS)
+    if url.username is not None or url.password is not None:
+        raise OidcHeld(OidcHoldReason.URL_USERINFO)
+    try:
+        port = url.port
+    except ValueError:
+        raise OidcHeld(OidcHoldReason.URL_PORT) from None
+    if port not in (None, 443):
+        raise OidcHeld(OidcHoldReason.URL_PORT)
+    if url.fragment:
+        raise OidcHeld(OidcHoldReason.URL_FRAGMENT)
+    if re.fullmatch(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*\.actions\.githubusercontent\.com", host) is None:
+        raise OidcHeld(OidcHoldReason.URL_HOST)
+    if not re.fullmatch(r"/[A-Za-z0-9_/-]+/idtoken", url.path):
+        raise OidcHeld(OidcHoldReason.URL_PATH)
+    if query != [("api-version", "2.0")]:
+        raise OidcHeld(OidcHoldReason.URL_QUERY)
+    return host, url.path + "?" + urlencode(query + [("audience", AUDIENCE)])
 
 
 def oidc_capability(environ: Mapping[str, str]) -> tuple[str, str, str]:
     host, target = oidc_endpoint(environ.get("ACTIONS_ID_TOKEN_REQUEST_URL", ""))
     bearer = environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
-    if (
-        not exact_type(bearer, str)
-        or not 1 <= len(bearer) <= MAX_OIDC
-        or any(ord(c) < 33 or ord(c) > 126 for c in bearer)
-    ):
-        raise Held("missing runner OIDC capability")
+    if not exact_type(bearer, str):
+        raise OidcHeld(OidcHoldReason.BEARER_FORMAT)
+    if not bearer:
+        raise OidcHeld(OidcHoldReason.BEARER_MISSING)
+    if not 1 <= len(bearer) <= MAX_OIDC:
+        raise OidcHeld(OidcHoldReason.BEARER_LENGTH)
+    if any(ord(c) < 33 or ord(c) > 126 for c in bearer):
+        raise OidcHeld(OidcHoldReason.BEARER_ASCII)
     return host, target, bearer
 
 
@@ -327,8 +368,9 @@ def send_once(delivery: dict[str, Any], envelope: dict[str, Any], environ: Mappi
         secure.sendall(MAGIC + struct.pack("!I", len(data)) + data + TRAILER)
         stage = HoldStage.ACK
         return read_ack(secure, envelope["operation_key"], deadline)
-    except Exception:
-        raise StageHeld(stage) from None
+    except Exception as error:
+        reason = getattr(error, "reason", None) if isinstance(error, OidcHeld) else None
+        raise StageHeld(stage, reason) from None
     finally:
         try:
             if message is not None:
@@ -356,6 +398,14 @@ def main() -> int:
     except Exception as error:
         failed_stage = error.stage if isinstance(error, StageHeld) else HoldStage.INPUT_CONTEXT
         code = next((stage.value for stage in HoldStage if stage is failed_stage), HoldStage.INPUT_CONTEXT.value)
+        reason = (
+            getattr(error, "reason", None)
+            if isinstance(error, StageHeld) and failed_stage is HoldStage.OIDC_CAPABILITY
+            else None
+        )
+        reason_code = next((item.value for item in OidcHoldReason if item is reason), None)
+        if reason_code is not None:
+            code += ":" + reason_code
         print(f"REP120 one-shot caller held [{code}]; no retry or acceptance.", file=sys.stderr)
         return 2
     print("REP120 transport complete; hosted acceptance remains false.")
