@@ -286,6 +286,8 @@
             <properties>
               <property name="role" value="keycloak_cac"/>
               <property name="scenario" value="{{ keycloak_cleanup_probe_scenario }}"/>
+              <property name="commit_sha" value="{{ lookup('env', 'QUALITY_SOURCE_SHA')
+                | default(lookup('env', 'GITHUB_SHA'), true) | default('unknown', true) }}"/>
             </properties>
           {% for check, passed in keycloak_cleanup_probe_checks.items() %}
             <testcase classname="keycloak.default-cleanup" name="{{ check }}" role="keycloak_cac">

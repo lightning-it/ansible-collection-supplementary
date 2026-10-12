@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 from ansible import constants as C
@@ -32,12 +33,13 @@ SAFE_FAILURE_CATEGORY = (
     "'invalid_private_key' if fixture_failure_text "
     "is search('not a supported private key type|InvalidPrivateKeyFileError') else "
     "'unsupported_key_type' if fixture_failure_text is search('Key type .* is not supported|InvalidKeyTypeError') else "
-    "'module_resolution' if fixture_failure_text is search('could not resolve|module_utils') else "
     "'attribute_error' if fixture_failure_text is search('AttributeError:') else "
     "'type_error' if fixture_failure_text is search('TypeError:') else "
     "'value_error' if fixture_failure_text is search('ValueError:') else "
     "'runtime_error' if fixture_failure_text is search('RuntimeError:') else "
     "'os_error' if fixture_failure_text is search('OSError:|FileNotFoundError:') else "
+    "'module_support_code' if fixture_failure_text is search('Could not find imported module support code') else "
+    "'module_resolution' if fixture_failure_text is search('could not resolve module/action') else "
     "'unsupported_key' if fixture_failure_text "
     "is search('not supported|Unsupported|invalid key') else "
     "'other_censored_failure' }}"
@@ -46,6 +48,7 @@ SAFE_FAILURE_CATEGORY = (
 SAFE_FAILURE_INPUT = (
     "{{ [ansible_failed_result.msg | default(''), "
     "ansible_failed_result.module_stderr | default(''), "
+    "ansible_failed_result.module_stdout | default(''), "
     "ansible_failed_result.stderr | default(''), "
     "ansible_failed_result.exception | default('')] | join(' ') }}"
 )
@@ -110,6 +113,8 @@ class VaultKeypairTests(unittest.TestCase):
                 "diagnostic_key_type": "Key type PARTIAL_CANARY is not supported",
                 "diagnostic_os_error": "OSError: [Errno 95] Operation not supported PARTIAL_CANARY",
                 "diagnostic_value_error": "ValueError: invalid key PARTIAL_CANARY",
+                "diagnostic_module_trace": "module_utils/example.py TypeError: PARTIAL_CANARY",
+                "diagnostic_module_support": "Could not find imported module support code: PARTIAL_CANARY",
             }
             if scenario in diagnostic_messages:
                 tasks = [{"ansible.builtin.fail": {"msg": diagnostic_messages[scenario]}, "no_log": True}]
@@ -154,6 +159,10 @@ class VaultKeypairTests(unittest.TestCase):
             (path / "ansible.cfg").write_text("[defaults]\n")
             ram_root = Path("/dev/shm")  # noqa: S108 - inspect the role-owned RAM cleanup boundary
             before = set(ram_root.glob("vault-ssh-keypair-*"))
+            # Ansible constants may have been initialized earlier in a different
+            # test context. Preserve the dependency path selected for this run.
+            configured_paths = os.environ.get("ANSIBLE_COLLECTIONS_PATH")
+            dependency_paths = configured_paths.split(os.pathsep) if configured_paths else C.COLLECTIONS_PATHS
             result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture
                 [ANSIBLE_PLAYBOOK, "-i", "localhost,", "-c", "local", str(path / "play.yml")]
                 + (["--check"] if check else []),
@@ -164,7 +173,7 @@ class VaultKeypairTests(unittest.TestCase):
                 env={
                     **os.environ,
                     "ANSIBLE_CONFIG": str(path / "ansible.cfg"),
-                    "ANSIBLE_COLLECTIONS_PATH": os.pathsep.join([str(path), *C.COLLECTIONS_PATHS]),
+                    "ANSIBLE_COLLECTIONS_PATH": os.pathsep.join([str(path), *dependency_paths]),
                 },
             )
             self.assertEqual(set(ram_root.glob("vault-ssh-keypair-*")), before)
@@ -175,6 +184,15 @@ class VaultKeypairTests(unittest.TestCase):
 
     def test_pair_is_generated_once_and_reused_without_rotation(self):
         code, output = self.execute("reuse")
+        self.assertEqual(code, 0, output)
+
+    def test_explicit_fixture_collection_path_takes_precedence_over_cached_defaults(self):
+        selected_paths = os.environ.get("ANSIBLE_COLLECTIONS_PATH") or os.pathsep.join(C.COLLECTIONS_PATHS)
+        with (
+            patch.dict(os.environ, {"ANSIBLE_COLLECTIONS_PATH": selected_paths}),
+            patch.object(C, "COLLECTIONS_PATHS", ["/unavailable-cached-collections"]),
+        ):
+            code, output = self.execute("reuse")
         self.assertEqual(code, 0, output)
 
     def test_failure_diagnostic_never_discloses_the_protected_module_message(self):
@@ -190,6 +208,8 @@ class VaultKeypairTests(unittest.TestCase):
             ("diagnostic_key_type", "unsupported_key_type"),
             ("diagnostic_os_error", "os_error"),
             ("diagnostic_value_error", "value_error"),
+            ("diagnostic_module_trace", "type_error"),
+            ("diagnostic_module_support", "module_support_code"),
         ):
             with self.subTest(category=category):
                 code, output = self.execute(scenario)

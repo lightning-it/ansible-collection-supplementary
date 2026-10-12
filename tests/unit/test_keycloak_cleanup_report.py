@@ -11,6 +11,8 @@ from pathlib import Path
 
 import yaml
 
+from scripts import quality_evidence as evidence
+
 ROOT = Path(__file__).resolve().parents[2]
 ANSIBLE_PLAYBOOK = shutil.which("ansible-playbook")
 if ANSIBLE_PLAYBOOK is None:
@@ -18,7 +20,7 @@ if ANSIBLE_PLAYBOOK is None:
 
 
 class CleanupReportTests(unittest.TestCase):
-    def exercise(self, failed_case=None):
+    def exercise(self, failed_case=None, *, source_sha="a" * 40, github_sha="b" * 40):
         source = yaml.safe_load((ROOT / "molecule/shared/keycloak/default-role-cleanup.yml").read_text())
         checks = dict.fromkeys(source[0]["ansible.builtin.set_fact"]["keycloak_cleanup_probe_checks"], True)
         if failed_case is not None:
@@ -64,9 +66,16 @@ class CleanupReportTests(unittest.TestCase):
             (directory / "inventory.yml").write_text(yaml.safe_dump(inventory))
             (directory / "play.yml").write_text(yaml.safe_dump(play))
             (directory / "ansible.cfg").write_text("[defaults]\n")
+            environment = {**os.environ, "ANSIBLE_CONFIG": str(directory / "ansible.cfg")}
+            environment.pop("QUALITY_SOURCE_SHA", None)
+            environment.pop("GITHUB_SHA", None)
+            if source_sha is not None:
+                environment["QUALITY_SOURCE_SHA"] = source_sha
+            if github_sha is not None:
+                environment["GITHUB_SHA"] = github_sha
             result = subprocess.run(  # noqa: S603 - execute the shipped writer in a local controlled fixture
                 [ANSIBLE_PLAYBOOK, "-i", str(directory / "inventory.yml"), str(directory / "play.yml")],
-                env={**os.environ, "ANSIBLE_CONFIG": str(directory / "ansible.cfg")},
+                env=environment,
                 capture_output=True,
                 text=True,
                 check=False,
@@ -77,6 +86,8 @@ class CleanupReportTests(unittest.TestCase):
             report = ET.parse(directory / "junit/remote-report-regression-default-cleanup.xml").getroot()  # noqa: S314
             self.assertEqual(report.get("tests"), str(len(checks)))
             self.assertEqual({case.get("name") for case in report.findall("testcase")}, set(checks))
+            parsed = evidence.parse_junit(directory / "junit/remote-report-regression-default-cleanup.xml")
+            self.assertEqual(evidence._report_commit(parsed), source_sha or github_sha or "unknown")
             return report
 
     def test_success_report_is_written_by_the_controller_for_a_remote_target(self):
@@ -88,3 +99,9 @@ class CleanupReportTests(unittest.TestCase):
         report = self.exercise("check_mode")
         self.assertEqual(report.get("failures"), "1")
         self.assertIsNotNone(report.find("testcase[@name='check_mode']/failure"))
+
+    def test_report_uses_github_sha_when_no_selected_source_is_available(self):
+        self.exercise(source_sha=None)
+
+    def test_missing_source_remains_unknown_instead_of_inventing_commit_evidence(self):
+        self.exercise(source_sha=None, github_sha=None)
