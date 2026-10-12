@@ -270,6 +270,71 @@ class OidcTests(unittest.TestCase):
             with self.subTest(url=url), self.assertRaises(sender.Held):
                 sender.oidc_endpoint(url)
 
+    def test_server_generated_rfc3986_routing_keeps_literal_endpoint_and_exact_wire_bytes(self):
+        # Synthetic grammar classes, not disclosure or inference of a hosted route.
+        paths = (
+            "/idtoken",
+            "/routing.with.dots/~opaque/idtoken",
+            "/!$&'()*+,;=:@-._~/idtoken",
+            "/opaque%3Aroute/%E2%82%AC/idtoken",
+            "/opaque%3aroute/idtoken",
+            "/uuid/_apis/distributedtask/hubs/actions/plans/plan/jobs/job/idtoken",
+        )
+        with patch.object(sender.http.client, "HTTPSConnection") as connection:
+            for path in paths:
+                with self.subTest(path=path):
+                    url = "https://fixture.actions.githubusercontent.com" + path + "?api-version=2.0"
+                    host, target = sender.oidc_endpoint(url)
+                    self.assertEqual(host, "fixture.actions.githubusercontent.com")
+                    self.assertEqual(
+                        target,
+                        path
+                        + "?"
+                        + sender.urlencode(
+                            [
+                                ("api-version", "2.0"),
+                                ("audience", sender.AUDIENCE),
+                            ]
+                        ),
+                    )
+            connection.assert_not_called()
+
+    def test_noncanonical_or_ambiguous_routes_hold_before_any_effect_without_private_values(self):
+        paths = (
+            "",
+            "/",
+            "/other",
+            "/IDTOKEN",
+            "/route/idtoken/",
+            "/route/idtoken.extra",
+            "/route/%69dtoken",
+            "//idtoken",
+            "/route//idtoken",
+            "/./idtoken",
+            "/../idtoken",
+            "/%2E/idtoken",
+            "/.%2e/idtoken",
+            "/opaque%2Froute/idtoken",
+            "/opaque%5croute/idtoken",
+            "/opaque%00route/idtoken",
+            "/opaque%20route/idtoken",
+            "/opaque%7Froute/idtoken",
+            "/opaque%252Froute/idtoken",
+            "/opaque%/idtoken",
+            "/opaque%2/idtoken",
+            "/opaque%GG/idtoken",
+            "/opaque[route]/idtoken",
+            "/opaque\\route/idtoken",
+        )
+        with patch.object(sender.http.client, "HTTPSConnection") as connection:
+            for path in paths:
+                url = "https://fixture.actions.githubusercontent.com" + path + "?api-version=2.0"
+                with self.subTest(path=path), self.assertRaises(sender.OidcHeld) as held:
+                    sender.fetch_oidc(environment() | {"ACTIONS_ID_TOKEN_REQUEST_URL": url}, time.monotonic() + 10)
+                self.assertIs(held.exception.reason, sender.OidcHoldReason.URL_PATH)
+                self.assertEqual(str(held.exception), "runner OIDC capability held")
+            connection.assert_not_called()
+
     def response(self, status=200, body=None):
         response = MagicMock()
         response.status = status
