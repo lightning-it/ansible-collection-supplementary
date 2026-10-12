@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import socket
 import ssl
 import struct
@@ -17,6 +18,7 @@ import time
 import unittest
 from typing import Any
 from unittest.mock import MagicMock, patch
+from urllib.parse import unquote_to_bytes
 
 from scripts import rep120_caller_sender as sender
 from tests.unit.test_rep120_caller_contract import context
@@ -200,7 +202,7 @@ class OidcTests(unittest.TestCase):
             ("URL_PORT", url_key, OIDC_URL.replace(".com/", ".com:invalid/")),
             ("URL_FRAGMENT", url_key, OIDC_URL + "#" + JWT_CANARY),
             ("URL_HOST", url_key, OIDC_URL.replace(".com/", ".com.evil/")),
-            ("URL_PATH", url_key, OIDC_URL.replace("/idtoken?", "/" + JWT_CANARY + "?")),
+            ("URL_PATH_ORIGIN_FORM", url_key, OIDC_URL.replace(".com/uuid/", ".com//" + JWT_CANARY + "/")),
             ("URL_QUERY", url_key, OIDC_URL + "&" + JWT_CANARY),
             ("URL_QUERY", url_key, OIDC_URL + "&audience=" + JWT_CANARY),
             ("URL_QUERY", url_key, OIDC_URL.replace("?api-version=2.0", "?api-version=1.0")),
@@ -208,6 +210,16 @@ class OidcTests(unittest.TestCase):
             ("BEARER_LENGTH", bearer_key, "x" * (sender.MAX_OIDC + 1)),
             ("BEARER_ASCII", bearer_key, JWT_CANARY + "\n"),
             ("BEARER_ASCII", bearer_key, JWT_CANARY + "é"),
+        ) + tuple(
+            (code, url_key, "https://fixture.actions.githubusercontent.com/" + JWT_CANARY + path + "?api-version=2.0")
+            for code, path in (
+                ("URL_PATH_ESCAPE", "%GG/idtoken"),
+                ("URL_PATH_SYNTAX", "[/idtoken"),
+                ("URL_PATH_DOT_SEGMENT", "/%2e/idtoken"),
+                ("URL_PATH_CONTROL", "%00/idtoken"),
+                ("URL_PATH_SEPARATOR", "%2f/idtoken"),
+                ("URL_PATH_DOUBLE_ENCODING", "%25/idtoken"),
+            )
         )
         for code, key, value in cases:
             message = envelope()
@@ -262,7 +274,6 @@ class OidcTests(unittest.TestCase):
             OIDC_URL + "#fragment",
             OIDC_URL + "&audience=evil",
             OIDC_URL + "&api-version=2.0",
-            OIDC_URL.replace("/idtoken?", "/other?"),
             OIDC_URL.replace("fixture.actions.githubusercontent.com", "127.0.0.1"),
             OIDC_URL + "\n",
             OIDC_URL.replace("?api-version=2.0", "?api-version=1.0"),
@@ -270,7 +281,7 @@ class OidcTests(unittest.TestCase):
             with self.subTest(url=url), self.assertRaises(sender.Held):
                 sender.oidc_endpoint(url)
 
-    def test_server_generated_rfc3986_routing_keeps_literal_endpoint_and_exact_wire_bytes(self):
+    def test_server_generated_rfc3986_routing_keeps_opaque_path_and_exact_wire_bytes(self):
         # Synthetic grammar classes, not disclosure or inference of a hosted route.
         paths = (
             "/idtoken",
@@ -279,6 +290,13 @@ class OidcTests(unittest.TestCase):
             "/opaque%3Aroute/%E2%82%AC/idtoken",
             "/opaque%3aroute/idtoken",
             "/uuid/_apis/distributedtask/hubs/actions/plans/plan/jobs/job/idtoken",
+            "/",
+            "/other-provider-route",
+            "/route/IDTOKEN",
+            "/route/idtoken/",
+            "/route/idtoken.extra",
+            "/route/%69dtoken",
+            "/route//opaque/",
         )
         with patch.object(sender.http.client, "HTTPSConnection") as connection:
             for path in paths:
@@ -297,19 +315,36 @@ class OidcTests(unittest.TestCase):
                             ]
                         ),
                     )
+                    # Actual stdlib request-line construction, without connecting.
+                    client = sender.http.client.HTTPConnection(host)
+                    with patch.object(client, "_output") as output:
+                        client.putrequest("GET", target)
+                    self.assertEqual(output.call_args_list[0].args[0], b"GET " + target.encode("ascii") + b" HTTP/1.1")
             connection.assert_not_called()
+
+    def test_nonsecret_input_envelopes_cannot_select_runner_oidc_capability(self):
+        for key in ("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_TOKEN"):
+            for location in ("envelope", "request", "delivery"):
+                message, receiver = envelope(), delivery()
+                destination = {"envelope": message, "request": message["request"], "delivery": receiver}[location]
+                destination[key] = JWT_CANARY
+                with (
+                    self.subTest(key=key, location=location),
+                    patch.object(sender.ssl, "SSLContext") as tls,
+                    patch.object(sender.socket, "socket") as connect,
+                    patch.object(sender, "fetch_oidc") as fetch,
+                    self.assertRaises(sender.StageHeld) as held,
+                ):
+                    sender.send_once(receiver, message, environment())
+                self.assertIs(held.exception.stage, sender.HoldStage.INPUT_CONTEXT)
+                tls.assert_not_called()
+                connect.assert_not_called()
+                fetch.assert_not_called()
 
     def test_noncanonical_or_ambiguous_routes_hold_before_any_effect_without_private_values(self):
         paths = (
             "",
-            "/",
-            "/other",
-            "/IDTOKEN",
-            "/route/idtoken/",
-            "/route/idtoken.extra",
-            "/route/%69dtoken",
             "//idtoken",
-            "/route//idtoken",
             "/./idtoken",
             "/../idtoken",
             "/%2E/idtoken",
@@ -325,15 +360,56 @@ class OidcTests(unittest.TestCase):
             "/opaque%GG/idtoken",
             "/opaque[route]/idtoken",
             "/opaque\\route/idtoken",
+            "/route/.",
+            "/route/%2e%2e",
+            "/route/%00",
+            "/route/%252f",
         )
         with patch.object(sender.http.client, "HTTPSConnection") as connection:
             for path in paths:
                 url = "https://fixture.actions.githubusercontent.com" + path + "?api-version=2.0"
                 with self.subTest(path=path), self.assertRaises(sender.OidcHeld) as held:
                     sender.fetch_oidc(environment() | {"ACTIONS_ID_TOKEN_REQUEST_URL": url}, time.monotonic() + 10)
-                self.assertIs(held.exception.reason, sender.OidcHoldReason.URL_PATH)
+                self.assertIs(held.exception.reason, sender.oidc_path_hold_reason(path))
                 self.assertEqual(str(held.exception), "runner OIDC capability held")
             connection.assert_not_called()
+
+    def test_opaque_paths_retain_every_main8230_positive(self):
+        # Frozen original predicate is a test oracle, not a second production validator.
+        def original(path):
+            pchar = r"(?:[A-Za-z0-9._~!$&'()*+,;=:@-]|%[0-9A-Fa-f]{2})"
+            if re.fullmatch(rf"/(?:{pchar}+/)*idtoken", path) is None:
+                return False
+            return all(
+                decoded not in (b".", b"..") and not any(byte < 33 or byte in (37, 47, 92, 127) for byte in decoded)
+                for decoded in (unquote_to_bytes(segment) for segment in path.split("/")[1:-1])
+            )
+
+        segments = ("", "a", "..", ".", "~:@", "%2e", "%2F", "%5c", "%00", "%20", "%7f", "%25", "%GG", "[", "%e2%82%ac")
+        for first in segments:
+            for second in segments:
+                for endpoint in ("idtoken", "%69dtoken", "other", "idtoken/"):
+                    path = f"/{first}/{second}/{endpoint}"
+                    with self.subTest(first=first, second=second, endpoint=endpoint):
+                        if original(path):
+                            self.assertTrue(sender.oidc_idtoken_path(path))
+                            self.assertIsNone(sender.oidc_path_hold_reason(path))
+
+    def test_path_diagnostic_precedence_is_fixed_and_value_free(self):
+        cases = (
+            ("//%GG/other", "URL_PATH_ORIGIN_FORM"),
+            ("relative/%GG/idtoken", "URL_PATH_ORIGIN_FORM"),
+            ("/%GG[/idtoken", "URL_PATH_ESCAPE"),
+            ("/%00%2f%25/idtoken", "URL_PATH_CONTROL"),
+            ("/%2f%25/idtoken", "URL_PATH_SEPARATOR"),
+            ("/%25/idtoken", "URL_PATH_DOUBLE_ENCODING"),
+        )
+        for path, code in cases:
+            with self.subTest(code=code):
+                reason = sender.oidc_path_hold_reason(path)
+                self.assertIsNotNone(reason)
+                assert reason is not None
+                self.assertEqual(reason.value, code)
 
     def response(self, status=200, body=None):
         response = MagicMock()

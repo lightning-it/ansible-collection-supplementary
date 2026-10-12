@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    REP120 caller preserves opaque runner-supplied RFC3986 routing instead of
+    requiring an undocumented endpoint name, with strict origin, traversal,
+    credential-free failure and no-retry boundaries retained.

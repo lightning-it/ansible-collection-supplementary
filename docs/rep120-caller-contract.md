@@ -171,11 +171,13 @@ then `LIT178END`; body at most 1 MiB and OIDC at most 16 KiB.
 OIDC retrieval is one direct HTTPS GET using actual runner URL/bearer, fixed
 audience, compiled system trust locations and no proxy, redirect or retry.
 Ambient `SSLKEYLOGFILE` and certificate environment overrides are not consumed.
-URL must be a subdomain of `actions.githubusercontent.com`, path ending
-`/idtoken`, and exactly `api-version=2.0`; no userinfo, fragment or non-443 port.
-Opaque routing segments use RFC3986 `pchar` syntax, not a handcrafted identifier
-alphabet. The terminal segment remains literal `idtoken`; empty and dot segments,
-malformed escapes, escaped separators/control bytes and double decoding hold.
+URL must be a subdomain of `actions.githubusercontent.com` with exactly
+`api-version=2.0`; no userinfo, fragment or non-443 port. The absolute origin-form
+path uses RFC3986 `pchar` syntax and literal slashes, not a handcrafted identifier
+alphabet or fixed endpoint name. Root paths, internal empty segments and trailing
+slashes are preserved. Empty paths and leading `//` hold to avoid implicit or
+authority-form routing. Dot segments (including the terminal segment), malformed
+escapes, escaped separators/control bytes and double decoding still hold.
 The sender preserves the accepted path bytes without decoding or normalization.
 The [official runner](https://github.com/actions/runner/blob/main/src/Runner.Worker/Handlers/ScriptHandler.cs)
 exports the service's `GenerateIdTokenUrl`; the
@@ -183,7 +185,15 @@ exports the service's `GenerateIdTokenUrl`; the
 consumes that generated URL without specifying its opaque segment values.
 [RFC3986 section 3.3](https://www.rfc-editor.org/rfc/rfc3986#section-3.3)
 defines path syntax, not GitHub route semantics or native authorization.
-Invalid routing or changed endpoint/query holds. Root verifies actual runner routing at
+No literal endpoint is guaranteed by those sources; the remaining ambiguity and
+decoding exclusions are conservative local constraints, not universal provider
+guarantees. The workflow's only input-derived environment values are delivery and
+envelope; neither can set the runner URL/bearer. Exact protected Main, actor, event,
+source and attempt-one gates remain mandatory, and Root still validates the JWT's
+actual subject/audience/run independently. Locally forged environment metadata is
+not authenticated authority. No actual rejected hosted path is disclosed or
+inferred from synthetic grammar tests.
+Invalid routing or changed query holds. Root verifies actual runner routing at
 activation; synthetic test URLs are not actual hosted URL evidence.
 The JWT remains in process memory/encrypted frame, never argv, extra env, logs,
 input/artifacts. Core dumps are disabled; Python heap zeroing is not claimed.
@@ -259,15 +269,30 @@ the active phase. No exception text, traceback, URL, token, payload or environme
 value is printed. A missing or invalid internal stage falls back to `INPUT_CONTEXT`.
 Only a known `OIDC_CAPABILITY` predicate failure adds one finite suffix:
 `URL_MISSING`, `URL_FORMAT`, `URL_HTTPS`, `URL_USERINFO`, `URL_PORT`,
-`URL_FRAGMENT`, `URL_HOST`, `URL_PATH`, `URL_QUERY`, `BEARER_MISSING`,
+`URL_FRAGMENT`, `URL_HOST`, `URL_PATH`, `URL_PATH_ORIGIN_FORM`, `URL_PATH_ESCAPE`,
+`URL_PATH_SYNTAX`, `URL_PATH_DOT_SEGMENT`, `URL_PATH_CONTROL`, `URL_PATH_SEPARATOR`,
+`URL_PATH_DOUBLE_ENCODING`, `URL_QUERY`, `BEARER_MISSING`,
 `BEARER_FORMAT`, `BEARER_LENGTH`, or `BEARER_ASCII`. This names the first rejected
 existing predicate, never a value, measured length, header hash or exception.
 Missing, forged or wrong-stage reason metadata adds no suffix. Unexpected failures
 retain the stage-only message; the suffix does not establish actual hosted cause
 until observed in the corresponding native run. Existing unknown URL routing/query
-changes still hold; no endpoint or credential rule is relaxed.
-All existing admission, source, run, expiry, TLS, OIDC and ACK guards remain
-unchanged. There is still no retry, dispatch or activation authority in this sender.
+changes outside the documented opaque-path contract still hold.
+Path rejection now identifies a fixed subpredicate: `URL_PATH_ORIGIN_FORM`,
+`URL_PATH_ESCAPE`, `URL_PATH_SYNTAX`,
+`URL_PATH_DOT_SEGMENT`, `URL_PATH_CONTROL`, `URL_PATH_SEPARATOR`, or
+`URL_PATH_DOUBLE_ENCODING`. Previously accepted paths remain accepted; only the
+undocumented endpoint/empty-segment routing assumptions are removed. Origin-form
+is checked before grammar rejection is classified in escape/syntax order;
+decoded segments are checked in wire order, with dot/control/separator/percent
+precedence within each segment. Only these constant names may cross the error
+boundary; no path, byte, length, URL, bearer or exception text is exposed.
+Legacy `URL_PATH` remains a valid historical code. This correction does not
+establish which predicate rejected the actual hosted path, prove hosted success,
+or authorize a diagnostic dispatch. A next regular Root-owned attempt still
+requires its normal gates. All existing admission, source, run, expiry, origin,
+query/audience, TLS, OIDC and ACK guards remain unchanged. There is still no retry,
+dispatch or activation authority in this sender.
 
 Run the repository's `pre-commit run --all-files` first. Focused tests use the
 existing pinned, offline, read-only, non-root Devtools boundary:
