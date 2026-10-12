@@ -16,7 +16,10 @@ not merely below the requested TTL. A returned leaf that does not outlive this
 window is rejected before KV custody advances or service files are written. This
 prevents repeated renewal of an immediately expiring identity. Both existing and
 new leaves must have exactly the ServerAuth extended usage; additional usages are
-rejected.
+rejected. If a KeyUsage extension is present, it must include Digital Signature
+and may additionally contain only Key Encipherment and Key Agreement. CA-signing
+and unrelated usages are rejected before custody or service files are changed.
+An absent KeyUsage extension remains valid for a server leaf.
 
 ## Dependencies
 

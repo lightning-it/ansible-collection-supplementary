@@ -23,14 +23,26 @@ if ANSIBLE_PLAYBOOK is None:
 
 SAFE_FAILURE_CATEGORY = (
     "Keypair fixture failure category: {{ "
-    "'python_dependency' if ansible_failed_result.msg | default('') "
+    "'python_dependency' if fixture_failure_text "
     "is search('Failed to import|required Python|ImportError|No module named') else "
-    "'filesystem_permission' if ansible_failed_result.msg | default('') "
+    "'filesystem_permission' if fixture_failure_text "
     "is search('Permission denied|Read-only file system') else "
-    "'unsupported_key' if ansible_failed_result.msg | default('') "
+    "'unsupported_key' if fixture_failure_text "
     "is search('not supported|Unsupported|invalid key') else "
-    "'module_resolution' if ansible_failed_result.msg | default('') is search('could not resolve|module_utils') else "
+    "'module_resolution' if fixture_failure_text is search('could not resolve|module_utils') else "
+    "'attribute_error' if fixture_failure_text is search('AttributeError:') else "
+    "'type_error' if fixture_failure_text is search('TypeError:') else "
+    "'value_error' if fixture_failure_text is search('ValueError:') else "
+    "'runtime_error' if fixture_failure_text is search('RuntimeError:') else "
+    "'os_error' if fixture_failure_text is search('OSError:|FileNotFoundError:') else "
     "'other_censored_failure' }}"
+)
+
+SAFE_FAILURE_INPUT = (
+    "{{ [ansible_failed_result.msg | default(''), "
+    "ansible_failed_result.module_stderr | default(''), "
+    "ansible_failed_result.stderr | default(''), "
+    "ansible_failed_result.exception | default('')] | join(' ') }}"
 )
 
 
@@ -87,6 +99,19 @@ class VaultKeypairTests(unittest.TestCase):
                 ]
             if scenario == "diagnostic":
                 tasks = [{"ansible.builtin.fail": {"msg": "PARTIAL_CANARY"}, "no_log": True}]
+            if scenario == "diagnostic_stderr":
+                tasks = [
+                    {
+                        "ansible.builtin.command": {
+                            "argv": [
+                                "python3",
+                                "-c",
+                                "import sys; sys.stderr.write('TypeError: PARTIAL_CANARY'); sys.exit(1)",
+                            ]
+                        },
+                        "no_log": True,
+                    }
+                ]
             play = [
                 {
                     "hosts": "localhost",
@@ -98,7 +123,17 @@ class VaultKeypairTests(unittest.TestCase):
                         else existing,
                         "vault_secret_bundle_generate_missing": scenario != "readonly",
                     },
-                    "tasks": [{"block": tasks, "rescue": [{"ansible.builtin.fail": {"msg": SAFE_FAILURE_CATEGORY}}]}],
+                    "tasks": [
+                        {
+                            "block": tasks,
+                            "rescue": [
+                                {
+                                    "ansible.builtin.fail": {"msg": SAFE_FAILURE_CATEGORY},
+                                    "vars": {"fixture_failure_text": SAFE_FAILURE_INPUT},
+                                }
+                            ],
+                        }
+                    ],
                 }
             ]
             (path / "play.yml").write_text(yaml.safe_dump(play))
@@ -132,6 +167,11 @@ class VaultKeypairTests(unittest.TestCase):
         code, output = self.execute("diagnostic")
         self.assertNotEqual(code, 0)
         self.assertIn("Keypair fixture failure category: other_censored_failure", output)
+
+    def test_stderr_diagnostic_reports_only_an_allowlisted_exception_category(self):
+        code, output = self.execute("diagnostic_stderr")
+        self.assertNotEqual(code, 0)
+        self.assertIn("Keypair fixture failure category: type_error", output)
 
     def test_check_mode_missing_pair_previews_without_generating_files(self):
         code, output = self.execute("missing", check=True)

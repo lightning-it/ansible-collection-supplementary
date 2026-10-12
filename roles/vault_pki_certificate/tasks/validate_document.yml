@@ -35,6 +35,11 @@
         vault_pki_certificate_info.basic_constraints is none
         or 'CA:FALSE' in vault_pki_certificate_info.basic_constraints
       - vault_pki_certificate_info.extended_key_usage == ['TLS Web Server Authentication']
+      - >-
+        vault_pki_certificate_info.key_usage is none
+        or ('Digital Signature' in vault_pki_certificate_info.key_usage
+        and vault_pki_certificate_info.key_usage
+        | difference(['Digital Signature', 'Key Encipherment', 'Key Agreement']) | length == 0)
     quiet: true
 
 - name: Require the protected matching server key pair

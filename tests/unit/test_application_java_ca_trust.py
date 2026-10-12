@@ -22,7 +22,7 @@ from jinja2 import Environment, StrictUndefined
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def certificate_fixture(hostname="localhost", future_ca=False, expired_ca=False, signing_usage=None):
+def certificate_fixture(hostname="localhost", future_ca=False, expired_ca=False, signing_usage=None, leaf_usage=None):
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Offline regression CA")])
     now = datetime.datetime.now(datetime.UTC)
@@ -64,8 +64,23 @@ def certificate_fixture(hostname="localhost", future_ca=False, expired_ca=False,
         .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
         .add_extension(x509.SubjectAlternativeName([x509.DNSName(hostname)]), critical=False)
         .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
-        .sign(key, hashes.SHA256())
     )
+    if leaf_usage is not None:
+        leaf = leaf.add_extension(
+            x509.KeyUsage(
+                digital_signature="Digital Signature" in leaf_usage,
+                content_commitment="Non Repudiation" in leaf_usage,
+                key_encipherment="Key Encipherment" in leaf_usage,
+                data_encipherment="Data Encipherment" in leaf_usage,
+                key_agreement="Key Agreement" in leaf_usage,
+                key_cert_sign="Certificate Sign" in leaf_usage,
+                crl_sign="CRL Sign" in leaf_usage,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+    leaf = leaf.sign(key, hashes.SHA256())
     return ca, leaf, leaf_key
 
 

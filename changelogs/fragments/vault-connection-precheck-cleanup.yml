@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    vault_connection_credentials - clear a previous credential result when a later invocation
+    fails its first input precheck.

@@ -94,6 +94,12 @@ class CredentialCleanupTests(unittest.TestCase):
                     self.assertNotIn("SECRET-CANARY", result.stdout + result.stderr)
 
     def test_later_source_failure_discards_the_previously_resolved_bundle(self):
+        self.exercise_credential_transaction()
+
+    def test_second_invocation_precheck_failure_forgets_the_previous_success(self):
+        self.exercise_credential_transaction(precheck_failure=True)
+
+    def exercise_credential_transaction(self, precheck_failure=False):
         main = yaml.safe_load((ROOT / "roles/vault_connection_credentials/tasks/main.yml").read_text())
         source_tasks = yaml.safe_load((ROOT / "roles/vault_connection_credentials/tasks/read_source.yml").read_text())
         source_tasks[1]["block"][0] = {
@@ -170,6 +176,37 @@ class CredentialCleanupTests(unittest.TestCase):
                     ],
                 }
             ]
+            if precheck_failure:
+                variables = play[0]["vars"]
+                variables["vault_connection_credentials_sources"] = sources[:1]
+                failure_boundary = play[0]["tasks"][0]
+                failure_boundary["rescue"].append(
+                    {"ansible.builtin.set_fact": {"fixture_second_invocation_rejected": True}}
+                )
+                play[0]["tasks"] = [
+                    {"ansible.builtin.import_tasks": str(path / "main.yml")},
+                    {
+                        "ansible.builtin.assert": {
+                            "that": ["vault_connection_credentials_result.first_password == 'SECRET-CANARY' * 4"]
+                        },
+                        "no_log": True,
+                    },
+                    {
+                        "ansible.builtin.set_fact": {
+                            "vault_connection_credentials_auth": {
+                                **variables["vault_connection_credentials_auth"],
+                                "role_id": None,
+                            }
+                        },
+                        "no_log": True,
+                    },
+                    failure_boundary,
+                    {
+                        "ansible.builtin.assert": {
+                            "that": ["fixture_second_invocation_rejected | default(false) | bool"]
+                        }
+                    },
+                ]
             (path / "play.yml").write_text(yaml.safe_dump(play))
             (path / "ansible.cfg").write_text("[defaults]\n")
             result = subprocess.run(  # noqa: S603 - controlled offline transaction fixture
