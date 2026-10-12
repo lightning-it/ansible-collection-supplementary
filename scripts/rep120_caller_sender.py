@@ -19,7 +19,7 @@ import time
 from collections.abc import Mapping
 from enum import Enum
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlsplit
+from urllib.parse import parse_qsl, unquote_to_bytes, urlencode, urlsplit
 
 from scripts.rep120_caller_contract import AUDIENCE, REQUEST_FIELDS, exact_type, inspect_context
 
@@ -207,6 +207,21 @@ def validate_inputs(delivery: dict[str, Any], envelope: dict[str, Any], context:
     canonical(envelope | {"oidc": "x" * MAX_OIDC})
 
 
+def oidc_idtoken_path(path: str) -> bool:
+    """RFC3986 routing segments, unchanged on the wire; literal endpoint only."""
+    # Runner supplies server-generated routing, not a UUID/ASCII-identifier schema.
+    # Only its path syntax is checked here; this never authenticates the caller.
+    pchar = r"(?:[A-Za-z0-9._~!$&'()*+,;=:@-]|%[0-9A-Fa-f]{2})"
+    if re.fullmatch(rf"/(?:{pchar}+/)*idtoken", path) is None:
+        return False
+    for segment in path.split("/")[1:-1]:
+        decoded = unquote_to_bytes(segment)
+        # No normalization, traversal, hidden separator/control or double decoding.
+        if decoded in (b".", b"..") or any(byte < 33 or byte in (37, 47, 92, 127) for byte in decoded):
+            return False
+    return True
+
+
 def oidc_endpoint(value: str) -> tuple[str, str]:
     """Only the runner's GitHub HTTPS idtoken URL; no audience override."""
     if exact_type(value, str) and not value:
@@ -236,7 +251,7 @@ def oidc_endpoint(value: str) -> tuple[str, str]:
         raise OidcHeld(OidcHoldReason.URL_FRAGMENT)
     if re.fullmatch(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*\.actions\.githubusercontent\.com", host) is None:
         raise OidcHeld(OidcHoldReason.URL_HOST)
-    if not re.fullmatch(r"/[A-Za-z0-9_/-]+/idtoken", url.path):
+    if not oidc_idtoken_path(url.path):
         raise OidcHeld(OidcHoldReason.URL_PATH)
     if query != [("api-version", "2.0")]:
         raise OidcHeld(OidcHoldReason.URL_QUERY)
