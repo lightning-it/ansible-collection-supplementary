@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - >-
+    Verify the dedicated dot-github ancestry-backmerge review identity and title
+    against the protected main commit, ordered merge parents, and exclusive
+    ancestry proof file, including final revalidation before acceptance.

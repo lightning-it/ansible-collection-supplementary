@@ -59,12 +59,12 @@
     {
       "path": "scripts/verify-dot-github-current-revision.py",
       "category": "local-required",
-      "sha256": "a5feb76a87920abf4efecc20d61a7c15803cf45eef82f6f714c6a33570df35da",
+      "sha256": "92c90d9d7262b7d8b98f690abd3e6351def847a497e642a2a9953ac15bcab828",
       "local_adaptation": {
         "base_commit": "939058fb82697472f9410480d334ced3bc8f464a",
         "base_blob": "1de40c129f4ef8bd72156e90ef76801a61535ad3",
         "base_sha256": "e478d450b162eefaa5bd8f65a88a73d89b01ddbcdfb9d1a753cdf173339757ba",
-        "reason": "Bind the current nine-field ordinary-human publisher metadata revision; historical donor and LI-259 port receipts remain unchanged."
+        "reason": "Bind the current nine-field ordinary-human publisher metadata revision and the dedicated, independently proof-bound ancestry publisher identity; historical donor and LI-259 port receipts remain unchanged."
       },
       "owner": "ansible-collection-supplementary",
       "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
