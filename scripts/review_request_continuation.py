@@ -1,10 +1,10 @@
+# Exact JSON type checks are an authorization boundary: bool is not int.
+# pylint: disable=unidiomatic-typecheck
 """LI-219 v2 first-request continuation. Never retry an effect or mint a new budget.
 
 This file is embedded in protected workflows, never loaded from a PR checkout.
 The deferred record carries original authorization, not request consumption.
 """
-# Exact JSON schema types deliberately reject bool as int and subclasses.
-# pylint: disable=unidiomatic-typecheck
 import base64
 import datetime as dt
 import hashlib
@@ -198,29 +198,17 @@ class Journal:
         require(sha(self.oid), "journal commit")
 
     def read(self, path):
-        result = api(
-            "graphql",
-            fields=[
-                "-f",
-                (
-                    "query=query($owner:String!,$name:String!,$oid:String!,$manifest:String!,$record:String!){r"
-                    "epository(owner:$owner,name:$name){nameWithOwner source:object(expression:$oid){__typename"
-                    " oid} manifest:object(expression:$manifest){__typename ... on Blob{isTruncated byteSize te"
-                    "xt}} record:object(expression:$record){__typename ... on Blob{isTruncated byteSize text}}}"
-                    "}"
-                ),
-                "-f",
-                f"owner={self.repo.split('/')[0]}",
-                "-f",
-                f"name={self.repo.split('/')[1]}",
-                "-f",
-                f"oid={self.oid}",
-                "-f",
-                f"manifest={self.oid}:manifest.json",
-                "-f",
-                f"record={self.oid}:{path}",
-            ],
+        query = (
+            "query=query($owner:String!,$name:String!,$oid:String!,"
+            "$manifest:String!,$record:String!){repository(owner:$owner,name:$name)"
+            "{nameWithOwner source:object(expression:$oid){__typename oid}"
+            " manifest:object(expression:$manifest){__typename ... on Blob"
+            "{isTruncated byteSize text}} record:object(expression:$record)"
+            "{__typename ... on Blob{isTruncated byteSize text}}}}"
         )
+        result = api("graphql", fields=["-f", query,
+                                        "-f", f"owner={self.repo.split('/')[0]}", "-f", f"name={self.repo.split('/')[1]}",
+                                        "-f", f"oid={self.oid}", "-f", f"manifest={self.oid}:manifest.json", "-f", f"record={self.oid}:{path}"])
         require("errors" not in result, "partial journal")
         data = result["data"]["repository"]
         require(data["nameWithOwner"] == self.repo and data["source"] == {"__typename": "Commit", "oid": self.oid}, "mixed journal")
@@ -231,28 +219,18 @@ class Journal:
 
     def create(self, path, record):
         require(self.read(path) is None, "record already exists")
-        result = commit_response(
-            {
-                "query": "mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid parents(first:2){nodes{oid}}}}}",
-                "variables": {
-                    "input": {
-                        "branch": {"repositoryNameWithOwner": self.repo, "branchName": "lit-review-operations"},
-                        "expectedHeadOid": self.oid,
-                        "message": {"headline": "Record LI-219 first-request continuation"},
-                        "fileChanges": {
-                            "additions": [
-                                {
-                                    "path": path,
-                                    "contents": base64.b64encode(
-                                        json.dumps(record, sort_keys=True, separators=(",", ":")).encode()
-                                    ).decode(),
-                                }
-                            ]
-                        },
-                    }
-                },
-            }
-        )
+        encoded = base64.b64encode(
+            json.dumps(record, sort_keys=True, separators=(",", ":")).encode()
+        ).decode()
+        result = commit_response({
+            "query": "mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid parents(first:2){nodes{oid}}}}}",
+            "variables": {"input": {
+                "branch": {"repositoryNameWithOwner": self.repo, "branchName": "lit-review-operations"},
+                "expectedHeadOid": self.oid,
+                "message": {"headline": "Record LI-219 first-request continuation"},
+                "fileChanges": {"additions": [{"path": path, "contents": encoded}]},
+            }},
+        })
         require(isinstance(result, dict) and "errors" not in result, "uncertain CAS")
         commit = result["data"]["createCommitOnBranch"]["commit"]
         require(sha(commit["oid"]) and commit["oid"] != self.oid
@@ -479,7 +457,8 @@ def unconsumed(repo, intent, journal):
     reviews = pages(f"repos/{repo}/pulls/{intent['pr']}/reviews")
     require(
         not any(
-            review.get("commit_id") == intent["head"] and review.get("user", {}).get("login") in REVIEWERS
+            review.get("commit_id") == intent["head"]
+            and review.get("user", {}).get("login") in REVIEWERS
             for review in reviews
         ),
         "current-head review exists",
@@ -613,18 +592,9 @@ def locate():
     clean_old_review(repo, pr_number, review_id, intent["head"], owner["created_at"])
     unconsumed(repo, intent, journal)
     # Locator only; no input below grants consumer mutation authority.
-    api(
-        f"repos/{repo}/actions/workflows/review-request-continuation.yml/dispatches",
-        {
-            "ref": intent["base_ref"],
-            "inputs": {
-                "pr_number": str(pr_number),
-                "owner_run": str(owner["id"]),
-                "expected_head": intent["head"],
-                "old_review": str(review_id),
-            },
-        },
-    )
+    api(f"repos/{repo}/actions/workflows/review-request-continuation.yml/dispatches",
+        {"ref": intent["base_ref"], "inputs": {"pr_number": str(pr_number), "owner_run": str(owner["id"]),
+                                               "expected_head": intent["head"], "old_review": str(review_id)}})
 
 
 def resume():
@@ -672,24 +642,16 @@ def native_resume_run(repo, run_id, source, intent, review_id, completed=True):
     # its own later protected source, not the original request source.
     if completed and intent["schema"] == 1 and run.get("head_branch") == "develop":
         resume_ref, resume_sha = "develop", source
-    require(
-        sha(source)
-        and type(run["id"]) is int
-        and str(run["id"]) == run_id
-        and type(run["run_attempt"]) is int
-        and run["run_attempt"] == 1
-        and run["event"] == "workflow_dispatch"
-        and run["path"] == WORKFLOW
-        and run["name"] == "Continue deferred first review request"
-        and run["repository"]["full_name"] == repo
-        and run["head_repository"]["full_name"] == repo
-        and run["head_sha"] == source == resume_sha
-        and run["head_branch"] == resume_ref
-        and run["actor"]["login"] == run["triggering_actor"]["login"] == "github-actions[bot]"
-        and run["display_title"]
-        == f"First review PR #{intent['pr']} head {intent['head']} owner {intent['owner_run']} old review {review_id}",
-        "resume native run",
+    expected_title = (
+        f"First review PR #{intent['pr']} head {intent['head']} "
+        f"owner {intent['owner_run']} old review {review_id}"
     )
+    require(sha(source) and type(run["id"]) is int and str(run["id"]) == run_id and type(run["run_attempt"]) is int and run["run_attempt"] == 1
+            and run["event"] == "workflow_dispatch" and run["path"] == WORKFLOW and run["name"] == "Continue deferred first review request"
+            and run["repository"]["full_name"] == repo and run["head_repository"]["full_name"] == repo
+            and run["head_sha"] == source == resume_sha and run["head_branch"] == resume_ref
+            and run["actor"]["login"] == run["triggering_actor"]["login"] == "github-actions[bot]"
+            and run["display_title"] == expected_title, "resume native run")
     if completed:
         require(run["status"] == "completed" and run["conclusion"] == "success", "resume native completion")
     else:
@@ -700,33 +662,12 @@ def native_resume_run(repo, run_id, source, intent, review_id, completed=True):
 def verify_receipt(context, record):
     """Read-only Required branch; invoked only after existing verifier-rerun proof."""
     repo, repo_id = context["repository"], context["repository_id"]
-    require(
-        set(record)
-        == {
-            "schema",
-            "repository",
-            "repository_id",
-            "action",
-            "operation",
-            "claim_run",
-            "claim_attempt",
-            "source_sha",
-            "intent",
-            "intent_commit",
-            "old_review",
-            "old_head",
-        }
-        and type(record["schema"]) is int
-        and record["schema"] == 2
-        and record["repository"] == repo
-        and record["repository_id"] == repo_id
-        and record["action"] == "request"
-        and record["claim_attempt"] == "1"
-        and isinstance(record["claim_run"], str)
-        and re.fullmatch(r"[1-9][0-9]*", record["claim_run"])
-        and sha(record["intent_commit"]),
-        "resume receipt schema",
-    )
+    require(set(record) == {"schema", "repository", "repository_id", "action", "operation", "claim_run", "claim_attempt",
+                            "source_sha", "intent", "intent_commit", "old_review", "old_head"}
+            and type(record["schema"]) is int and record["schema"] == 2 and record["repository"] == repo
+            and record["repository_id"] == repo_id and record["action"] == "request" and record["claim_attempt"] == "1"
+            and isinstance(record["claim_run"], str) and re.fullmatch(r"[1-9][0-9]*", record["claim_run"])
+            and sha(record["intent_commit"]), "resume receipt schema")
     intent = record["intent"]
     key = key_for(repo_id, context["owner"], context["head"])
     require(record["operation"] == key, "resume operation")

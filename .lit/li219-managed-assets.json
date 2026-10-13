@@ -54,7 +54,7 @@
       "sha256": "aee6e43da9ee2eb4b17c79dd4d981294ae8f87cebe60aa502d2eca1c582dd622",
       "source": "shared-assets-lit/scripts/review_content_markers.py",
       "owner": "ansible-collection-supplementary",
-      "purpose": "Repository-local native sanity compatibility: AST-equivalent formatting, escaped Unicode literals and documented exact schema type checks; protected donor provenance and review budgets retained."
+      "purpose": "Protected PR base-ref dispatch/consumer binding and native sanity source compatibility; strict schema types and runtime Unicode content semantics retained."
     },
     {
       "path": "scripts/verify-dot-github-current-revision.py",
@@ -66,9 +66,9 @@
     {
       "path": ".github/workflows/copilot-review.yml",
       "category": "local-required",
-      "sha256": "eaf193cda22365415ec6d43cf0611e1f5a830d97dc1f535b242af2d964cfabd6",
+      "sha256": "636ce150d04f9f9e0f97dc598727cbf2060ba0fad3742d0da22d22177c30fd10",
       "owner": "ansible-collection-supplementary",
-      "purpose": "Repository-local native sanity compatibility: AST-equivalent formatting, escaped Unicode literals and documented exact schema type checks; protected donor provenance and review budgets retained."
+      "purpose": "Protected Source continuation with Supplementary-native E126 indentation adaptation; runtime behavior unchanged."
     },
     {
       "path": "scripts/lit-push-ready.py",
@@ -81,17 +81,17 @@
       "path": ".github/workflows/review-request-continuation.yml",
       "category": "local-required",
       "source": "shared-assets-lit/default/.github/workflows/review-request-continuation.yml",
-      "sha256": "c6bdbcfd04cefdf8fa5295add3512f9c53fadc9b18130bdc0c94564beaced5db",
+      "sha256": "9bcc9996400f8b36398b30b911f0bddd0c51b872a12024b64c7d43d318a461e6",
       "owner": "ansible-collection-supplementary",
-      "purpose": "Repository-local native sanity compatibility: AST-equivalent formatting, escaped Unicode literals and documented exact schema type checks; protected donor provenance and review budgets retained."
+      "purpose": "Protected Source continuation with Supplementary-native E126 indentation adaptation; runtime behavior unchanged."
     },
     {
       "path": "scripts/review_request_continuation.py",
       "category": "local-required",
       "source": "shared-assets-lit/default/scripts/review_request_continuation.py",
-      "sha256": "650c6f59af8679531384c4ed4213e4448e466f9fb2a81096eb5689f03421c575",
+      "sha256": "71e062106e12759db9a8536306e02dcbc9bcb9950646d557339afe3e9daf6862",
       "owner": "ansible-collection-supplementary",
-      "purpose": "Repository-local native sanity compatibility: AST-equivalent formatting, escaped Unicode literals and documented exact schema type checks; protected donor provenance and review budgets retained."
+      "purpose": "Protected Source continuation with Supplementary-native E126 indentation adaptation; runtime behavior unchanged."
     },
     {
       "path": "scripts/review_request_provenance.py",
@@ -99,15 +99,13 @@
       "source": "shared-assets-lit/default/scripts/review_request_provenance.py",
       "sha256": "d20bfebbeeb7e2f08d5bb2604da6004f1d58d31fe2cf673ee221b9e1bbd519b1",
       "owner": "ansible-collection-supplementary",
-      "purpose": "Repository-local native sanity compatibility: AST-equivalent formatting, escaped Unicode literals and documented exact schema type checks; protected donor provenance and review budgets retained."
+      "purpose": "Scoped Port successor: typed default/base controller authority, current-target fences and authenticated ordinary-human fork verification; one-request budget retained."
     },
     {
       "path": "scripts/native_verifier_retry.py",
-      "category": "local-required",
+      "category": "central-managed",
       "source": "shared-assets-lit/default/scripts/native_verifier_retry.py",
-      "sha256": "66be48baeca8c45d98f7713a5a7b1ea1ebafbe5b25b06e98dd43c6e212b15150",
-      "owner": "ansible-collection-supplementary",
-      "purpose": "Repository-local native sanity compatibility: AST-equivalent formatting, escaped Unicode literals and documented exact schema type checks; protected donor provenance and review budgets retained."
+      "sha256": "627ffea4b615df7d4a4374038cc8aab8a8db4bc5b8cf5613ad20761145787a12"
     },
     {
       "path": "scripts/run-native-verifier-retry.sh",

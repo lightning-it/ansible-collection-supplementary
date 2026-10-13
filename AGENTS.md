@@ -195,8 +195,11 @@ mandatory; no automatic splitting, truncation or additional AI review follows.
 Per-file safe-read limits, historical evidence schemas and model-call contracts
 remain separate. No new model-call route is introduced by this pilot.
 
-`.lit/li219-pilot-source.json` records the actual protected Source MAIN and exact
-local hashes; a local feature-source hash is not protected rollout authority. The scoped inventory
+`.lit/li219-pilot-source.json` preserves the original protected Source MAIN
+adoption and its historical local hashes. Later LI-259 changes are bound to
+protected Source MAIN and the current local bytes in
+`.lit/li259-supplementary-port.json`; a local feature-source hash is not
+protected rollout authority. The scoped current inventory
 `.lit/li219-managed-assets.json`, validated by the pilot contract tests,
 distinguishes byte-identical source assets from locally adapted contracts. It
 does not opt the collection into a repository-wide managed inventory or fleet sync.
