@@ -208,11 +208,16 @@ def validate_neutral_metadata(
         "schema", "base_sha", "head_sha", "controller_sha", "pull_request_number",
         "producer_run_id", "review_path", "run_url",
     }
-    # Core's ordinary-human publisher has eight fields. Only its separate
-    # Renovate branch adds mutable metadata; live event fences bind both reads.
+    # Preserve the legacy eight-field human publisher and bind the current
+    # nine-field publisher's metadata revision independently of Renovate.
     kind = "copilot"
     title = "Current revision review passed"
-    if set(summary) != common_keys:
+    if set(summary) == common_keys | {"pull_request_last_edited_at"}:
+        revision = summary["pull_request_last_edited_at"]
+        if revision is not None:
+            require_timestamp(revision, "neutral metadata revision")
+        require_equal(revision, pr["_metadata_revision"], "neutral metadata revision")
+    elif set(summary) != common_keys:
         require_equal(
             set(summary),
             common_keys | {
