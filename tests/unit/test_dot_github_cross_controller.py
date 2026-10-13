@@ -910,6 +910,32 @@ if __name__ == "__main__":
 
 
 class OrdinaryHumanPublisherABITests(unittest.TestCase):
+    def test_current_nine_field_human_publisher_binds_both_live_metadata_reads(self):
+        key = f"repos/{TARGET}/commits/{HEAD}/check-runs?check_name=Current%20revision%20review&filter=all&per_page=100"
+        for revision in (None, "2026-10-07T00:00:00Z"):
+            with self.subTest(revision=revision):
+                responses = valid_responses()
+                responses[f"metadata/{PR_NUMBER}"] = revision
+                check = responses[key]["check_runs"][0]
+                summary = json.loads(check["output"]["summary"])
+                summary["pull_request_last_edited_at"] = revision
+                check["output"]["summary"] = json.dumps(summary)
+                client = FakeClient(responses)
+                MODULE.verify(client, valid_environment(), attempts=1, sleep=lambda _: None)
+                self.assertEqual(client.calls[f"metadata/{PR_NUMBER}"], 2)
+
+    def test_current_human_publisher_rejects_stale_or_malformed_metadata(self):
+        key = f"repos/{TARGET}/commits/{HEAD}/check-runs?check_name=Current%20revision%20review&filter=all&per_page=100"
+        for revision in ("2026-10-07T00:00:00Z", "invalid", False, 0, [], {}):
+            with self.subTest(revision=revision):
+                responses = valid_responses()
+                check = responses[key]["check_runs"][0]
+                summary = json.loads(check["output"]["summary"])
+                summary["pull_request_last_edited_at"] = revision
+                check["output"]["summary"] = json.dumps(summary)
+                with self.assertRaises(MODULE.VerificationError):
+                    MODULE.verify(FakeClient(responses), valid_environment(), attempts=1, sleep=lambda _: None)
+
     def test_actual_eight_key_publisher_accepts_default_controller_distinct_from_base(self):
         summary = json.loads(valid_neutral()["output"]["summary"])
         self.assertEqual(

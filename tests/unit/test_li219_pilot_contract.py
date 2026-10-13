@@ -61,6 +61,16 @@ class PilotContractTests(unittest.TestCase):
             asset = next(asset for asset in inventory["assets"] if asset["path"] == binding["target_path"])
             self.assertEqual(asset["sha256"], digest)
             if binding["target_sha256"] != digest:
+                if asset["path"] == "scripts/verify-dot-github-current-revision.py":
+                    adaptation = asset["local_adaptation"]
+                    self.assertEqual("local-required", asset["category"])
+                    self.assertEqual("ansible-collection-supplementary", asset["owner"])
+                    self.assertEqual({"base_commit", "base_blob", "base_sha256", "reason"}, set(adaptation))
+                    self.assertEqual(binding["target_sha256"], adaptation["base_sha256"])
+                    self.assertEqual("939058fb82697472f9410480d334ced3bc8f464a", adaptation["base_commit"])
+                    self.assertEqual("1de40c129f4ef8bd72156e90ef76801a61535ad3", adaptation["base_blob"])
+                    self.assertTrue(adaptation["reason"])
+                    continue
                 # Keep the LI-219 protected donor receipt immutable. LI-259 is
                 # a separate, exact protected-main overlay for changed assets.
                 successor = overlay_assets[binding["target_path"]]

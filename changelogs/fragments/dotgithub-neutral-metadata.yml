@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Bind the current nine-field ordinary-human neutral review publisher to the live PR metadata revision
+    in the reciprocal dot-github verifier, while retaining legacy human and Renovate contracts.

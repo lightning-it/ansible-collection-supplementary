@@ -1320,7 +1320,17 @@ class WorkflowCouplingTests(unittest.TestCase):
         self.assertIn("LI259_INFRA_RETRY=enabled", policy)
         self.assertIn("attempts 3 and 4", policy)
         self.assertNotIn("no third verifier attempt or LI-259 route is added", policy)
+        inventory = json.loads((ROOT / ".lit/li219-managed-assets.json").read_text())
+        local_assets = {asset["path"]: asset for asset in inventory["assets"]}
         for row in manifest["preserved_local_assets"]:
+            if row["path"] == "scripts/verify-dot-github-current-revision.py":
+                asset = local_assets[row["path"]]
+                adaptation = asset["local_adaptation"]
+                self.assertEqual(row["sha256"], adaptation["base_sha256"])
+                self.assertEqual("local-required", asset["category"])
+                self.assertEqual("ansible-collection-supplementary", asset["owner"])
+                self.assertEqual(asset["sha256"], hashlib.sha256((ROOT / row["path"]).read_bytes()).hexdigest())
+                continue
             self.assertEqual(row["sha256"], hashlib.sha256((ROOT / row["path"]).read_bytes()).hexdigest(), row["path"])
         for step in yaml.safe_load((ROOT / ".github/workflows/current-revision-rerun.yml").read_text())[
             "jobs"
