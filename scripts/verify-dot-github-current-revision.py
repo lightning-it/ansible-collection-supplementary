@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import os
@@ -35,6 +37,9 @@ PROMOTION_VERIFIER_NAMES = frozenset(
 RESERVATION_NAME = "Protected current-revision verifier"
 RELEASE_APP_LOGIN = "lightning-it-release-automation[bot]"
 RELEASE_APP_ID = 307565056
+ANCESTRY_APP_LOGIN = "lightning-it-shared-assets-sync[bot]"
+ANCESTRY_APP_ID = 307342877
+ANCESTRY_REVIEW_PATH = "deterministic evidence-bound ancestry exemption"
 PROMOTION_TITLE = "chore(release): promote develop to main"
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 POSITIVE_INTEGER_PATTERN = re.compile(r"^[1-9][0-9]*$")
@@ -158,6 +163,79 @@ def validate_event_producer(run: Mapping[str, Any], binding: Mapping[str, Any], 
         raise VerificationError("event producer predates the bound metadata revision")
 
 
+def validate_ancestry_binding(client: GitHubClient, pr: Mapping[str, Any], base: str, head: str) -> None:
+    """Accept only the existing Root ancestry merge, never a content exemption."""
+    author = require_mapping(pr.get("user"), "ancestry author")
+    require_equal(author.get("type"), "Bot", "ancestry author type")
+    identity = (author.get("login"), author.get("id"))
+    if type(author.get("id")) is not int or identity not in {
+        (ANCESTRY_APP_LOGIN, ANCESTRY_APP_ID),
+        (RELEASE_APP_LOGIN, RELEASE_APP_ID),
+    }:
+        raise VerificationError("ancestry author identity is invalid")
+    require_equal(pr["base"]["ref"], "develop", "ancestry base ref")
+    require_equal(pr["head"]["repo"]["full_name"], TARGET_REPOSITORY, "ancestry head repository")
+    branch = require_mapping(client.get(f"repos/{TARGET_REPOSITORY}/branches/main"), "ancestry main branch")
+    require_equal(branch.get("name"), "main", "ancestry main name")
+    if branch.get("protected") is not True:
+        raise VerificationError("ancestry main protection is invalid")
+    main = require_mapping(branch.get("commit"), "ancestry main commit").get("sha")
+    if not isinstance(main, str):
+        raise VerificationError("ancestry main SHA is invalid")
+    require_sha(main, "ancestry main SHA")
+    require_equal(pr["head"]["ref"], f"backmerge/github-{main[:12]}-{base[:12]}-main", "ancestry head ref")
+    require_equal(pr.get("title"), f"chore(governance): record main ancestry before {main[:12]}", "ancestry title")
+    commit = require_mapping(client.get(f"repos/{TARGET_REPOSITORY}/git/commits/{head}"), "ancestry commit")
+    require_equal(commit.get("sha"), head, "ancestry commit SHA")
+    parents = require_list(commit.get("parents"), "ancestry parents")
+    require_equal(
+        [require_mapping(parent, "ancestry parent").get("sha") for parent in parents], [base, main], "ancestry parents"
+    )
+    comparison = require_mapping(
+        client.get(f"repos/{TARGET_REPOSITORY}/compare/{base}...{head}"), "ancestry comparison"
+    )
+    require_equal(
+        require_mapping(comparison.get("merge_base_commit"), "ancestry merge base").get("sha"),
+        base,
+        "ancestry merge base SHA",
+    )
+    files = require_list(comparison.get("files"), "ancestry changed files")
+    if len(files) != 1:
+        raise VerificationError("ancestry changes content beyond its proof")
+    changed = require_mapping(files[0], "ancestry changed file")
+    require_equal(changed.get("filename"), ".lit/main-ancestry.json", "ancestry changed path")
+    require_equal(changed.get("status"), "modified", "ancestry changed status")
+    resource = require_mapping(
+        client.get(f"repos/{TARGET_REPOSITORY}/contents/.lit/main-ancestry.json?ref={head}"), "ancestry proof file"
+    )
+    require_equal(resource.get("type"), "file", "ancestry proof type")
+    require_equal(resource.get("encoding"), "base64", "ancestry proof encoding")
+    encoded, size = resource.get("content"), resource.get("size")
+    if not isinstance(encoded, str) or len(encoded) > 8192 or type(size) is not int or not 0 < size <= 4096:
+        raise VerificationError("ancestry proof size or content is invalid")
+    try:
+        decoded = base64.b64decode(encoded.replace("\n", ""), validate=True)
+        require_equal(len(decoded), size, "ancestry proof size")
+        proof = require_mapping(json.loads(decoded), "ancestry proof")
+    except (ValueError, UnicodeError, binascii.Error) as exc:
+        raise VerificationError("ancestry proof is malformed") from exc
+    require_equal(
+        set(proof),
+        {"schema_version", "repository", "main_sha", "develop_parent_sha", "purpose"},
+        "ancestry proof fields",
+    )
+    if type(proof.get("schema_version")) is not int:
+        raise VerificationError("ancestry proof schema is invalid")
+    for field, value in (
+        ("schema_version", 1),
+        ("repository", TARGET_REPOSITORY),
+        ("main_sha", main),
+        ("develop_parent_sha", base),
+        ("purpose", "Bind the reviewed main ancestry backmerge."),
+    ):
+        require_equal(proof.get(field), value, f"ancestry proof {field}")
+
+
 def validate_neutral_metadata(
     client: GitHubClient,
     reservation: Mapping[str, Any],
@@ -212,7 +290,13 @@ def validate_neutral_metadata(
     # nine-field publisher's metadata revision independently of Renovate.
     kind = "copilot"
     title = "Current revision review passed"
-    if set(summary) == common_keys | {"pull_request_last_edited_at"}:
+    if summary.get("review_path") == ANCESTRY_REVIEW_PATH:
+        require_equal(set(summary), common_keys, "neutral ancestry fields")
+        require_equal(summary.get("controller_sha"), base, "neutral ancestry controller")
+        validate_ancestry_binding(client, pr, base, head)
+        kind = "ancestry-backmerge"
+        title = "Current revision deterministic exemption passed"
+    elif set(summary) == common_keys | {"pull_request_last_edited_at"}:
         revision = summary["pull_request_last_edited_at"]
         if revision is not None:
             require_timestamp(revision, "neutral metadata revision")
