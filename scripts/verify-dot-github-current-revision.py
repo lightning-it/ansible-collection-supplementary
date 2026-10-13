@@ -168,10 +168,7 @@ def validate_ancestry_binding(client: GitHubClient, pr: Mapping[str, Any], base:
     author = require_mapping(pr.get("user"), "ancestry author")
     require_equal(author.get("type"), "Bot", "ancestry author type")
     identity = (author.get("login"), author.get("id"))
-    if type(author.get("id")) is not int or identity not in {
-        (ANCESTRY_APP_LOGIN, ANCESTRY_APP_ID),
-        (RELEASE_APP_LOGIN, RELEASE_APP_ID),
-    }:
+    if type(author.get("id")) is not int or identity != (ANCESTRY_APP_LOGIN, ANCESTRY_APP_ID):
         raise VerificationError("ancestry author identity is invalid")
     require_equal(pr["base"]["ref"], "develop", "ancestry base ref")
     require_equal(pr["head"]["repo"]["full_name"], TARGET_REPOSITORY, "ancestry head repository")
@@ -204,7 +201,8 @@ def validate_ancestry_binding(client: GitHubClient, pr: Mapping[str, Any], base:
         raise VerificationError("ancestry changes content beyond its proof")
     changed = require_mapping(files[0], "ancestry changed file")
     require_equal(changed.get("filename"), ".lit/main-ancestry.json", "ancestry changed path")
-    require_equal(changed.get("status"), "modified", "ancestry changed status")
+    if changed.get("status") not in {"added", "modified"}:
+        raise VerificationError("ancestry changed status is invalid")
     resource = require_mapping(
         client.get(f"repos/{TARGET_REPOSITORY}/contents/.lit/main-ancestry.json?ref={head}"), "ancestry proof file"
     )

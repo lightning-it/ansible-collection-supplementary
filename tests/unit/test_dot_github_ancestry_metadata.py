@@ -81,11 +81,23 @@ class AncestryMetadataTests(unittest.TestCase):
         self.assertEqual(client.calls[MAIN_PATH], 2)
         self.assertEqual(client.calls[PROOF_PATH], 2)
 
-    def test_accepts_existing_release_app_ancestry_identity(self):
+    def test_rejects_release_app_for_root_ancestry_identity(self):
         responses, environment = fixture()
         responses[FIXTURES.PR_PATH]["user"].update(login=MODULE.RELEASE_APP_LOGIN, id=MODULE.RELEASE_APP_ID)
         environment.update(EVENT_AUTHOR=MODULE.RELEASE_APP_LOGIN)
+        with self.assertRaises(MODULE.VerificationError):
+            verify(responses, environment)
+
+    def test_accepts_first_added_proof_but_rejects_removed_or_renamed_proof(self):
+        responses, environment = fixture()
+        responses[COMPARE_PATH]["files"][0]["status"] = "added"
         verify(responses, environment)
+        for status in ("removed", "renamed", "copied", None):
+            with self.subTest(status=status):
+                responses, environment = fixture()
+                responses[COMPARE_PATH]["files"][0]["status"] = status
+                with self.assertRaises(MODULE.VerificationError):
+                    verify(responses, environment)
 
     def test_rejects_wrong_title_identity_and_summary_contract(self):
         for mutation in ("title", "identity", "extra", "controller", "path", "schema"):
