@@ -59,7 +59,7 @@
     {
       "path": "scripts/verify-dot-github-current-revision.py",
       "category": "local-required",
-      "sha256": "e474faa672e556a89ce51b184bfe9a83f345d5221187b9e2b494caf9b6ff4797",
+      "sha256": "92c90d9d7262b7d8b98f690abd3e6351def847a497e642a2a9953ac15bcab828",
       "local_adaptation": {
         "base_commit": "939058fb82697472f9410480d334ced3bc8f464a",
         "base_blob": "1de40c129f4ef8bd72156e90ef76801a61535ad3",

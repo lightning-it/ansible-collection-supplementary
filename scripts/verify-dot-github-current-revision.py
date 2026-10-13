@@ -168,7 +168,11 @@ def validate_ancestry_binding(client: GitHubClient, pr: Mapping[str, Any], base:
     author = require_mapping(pr.get("user"), "ancestry author")
     require_equal(author.get("type"), "Bot", "ancestry author type")
     identity = (author.get("login"), author.get("id"))
-    if type(author.get("id")) is not int or identity != (ANCESTRY_APP_LOGIN, ANCESTRY_APP_ID):
+    if (
+        not isinstance(author.get("id"), int)
+        or isinstance(author.get("id"), bool)
+        or identity != (ANCESTRY_APP_LOGIN, ANCESTRY_APP_ID)
+    ):
         raise VerificationError("ancestry author identity is invalid")
     require_equal(pr["base"]["ref"], "develop", "ancestry base ref")
     require_equal(pr["head"]["repo"]["full_name"], TARGET_REPOSITORY, "ancestry head repository")
@@ -209,7 +213,13 @@ def validate_ancestry_binding(client: GitHubClient, pr: Mapping[str, Any], base:
     require_equal(resource.get("type"), "file", "ancestry proof type")
     require_equal(resource.get("encoding"), "base64", "ancestry proof encoding")
     encoded, size = resource.get("content"), resource.get("size")
-    if not isinstance(encoded, str) or len(encoded) > 8192 or type(size) is not int or not 0 < size <= 4096:
+    if (
+        not isinstance(encoded, str)
+        or len(encoded) > 8192
+        or not isinstance(size, int)
+        or isinstance(size, bool)
+        or not 0 < size <= 4096
+    ):
         raise VerificationError("ancestry proof size or content is invalid")
     try:
         decoded = base64.b64decode(encoded.replace("\n", ""), validate=True)
@@ -222,7 +232,7 @@ def validate_ancestry_binding(client: GitHubClient, pr: Mapping[str, Any], base:
         {"schema_version", "repository", "main_sha", "develop_parent_sha", "purpose"},
         "ancestry proof fields",
     )
-    if type(proof.get("schema_version")) is not int:
+    if not isinstance(proof.get("schema_version"), int) or isinstance(proof.get("schema_version"), bool):
         raise VerificationError("ancestry proof schema is invalid")
     for field, value in (
         ("schema_version", 1),
