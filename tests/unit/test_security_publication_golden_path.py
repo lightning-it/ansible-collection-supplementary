@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -40,18 +41,25 @@ class SecurityPublicationGoldenPathTests(unittest.TestCase):
 
     def test_release_validation_wait_covers_complete_ci_budget(self) -> None:
         environment = self.workflow["env"]
-        attempts = 7 * int(environment["RELEASE_VALIDATION_WINDOW_ATTEMPTS"]) + int(
-            environment["RELEASE_VALIDATION_FINAL_ATTEMPTS"]
+        self.assertFalse(
+            {
+                "RELEASE_VALIDATION_WINDOW_ATTEMPTS",
+                "RELEASE_VALIDATION_FINAL_ATTEMPTS",
+                "RELEASE_VALIDATION_POLL_SECONDS",
+            }
+            & environment.keys()
         )
-        budget = attempts * int(environment["RELEASE_VALIDATION_POLL_SECONDS"]) // 60
         required = int(environment["RELEASE_VALIDATION_WORST_CASE_MINUTES"]) + int(
             environment["RELEASE_VALIDATION_QUEUE_ALLOWANCE_MINUTES"]
         )
-        self.assertGreaterEqual(budget, required)
         jobs = self.workflow["jobs"]
         reusable = yaml.safe_load((WORKFLOW_PATH.parent / "release-validation-window.yml").read_text())
         self.assertLessEqual(reusable["jobs"]["window"]["timeout-minutes"], 90)
         wait = reusable["jobs"]["window"]["steps"][0]["run"]
+        intervals = re.findall(r"(?m)^\s*sleep ([1-9][0-9]*)\s*$", wait)
+        self.assertEqual(["30"], intervals)
+        poll_seconds = int(intervals[0])
+        attempts = 0
         predecessor = "security-classification"
         for index in range(1, 9):
             job_name = (
@@ -64,6 +72,7 @@ class SecurityPublicationGoldenPathTests(unittest.TestCase):
             self.assertEqual("./.github/workflows/release-validation-window.yml", job["uses"])
             self.assertEqual("${{ inputs.release_sha }}", job["with"]["release_sha"])
             self.assertEqual(140 if index == 8 else 160, job["with"]["attempts"])
+            attempts += job["with"]["attempts"]
             self.assertEqual(index == 8, job["with"]["final_window"])
             if index > 1:
                 for binding, output in (
@@ -73,6 +82,9 @@ class SecurityPublicationGoldenPathTests(unittest.TestCase):
                 ):
                     self.assertEqual(f"${{{{ needs.{predecessor}.outputs.{output} }}}}", job["with"][binding])
             predecessor = job_name
+        budget = attempts * poll_seconds // 60
+        self.assertEqual(630, budget)
+        self.assertGreaterEqual(budget, required)
         for exact_identity in (
             '.event == "push"',
             '.head_branch == "main"',
