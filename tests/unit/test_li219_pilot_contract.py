@@ -16,14 +16,16 @@ ASSETS = {
     ".github/workflows/copilot-review-refresh.yml",
     ".github/workflows/current-revision-rerun.yml",
     ".github/workflows/review-event-reconcile.yml",
-    ".github/workflows/dot-github-current-revision-required.yml",
     "scripts/review-event-reconcile.py",
     ".github/workflows/review-request-continuation.yml",
     "scripts/review_request_continuation.py",
     "scripts/review_request_provenance.py",
     "scripts/review_content_markers.py",
-    "scripts/verify-dot-github-current-revision.py",
     "scripts/lit-push-ready.py",
+}
+RETIRED = {
+    ".github/workflows/dot-github-current-revision-required.yml",
+    "scripts/verify-dot-github-current-revision.py",
     "tests/unit/test_dot_github_current_revision.py",
 }
 
@@ -49,28 +51,24 @@ class PilotContractTests(unittest.TestCase):
         source = json.loads((ROOT / ".lit/li219-pilot-source.json").read_text())
         overlay = json.loads((ROOT / ".lit/li259-supplementary-port.json").read_text())
         overlay_assets = {row["path"]: row for row in overlay["assets"]}
+        retirement = json.loads((ROOT / ".lit/li319-central-verifier-retirement.json").read_text())
+        retired = {row["path"]: row for row in retirement["retired_assets"]}
         self.assertEqual("li219-three-pilot", inventory["scope"])
         self.assertEqual("lightning-it/ansible-collection-supplementary", inventory["repository"])
         self.assertEqual(ASSETS, {asset["path"] for asset in inventory["assets"]})
         self.assertEqual(len(ASSETS), len(inventory["assets"]))
-        self.assertEqual(ASSETS, {binding["target_path"] for binding in source["bindings"]})
+        self.assertEqual(ASSETS | RETIRED, {binding["target_path"] for binding in source["bindings"]})
         for binding in source["bindings"]:
             path = ROOT / binding["target_path"]
+            if binding["target_path"] in RETIRED:
+                self.assertFalse(path.exists())
+                self.assertEqual(binding["target_sha256"], retired[binding["target_path"]]["historical_target_sha256"])
+                continue
             self.assertFalse(path.is_symlink())
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
             asset = next(asset for asset in inventory["assets"] if asset["path"] == binding["target_path"])
             self.assertEqual(asset["sha256"], digest)
             if binding["target_sha256"] != digest:
-                if asset["path"] == "scripts/verify-dot-github-current-revision.py":
-                    adaptation = asset["local_adaptation"]
-                    self.assertEqual("local-required", asset["category"])
-                    self.assertEqual("ansible-collection-supplementary", asset["owner"])
-                    self.assertEqual({"base_commit", "base_blob", "base_sha256", "reason"}, set(adaptation))
-                    self.assertEqual(binding["target_sha256"], adaptation["base_sha256"])
-                    self.assertEqual("939058fb82697472f9410480d334ced3bc8f464a", adaptation["base_commit"])
-                    self.assertEqual("1de40c129f4ef8bd72156e90ef76801a61535ad3", adaptation["base_blob"])
-                    self.assertTrue(adaptation["reason"])
-                    continue
                 # Keep the LI-219 protected donor receipt immutable. LI-259 is
                 # a separate, exact protected-main overlay for changed assets.
                 successor = overlay_assets[binding["target_path"]]
@@ -198,6 +196,9 @@ class PilotContractTests(unittest.TestCase):
         self.assertEqual({"standard", "trust-root"}, set(config["review"]["profiles"]))
         self.assertEqual(2, config["review"]["classification"]["version"])
         self.assertEqual(500000, config["review"]["warn_diff_bytes"])
-        verifier = (ROOT / "scripts/verify-dot-github-current-revision.py").read_text()
-        self.assertIn("PROMOTION_TITLE", verifier)
-        self.assertIn("def validate_aggregated_promotion(", verifier)
+        retirement = json.loads((ROOT / ".lit/li319-central-verifier-retirement.json").read_text())
+        self.assertEqual("lightning-it/.github", retirement["central_source"]["repository"])
+        self.assertEqual("refs/heads/main", retirement["central_source"]["ref"])
+        self.assertEqual(21200954, retirement["ruleset_id"])
+        for row in retirement["retired_assets"]:
+            self.assertFalse((ROOT / row["path"]).exists())

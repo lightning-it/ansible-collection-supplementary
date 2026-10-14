@@ -216,8 +216,28 @@ sealed total budget 180 minutes, and the start reserve 60 minutes. Claim-to-POST
 visibility gaps are bounded GET-only pending; unknown writes never repeat.
 Observed drift, deterministic failures and exhausted feasible budgets are terminal.
 No recovery creates AI requests, pushes, PRs or reviewed revisions. The separate
-cross-controller receiver remains limited to attempts 1/2. Existing unsealed runs
-gain no authority, and activation still requires genuine native acceptance.
+former cross-controller receiver is now owned by the central `.github` source
+under LI-319; Supplementary no longer distributes or executes that authority.
+Existing unsealed runs gain no authority, and activation still requires genuine
+native acceptance.
+
+### LI-319 central verification ownership
+
+The owner-authorized migration makes public `lightning-it/.github/main` the sole
+central verifier source. Live ruleset 21200954 was switched through the protected
+private Management path after overlapping mandatory enforcement and native
+one-person acceptance. Supplementary remains a consumer of unchanged rule
+20938748 and owns its Collection, compatibility, security and release gates.
+One authorized person may approve their own initiated operation through the
+native self-reviewable environment; no second human approval is required.
+
+The retired local counter-verifier, its dedicated tests and its three active
+managed-inventory entries must not be regenerated. Their exact prior blobs and
+historical LI-219/LI-259 bindings are recorded in
+`.lit/li319-central-verifier-retirement.json`; historical source receipts remain
+unchanged. Only explicitly bound current policy updates supersede old policy
+hashes. Existing review consumption, technical retry limits and release evidence
+are preserved. Private administrative credentials never enter this repository.
 
 ## 2. Repository Baseline (This Repo)
 
