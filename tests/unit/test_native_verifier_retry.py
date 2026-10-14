@@ -1312,8 +1312,14 @@ class WorkflowCouplingTests(unittest.TestCase):
                         b"blob " + str(len(content)).encode() + b"\0" + content, usedforsecurity=False
                     ).hexdigest(),
                 )
+        retirement = json.loads((ROOT / ".lit/li319-central-verifier-retirement.json").read_text())
+        policies = {row["path"]: row for row in retirement["policy_updates"]}
+        retired = {row["path"]: row for row in retirement["retired_assets"]}
         for row in manifest["local_policy_assets"]:
-            self.assertEqual(row["sha256"], hashlib.sha256((ROOT / row["path"]).read_bytes()).hexdigest())
+            self.assertEqual(row["sha256"], policies[row["path"]]["previous_sha256"])
+            self.assertEqual(
+                policies[row["path"]]["sha256"], hashlib.sha256((ROOT / row["path"]).read_bytes()).hexdigest()
+            )
         instructions = (ROOT / ".github/copilot-instructions.md").read_text()
         self.assertIn("AGENTS_SHA256: " + hashlib.sha256((ROOT / "AGENTS.md").read_bytes()).hexdigest(), instructions)
         policy = (ROOT / "AGENTS.md").read_text()
@@ -1323,13 +1329,10 @@ class WorkflowCouplingTests(unittest.TestCase):
         inventory = json.loads((ROOT / ".lit/li219-managed-assets.json").read_text())
         local_assets = {asset["path"]: asset for asset in inventory["assets"]}
         for row in manifest["preserved_local_assets"]:
-            if row["path"] == "scripts/verify-dot-github-current-revision.py":
-                asset = local_assets[row["path"]]
-                adaptation = asset["local_adaptation"]
-                self.assertEqual(row["sha256"], adaptation["base_sha256"])
-                self.assertEqual("local-required", asset["category"])
-                self.assertEqual("ansible-collection-supplementary", asset["owner"])
-                self.assertEqual(asset["sha256"], hashlib.sha256((ROOT / row["path"]).read_bytes()).hexdigest())
+            if row["path"] in retired:
+                self.assertFalse((ROOT / row["path"]).exists())
+                self.assertNotIn(row["path"], local_assets)
+                self.assertEqual(row["sha256"], retired[row["path"]]["historical_preserved_sha256"])
                 continue
             self.assertEqual(row["sha256"], hashlib.sha256((ROOT / row["path"]).read_bytes()).hexdigest(), row["path"])
         for step in yaml.safe_load((ROOT / ".github/workflows/current-revision-rerun.yml").read_text())[
@@ -1407,10 +1410,8 @@ bash() {
         self.assertLess(function.index("seal_native_retry_contract"), function.index("claim_review_operation"))
         self.assertLess(function.rindex("seal_native_retry_contract"), function.index("--method POST"))
 
-    def test_unadapted_cross_receiver_keeps_attempt_limit_and_ai_first_attempt_only(self):
-        text = (ROOT / "scripts/verify-dot-github-current-revision.py").read_text()
-        self.assertIn("if run_attempt not in {1, 2}:", text)
-        self.assertNotIn("native_verifier_retry", text)
+    def test_retired_cross_receiver_and_ai_first_attempt_only(self):
+        self.assertFalse((ROOT / "scripts/verify-dot-github-current-revision.py").exists())
         producer = (ROOT / ".github/workflows/copilot-review.yml").read_text()
         request = producer.split("  request-current-revision-review:", 1)[1].split("    permissions:", 1)[0]
         self.assertIn("github.run_attempt == 1", request)
