@@ -1,7 +1,0 @@
----
-minor_changes:
-  - >-
-    Retire the reciprocal .github counter-verifier after protected central-source
-    cutover, retaining Collection, compatibility, security and release checks.
-    Preserve historical adoption receipts and authenticate the retired inventory
-    separately so future synchronization cannot restore local verifier authority.
