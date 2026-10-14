@@ -665,20 +665,14 @@ class ReviewEventTests(unittest.TestCase):
 
         import yaml
 
-        verifier = ast.parse((ROOT / "scripts/verify-dot-github-current-revision.py").read_text())
-        action_set = next(
-            node.value.args[0]
-            for node in verifier.body
-            if isinstance(node, ast.Assign)
-            and any(isinstance(t, ast.Name) and t.id == "PRODUCER_ACTIONS" for t in node.targets)
-        )
-        actions = {node.value for node in action_set.elts}
+        # Receiver authority and its own workflow tests live in .github. Keep
+        # the Collection's actual locator and helper-selection contract here.
+        producer = yaml.safe_load((ROOT / ".github/workflows/copilot-review.yml").read_text())
+        actions = set(producer.get("on", producer.get(True))["pull_request_target"]["types"])
         locator = ast.parse((ROOT / "scripts/review-event-reconcile.py").read_text())
         function = next(n for n in locator.body if isinstance(n, ast.FunctionDef) and n.name == "required_locator")
         action_tuple = next(n.iter for n in ast.walk(function) if isinstance(n, ast.comprehension))
         self.assertEqual(actions, {node.value for node in action_tuple.elts})
-        outer = yaml.safe_load((ROOT / ".github/workflows/dot-github-current-revision-required.yml").read_text())
-        self.assertEqual(actions, set(outer.get("on", outer.get(True))["pull_request_target"]["types"]))
         helper = yaml.safe_load((ROOT / ".github/workflows/current-revision-rerun.yml").read_text())
         scripts = [step.get("run", "") for job in helper["jobs"].values() for step in job.get("steps", [])]
         body = next(script for script in scripts if 'required_runs="$(jq -c' in script)
