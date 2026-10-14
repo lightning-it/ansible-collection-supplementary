@@ -1317,7 +1317,9 @@ class WorkflowCouplingTests(unittest.TestCase):
         retired = {row["path"]: row for row in retirement["retired_assets"]}
         for row in manifest["local_policy_assets"]:
             self.assertEqual(row["sha256"], policies[row["path"]]["previous_sha256"])
-            self.assertEqual(policies[row["path"]]["sha256"], hashlib.sha256((ROOT / row["path"]).read_bytes()).hexdigest())
+            self.assertEqual(
+                policies[row["path"]]["sha256"], hashlib.sha256((ROOT / row["path"]).read_bytes()).hexdigest()
+            )
         instructions = (ROOT / ".github/copilot-instructions.md").read_text()
         self.assertIn("AGENTS_SHA256: " + hashlib.sha256((ROOT / "AGENTS.md").read_bytes()).hexdigest(), instructions)
         policy = (ROOT / "AGENTS.md").read_text()

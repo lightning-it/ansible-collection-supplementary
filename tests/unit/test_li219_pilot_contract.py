@@ -23,9 +23,11 @@ ASSETS = {
     "scripts/review_content_markers.py",
     "scripts/lit-push-ready.py",
 }
-RETIRED = {".github/workflows/dot-github-current-revision-required.yml",
-           "scripts/verify-dot-github-current-revision.py",
-           "tests/unit/test_dot_github_current_revision.py"}
+RETIRED = {
+    ".github/workflows/dot-github-current-revision-required.yml",
+    "scripts/verify-dot-github-current-revision.py",
+    "tests/unit/test_dot_github_current_revision.py",
+}
 
 
 class PilotContractTests(unittest.TestCase):
