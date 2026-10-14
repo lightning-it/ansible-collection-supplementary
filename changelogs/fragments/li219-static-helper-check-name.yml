@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Use a static protected main helper check name so GitHub preserves the
-    required context even when the helper job is skipped.
