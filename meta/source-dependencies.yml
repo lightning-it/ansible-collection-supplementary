@@ -42,7 +42,7 @@ container_images:
   - reference: "docker.io/hashicorp/vault:1.21@sha256:4e33b126a59c0c333b76fb4e894722462659a6bec7c48c9ee8cea56fccfd2569"
     locations:
       - "roles/vault_deploy/defaults/main.yml"
-  - reference: "docker.io/library/nginx:stable@sha256:09cc2702709e6388d979d8030e3ab4eb1ceb699b2dced26d7543e872a822e823"
+  - reference: "docker.io/library/nginx:stable@sha256:eb1c896deef834f4e056829fd6dadac8305501f16cc71ba65fb252c8d0aa168e"
     locations:
       - "roles/nginx_deploy/defaults/main.yml"
   - reference: "docker.io/library/postgres:16@sha256:65b16a8b326e0cfbdf33fa7e783f2a0cb352a61448616ccccfd616ef42aa0f65"
