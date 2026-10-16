@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    vault_pki_certificate - reject present server key usage without Digital Signature
+    or with CA-signing or unrelated usage before advancing custody or materializing a certificate.

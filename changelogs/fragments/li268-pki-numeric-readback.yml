@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    vault_pki_leaf_cac - normalize positive numeric inventory fields to Vault API integers
+    before reconciliation and independent readback; reject invalid duration/key counts before API access.

@@ -25,12 +25,9 @@
   no_log: true
 
 - name: Reconcile incomplete multipart upload cleanup
-  community.aws.s3_lifecycle:
-    name: "{{ hetzner_object_storage_cac_bucket }}"
-    rule_id: abort-incomplete-multipart-uploads
-    status: enabled
-    abort_incomplete_multipart_upload_days: >-
-      {{ hetzner_object_storage_cac_abort_incomplete_multipart_upload_days }}
+  lit.supplementary.hetzner_s3_abort_lifecycle:
+    bucket: "{{ hetzner_object_storage_cac_bucket }}"
+    abort_days: "{{ hetzner_object_storage_cac_abort_incomplete_multipart_upload_days }}"
     endpoint_url: "{{ hetzner_object_storage_cac_endpoint }}"
     region: "{{ hetzner_object_storage_cac_region }}"
     access_key: "{{ _hetzner_object_storage_cac_access_key }}"

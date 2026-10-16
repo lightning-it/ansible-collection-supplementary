@@ -140,6 +140,7 @@ class NativeManifestReconciliationTests(unittest.TestCase):
                     role = collection / "roles" / (component + "_deploy")
                     (role / "tasks").mkdir(parents=True)
                     (role / "templates").mkdir()
+                    shutil.copytree(ROOT / "roles" / (component + "_deploy") / "defaults", role / "defaults")
                     (collection / "plugins/filter").mkdir(parents=True)
                     shutil.copy2(ROOT / "plugins/filter/native_manifest.py", collection / "plugins/filter")
                     shutil.copy2(

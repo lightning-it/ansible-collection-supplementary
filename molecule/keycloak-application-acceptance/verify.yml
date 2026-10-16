@@ -42,6 +42,15 @@
       KEYCLOAK_TEST_INVALID_PASSWORD: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_INVALID_PASSWORD') }}"
       KEYCLOAK_TEST_ARTIFACTS: "{{ keycloak_acceptance_artifacts_remote }}"
   tasks:
+    - name: Verify optional default-role cleanup against an isolated real realm
+      ansible.builtin.import_tasks: ../shared/keycloak/default-role-cleanup.yml
+      vars:
+        keycloak_cleanup_probe_url: http://127.0.0.1:28080
+        keycloak_cleanup_probe_password: "{{ lookup('ansible.builtin.env', 'KEYCLOAK_TEST_ADMIN_PASSWORD') }}"
+        keycloak_cleanup_probe_scenario: keycloak-application-acceptance
+        keycloak_cleanup_probe_junit_dir: >-
+          {{ keycloak_acceptance_artifacts_local ~ "/junit" }}
+
     - name: Require all deterministic test identities and ephemeral secrets
       ansible.builtin.assert:
         that:

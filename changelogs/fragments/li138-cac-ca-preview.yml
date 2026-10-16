@@ -1,0 +1,10 @@
+---
+bugfixes:
+  - vault_pki_leaf_cac - use the required CaC role and variable namespace for API reconciliation.
+  - >-
+    keycloak_deploy and guacamole_deploy - predict pinned public CA materialization
+    on fresh hosts without writing check-mode files.
+  - >-
+    keycloak_deploy and guacamole_deploy - bind manifests to content-addressed CA paths
+    so failed deployments retain the previous trust boundary.
+  - vault_pki_leaf_cac - reconcile complete TLS server key usages and close undeclared custom usage OIDs.

@@ -1,0 +1,4 @@
+---
+vault_connection_credentials_sources: []
+vault_connection_credentials_auth: {}
+vault_connection_credentials_kv_mount: ""

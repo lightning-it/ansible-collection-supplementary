@@ -1,0 +1,8 @@
+---
+vault_pki_leaf_cac_api_url: ""
+vault_pki_leaf_cac_ca_path: ""
+vault_pki_leaf_cac_admin_token: ""
+vault_pki_leaf_cac_mount: ""
+vault_pki_leaf_cac_name: ""
+vault_pki_leaf_cac_definition: {}
+vault_pki_leaf_cac_allow_change: false

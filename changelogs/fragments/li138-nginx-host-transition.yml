@@ -1,0 +1,3 @@
+---
+bugfixes:
+  - nginx_deploy - reject retained default-site files before switching an existing deployment to host networking.

@@ -1,0 +1,65 @@
+---
+- name: Validate Vault secret bundle contract
+  ansible.builtin.assert:
+    that:
+      - vault_secret_bundle_address | trim | length > 0
+      - vault_secret_bundle_kv_mount | trim | length > 0
+      - vault_secret_bundle_kv_path | trim | length > 0
+      - vault_secret_bundle_items is sequence
+      - vault_secret_bundle_items is not string
+      - vault_secret_bundle_static_data is mapping
+      - vault_secret_bundle_ssh_keypairs is sequence
+      - vault_secret_bundle_ssh_keypairs is not string
+      - >-
+        (vault_secret_bundle_token | trim | length > 0) or
+        ((vault_secret_bundle_role_id | trim | length > 0) and
+         (vault_secret_bundle_secret_id | trim | length > 0))
+    fail_msg: "The Vault secret bundle requires a KV path and complete token or AppRole authentication."
+  no_log: true
+  run_once: true
+
+- name: Validate requested Vault secret fields
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.name | default('', true) is match('^[A-Za-z][A-Za-z0-9_]*$')
+      - item.length | default(40) | int >= 16
+      - item.chars | default('ascii_letters,digits') | string | length > 0
+    fail_msg: >-
+      Each Vault secret item requires a safe name, a minimum length of 16,
+      and a non-empty password character contract.
+    quiet: true
+  loop: "{{ vault_secret_bundle_items }}"
+  loop_control:
+    label: "{{ item.name | default('invalid') }}"
+  no_log: true
+  run_once: true
+
+- name: Validate every SSH keypair declaration before contacting Vault
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.keys() | list | sort == ['private_field', 'public_field']
+      - item.private_field is string
+      - item.public_field is string
+      - item.private_field is match('^[A-Za-z][A-Za-z0-9_]*$')
+      - item.public_field is match('^[A-Za-z][A-Za-z0-9_]*$')
+      - item.private_field != item.public_field
+    quiet: true
+  loop: "{{ vault_secret_bundle_ssh_keypairs }}"
+  no_log: true
+  run_once: true
+
+- name: Require distinct keypair and generated-secret field ownership
+  ansible.builtin.assert:
+    that:
+      - >-
+        (vault_secret_bundle_ssh_keypairs | map(attribute='private_field') | list
+        + vault_secret_bundle_ssh_keypairs | map(attribute='public_field') | list
+        + vault_secret_bundle_items | map(attribute='name') | list) | length
+        == (vault_secret_bundle_ssh_keypairs | map(attribute='private_field') | list
+        + vault_secret_bundle_ssh_keypairs | map(attribute='public_field') | list
+        + vault_secret_bundle_items | map(attribute='name') | list) | unique | length
+    quiet: true
+  no_log: true
+  run_once: true

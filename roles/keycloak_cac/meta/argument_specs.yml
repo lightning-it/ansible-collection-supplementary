@@ -76,6 +76,17 @@ argument_specs:
         type: list
         elements: dict
         no_log: true
+      keycloak_cac_default_role_cleanup_enabled:
+        description: Explicit opt-in to removing catalogued default-role assignments; requires separate authorization.
+        type: bool
+        default: false
+      keycloak_cac_default_role_cleanup:
+        description: >-
+          Realms whose effective default-role children are removed only from an
+          exact allowlist; each entry may require an empty realm.
+        type: list
+        elements: dict
+        no_log: true
       keycloak_cac_samba_ldap_enabled:
         description: Whether the Samba Active Directory LDAPS provider is reconciled.
         type: bool

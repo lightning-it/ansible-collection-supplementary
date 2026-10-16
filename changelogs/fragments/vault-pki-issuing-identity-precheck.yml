@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    vault_pki_certificate - Reject malformed or empty AppRole issuing
+    credentials before any Vault reads or certificate issuance.

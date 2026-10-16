@@ -16,6 +16,8 @@ class VaultSecretBundleContractTests(unittest.TestCase):
         tasks = yaml.safe_load(TASKS.read_text(encoding="utf-8"))
 
         self.assertTrue(tasks)
+        self.assertEqual(tasks[0]["ansible.builtin.import_tasks"], "assert.yml")
+        self.assertEqual(tasks[0]["tags"], "always")
         for task in tasks:
             with self.subTest(task=task.get("name")):
                 self.assertIs(task.get("run_once"), True)
