@@ -1,0 +1,146 @@
+# yamllint disable rule:truthy
+---
+name: Bound exact-SHA release validation window
+
+on:
+  workflow_call:
+    inputs:
+      release_sha:
+        required: true
+        type: string
+      prior_run_id:
+        required: false
+        type: string
+        default: ""
+      prior_run_attempt:
+        required: false
+        type: string
+        default: ""
+      prior_complete:
+        required: false
+        type: string
+        default: "false"
+      attempts:
+        required: true
+        type: number
+      final_window:
+        required: true
+        type: boolean
+    outputs:
+      ci-run-id:
+        value: ${{ jobs.window.outputs.ci-run-id }}
+      ci-run-attempt:
+        value: ${{ jobs.window.outputs.ci-run-attempt }}
+      complete:
+        value: ${{ jobs.window.outputs.complete }}
+
+permissions:
+  actions: read
+
+jobs:
+  window:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      ci-run-id: ${{ steps.wait.outputs.ci-run-id }}
+      ci-run-attempt: ${{ steps.wait.outputs.ci-run-attempt }}
+      complete: ${{ steps.wait.outputs.complete }}
+    steps:
+      - name: Poll one bounded exact-SHA window
+        id: wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PRIOR_RUN_ID: ${{ inputs.prior_run_id }}
+          PRIOR_RUN_ATTEMPT: ${{ inputs.prior_run_attempt }}
+          PRIOR_COMPLETE: ${{ inputs.prior_complete }}
+          ATTEMPTS: ${{ inputs.attempts }}
+          FINAL_WINDOW: ${{ inputs.final_window }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PRIOR_RUN_ID" =~ ^[0-9]*$ ]]
+          [[ "$PRIOR_RUN_ATTEMPT" =~ ^[0-9]*$ ]]
+          [[ "$ATTEMPTS" =~ ^[1-9][0-9]*$ ]]
+          case "$PRIOR_COMPLETE" in true|false) ;; *) exit 1 ;; esac
+          case "$FINAL_WINDOW" in true|false) ;; *) exit 1 ;; esac
+          if [ -n "$PRIOR_RUN_ID" ]; then
+            test -n "$PRIOR_RUN_ATTEMPT"
+          else
+            test -z "$PRIOR_RUN_ATTEMPT"
+            test "$PRIOR_COMPLETE" = false
+          fi
+          run_id="$PRIOR_RUN_ID"
+          run_attempt="$PRIOR_RUN_ATTEMPT"
+          complete=false
+          # ATTEMPTS counts sleep intervals; query once more at their boundary.
+          for attempt in $(seq 1 "$((ATTEMPTS + 1))"); do
+            runs="$(
+              gh api --method GET \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/collection-ci.yml/runs" \
+                -f branch=main -f event=push -f head_sha="$RELEASE_SHA" -f per_page=100
+            )"
+            matches="$(
+              jq -c --arg sha "$RELEASE_SHA" '
+                [.workflow_runs[] | select(
+                  .event == "push" and .head_branch == "main" and .head_sha == $sha
+                )]
+              ' <<< "$runs"
+            )"
+            # Re-query on every poll; a later producer invalidates an existing binding.
+            test "$(jq -r '.total_count // 101' <<< "$runs")" -le 1
+            test "$(jq 'length' <<< "$matches")" -le 1
+            selected_id="$(jq -r '.[0].id // empty' <<< "$matches")"
+            selected_attempt="$(jq -r '.[0].run_attempt // empty' <<< "$matches")"
+            if [ -n "$run_id" ]; then
+              test "$selected_id" = "$run_id"
+              test "$selected_attempt" = "$run_attempt"
+            else
+              run_id="$selected_id"
+              run_attempt="$selected_attempt"
+            fi
+            if [ -n "$run_id" ]; then
+              [[ "$run_id" =~ ^[1-9][0-9]*$ ]]
+              [[ "$run_attempt" =~ ^[1-9][0-9]*$ ]]
+              run="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}")"
+              jq -e --arg sha "$RELEASE_SHA" --argjson id "$run_id" \
+                --argjson run_attempt "$run_attempt" '
+                  .id == $id and .run_attempt == $run_attempt and
+                  .event == "push" and .head_branch == "main" and .head_sha == $sha
+                ' <<< "$run" >/dev/null
+              status="$(jq -r '.status // empty' <<< "$run")"
+              conclusion="$(jq -r '.conclusion // empty' <<< "$run")"
+              if [ "$status" = completed ]; then
+                test "$conclusion" = success
+                complete=true
+                break
+              fi
+              test "$PRIOR_COMPLETE" = false
+              case "$status" in queued|in_progress|pending|requested|waiting) ;; *) exit 1 ;; esac
+            fi
+            if [ "$attempt" -le "$ATTEMPTS" ]; then
+              echo "Waiting for exact-SHA Collection CI ($attempt/$ATTEMPTS)."
+              sleep 30
+            fi
+          done
+          if [ "$FINAL_WINDOW" = true ]; then
+            test "$complete" = true
+            jobs="$(
+              gh api --method GET --paginate --slurp \
+                "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs" \
+                -f filter=all -f per_page=100
+            )"
+            gate_count="$(
+              jq --argjson run_attempt "$run_attempt" '[.[].jobs[] | select(
+                .name == "Collection / Release Validation" and
+                .run_attempt == $run_attempt and
+                .status == "completed" and .conclusion == "success"
+              )] | length' <<< "$jobs"
+            )"
+            test "$gate_count" -eq 1
+          fi
+          {
+            echo "ci-run-id=$run_id"
+            echo "ci-run-attempt=$run_attempt"
+            echo "complete=$complete"
+          } >> "$GITHUB_OUTPUT"
