@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - >-
+    Prepare the protected central review policy and checkout-free review signals
+    for the paired Supplementary workflow migration. This bootstrap preserves
+    product checks and publishing and grants no runtime or release acceptance.
