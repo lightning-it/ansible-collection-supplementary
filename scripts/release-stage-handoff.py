@@ -74,35 +74,35 @@ def load_canonical(payload: bytes, label: str) -> dict[str, Any]:
         canonical_payload = canonical(value)
     except (ValueError, RecursionError) as error:
         raise HandoffError(f"{label} is invalid JSON") from error
-    if type(value) is not dict or canonical_payload != payload:
+    if not isinstance(value, dict) or canonical_payload != payload:
         raise HandoffError(f"{label} is not canonical JSON")
     return value
 
 
 def positive(value: Any, label: str) -> int:
-    if type(value) is not int or value <= 0:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         raise HandoffError(f"{label} must be a positive integer")
     return value
 
 
 def validate_binding(binding: dict[str, Any]) -> None:
-    if type(binding) is not dict or set(binding) != BINDING_KEYS:
+    if not isinstance(binding, dict) or set(binding) != BINDING_KEYS:
         raise HandoffError("handoff binding shape differs")
-    if type(binding["sourceSha"]) is not str or SHA.fullmatch(binding["sourceSha"]) is None:
+    if not isinstance(binding["sourceSha"], str) or SHA.fullmatch(binding["sourceSha"]) is None:
         raise HandoffError("source SHA is invalid")
     for key in ("sourceRunId", "sourceRunAttempt", "ciRunId", "ciRunAttempt"):
         positive(binding[key], key)
-    if type(binding["releaseVersion"]) is not str or VERSION.fullmatch(binding["releaseVersion"]) is None:
+    if not isinstance(binding["releaseVersion"], str) or VERSION.fullmatch(binding["releaseVersion"]) is None:
         raise HandoffError("release version is invalid")
-    if type(binding["candidateName"]) is not str or NAME.fullmatch(binding["candidateName"]) is None:
+    if not isinstance(binding["candidateName"], str) or NAME.fullmatch(binding["candidateName"]) is None:
         raise HandoffError("candidate name is invalid")
     if binding["candidateName"] != f"lit-supplementary-{binding['releaseVersion']}.tar.gz":
         raise HandoffError("candidate name does not match release version")
-    if type(binding["securityRelease"]) is not bool or type(binding["galaxyRequired"]) is not bool:
+    if not isinstance(binding["securityRelease"], bool) or not isinstance(binding["galaxyRequired"], bool):
         raise HandoffError("release flags must be boolean")
     evidence = binding["securityEvidenceId"]
     if binding["securityRelease"]:
-        if type(evidence) is not str or EVIDENCE.fullmatch(evidence) is None:
+        if not isinstance(evidence, str) or EVIDENCE.fullmatch(evidence) is None:
             raise HandoffError("security release evidence binding is invalid")
     elif evidence is not None:
         raise HandoffError("ordinary release must not carry security evidence ID")
@@ -110,7 +110,7 @@ def validate_binding(binding: dict[str, Any]) -> None:
 
 def safe_relative(path: str) -> None:
     try:
-        encoded = path.encode("utf-8") if type(path) is str else b""
+        encoded = path.encode("utf-8") if isinstance(path, str) else b""
     except UnicodeError as error:
         raise HandoffError("handoff file path is invalid") from error
     if not (0 < len(encoded) <= 1024):
@@ -210,7 +210,7 @@ def build_manifest(root: Path, binding: dict[str, Any]) -> dict[str, Any]:
 
 
 def verify(root: Path, binding: dict[str, Any], manifest_payload: bytes, expected_sha256: str) -> None:
-    if type(expected_sha256) is not str or DIGEST.fullmatch(expected_sha256) is None:
+    if not isinstance(expected_sha256, str) or DIGEST.fullmatch(expected_sha256) is None:
         raise HandoffError("handoff manifest digest is invalid")
     if not manifest_payload or len(manifest_payload) > MAX_MANIFEST_BYTES:
         raise HandoffError("handoff manifest size is invalid")

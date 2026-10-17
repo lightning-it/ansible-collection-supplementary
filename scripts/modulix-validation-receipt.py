@@ -795,7 +795,11 @@ def main() -> int:
                 or (args.bound_run_id is None) != (args.bound_run_attempt is None)
             ):
                 raise ReceiptError("window phase lacks an exact continuation binding")
-            if type(args.timeout_seconds) is not int or not 0 < args.timeout_seconds <= MAX_WINDOW_SECONDS:
+            if (
+                not isinstance(args.timeout_seconds, int)
+                or isinstance(args.timeout_seconds, bool)
+                or not 0 < args.timeout_seconds <= MAX_WINDOW_SECONDS
+            ):
                 raise ReceiptError("window exceeds the bounded 80-minute contract")
         else:
             if args.output_directory is None:
@@ -810,7 +814,11 @@ def main() -> int:
                 raise ReceiptError("single phase has unrelated continuation arguments")
             if args.timeout_seconds is None:
                 args.timeout_seconds = DEFAULT_TIMEOUT_SECONDS
-            if type(args.timeout_seconds) is not int or not 0 < args.timeout_seconds <= DEFAULT_TIMEOUT_SECONDS:
+            if (
+                not isinstance(args.timeout_seconds, int)
+                or isinstance(args.timeout_seconds, bool)
+                or not 0 < args.timeout_seconds <= DEFAULT_TIMEOUT_SECONDS
+            ):
                 raise ReceiptError("validation timeout is outside the bounded contract")
         manifest = validate_nexus_manifest(args.nexus_manifest)
         client = GhControllerClient()

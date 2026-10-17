@@ -31,7 +31,8 @@ def unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
 def parse_locations(policy: dict) -> dict[tuple[str, tuple[str, ...]], str]:
     if (
         set(policy) != {"version", "locations"}
-        or type(policy["version"]) is not int
+        or not isinstance(policy["version"], int)
+        or isinstance(policy["version"], bool)
         or policy["version"] != 1
     ):
         raise ValueError("invalid queue policy schema or version")
