@@ -55,6 +55,7 @@ permissions:
 
 concurrency:
   group: main-develop-transition-${{ github.repository }}
+  queue: max
   cancel-in-progress: false
 
 jobs:
@@ -140,6 +141,7 @@ jobs:
        (needs.security-classification.outputs.security-release == 'true' &&
         github.actor == 'lightning-it-release-automation[bot]'))
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     environment:
       name: >-
         ${{ needs.security-classification.outputs.security-release == 'true' &&
