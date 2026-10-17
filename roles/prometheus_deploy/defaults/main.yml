@@ -8,7 +8,7 @@ prometheus_deploy_skip_deploy: false
 prometheus_deploy_pod_name: "prometheus"
 prometheus_deploy_container_name: "prometheus"
 prometheus_deploy_image: >-
-  docker.io/prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0
+  docker.io/prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
 prometheus_deploy_pod_manifest_path: "/etc/podman/pods/prometheus.yml"
 prometheus_deploy_systemd_enabled: true
 prometheus_deploy_systemd_unit_name: "{{ prometheus_deploy_pod_name }}"
