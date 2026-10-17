@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "repository": "lightning-it/ansible-collection-supplementary",
+  "mode": "reference",
+  "quality": [
+    {
+      "workflow": ".github/workflows/collection-ci.yml",
+      "job": "Collection / Fast"
+    },
+    {
+      "workflow": ".github/workflows/collection-ci.yml",
+      "job": "Collection / Build and Install"
+    }
+  ],
+  "accepted_sources": [],
+  "distribution_sources": [],
+  "artifact_publication": true
+}
