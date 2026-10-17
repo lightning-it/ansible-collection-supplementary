@@ -19,7 +19,7 @@ Repository classification: **Ansible Collection**.
 Required test profiles: `pre-commit, lint, light, molecule-light, molecule-heavy-incus, release-validation`.
 Publishing targets: `github-release, ansible-galaxy`.
 
-## Supported and tested platforms
+## Supported and Tested Platforms
 
 Support is role- and profile-specific; there is no collection-wide platform
 claim. [`meta/role-coverage.yml`](meta/role-coverage.yml) is authoritative, and

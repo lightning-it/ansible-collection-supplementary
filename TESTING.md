@@ -13,7 +13,7 @@ registry also records `experimental`, `not-applicable`, external blockers, and
 deprecation. Stub and skip-mode scenarios remain visible as migration debt but
 never count as a production pass.
 
-## Profiles
+## Test Profiles
 
 ### Tiny
 
