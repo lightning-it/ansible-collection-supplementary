@@ -128,7 +128,7 @@ def check_generated_docs(meta: dict[str, str]) -> None:
         raise AssertionError("README.md is missing the managed quality badge block")
     if "[RELEASE.md](./RELEASE.md)" not in readme:
         raise AssertionError("README.md does not link to RELEASE.md")
-    if "## Supported and Tested Platforms" not in readme:
+    if "## Supported and tested platforms" not in readme:
         raise AssertionError("README.md does not include the supported/tested platforms matrix")
     for term in [
         "Production Ready",
@@ -157,7 +157,7 @@ def check_generated_docs(meta: dict[str, str]) -> None:
         ]:
             if f"`{asset}`" not in release:
                 raise AssertionError(f"RELEASE.md does not list required release asset {asset}")
-    if "## Test Profiles" not in testing:
+    if "## Profiles" not in testing:
         raise AssertionError("TESTING.md does not describe test profiles")
     for term in ["OpenSSF Readiness", "Scorecard", "Best Practices Badge", "Security Policy"]:
         if term not in openssf:
