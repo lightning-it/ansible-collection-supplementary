@@ -57,7 +57,7 @@ container_images:
   - reference: "docker.io/netboxcommunity/netbox:v4.6-5.0.2@sha256:b3b5e3ae884d1daa23958bd3b2eb777864c42b8b25a2cb5ce2af857654aba3f7"
     locations:
       - "roles/netbox_deploy/defaults/main.yml"
-  - reference: "docker.io/prom/alertmanager:v0.34.0@sha256:690c7b525f4367aa91f73e2f91c632206d32e97c6384bdbf2fb7a861b420340d"
+  - reference: "docker.io/prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a"
     locations:
       - "roles/alertmanager_deploy/defaults/main.yml"
   - reference: "docker.io/prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0"
