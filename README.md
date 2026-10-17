@@ -19,7 +19,7 @@ Repository classification: **Ansible Collection**.
 Required test profiles: `pre-commit, lint, light, molecule-light, molecule-heavy-incus, release-validation`.
 Publishing targets: `github-release, ansible-galaxy`.
 
-## Supported and Tested Platforms
+## Supported and tested platforms
 
 Support is role- and profile-specific; there is no collection-wide platform
 claim. [`meta/role-coverage.yml`](meta/role-coverage.yml) is authoritative, and
@@ -472,7 +472,7 @@ Publishing targets: `github-release, ansible-galaxy`.
 
 <!-- BEGIN LIT_COMPATIBILITY_MATRIX -->
 
-## Compatibility matrix
+## Supported and Tested Platforms
 
 The generated [role coverage report](docs/testing/role-coverage.md) is the
 current matrix. Release attachments contain the executed role/profile/target

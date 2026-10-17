@@ -13,7 +13,7 @@ registry also records `experimental`, `not-applicable`, external blockers, and
 deprecation. Stub and skip-mode scenarios remain visible as migration debt but
 never count as a production pass.
 
-## Test Profiles
+## Profiles
 
 ### Tiny
 
@@ -89,7 +89,7 @@ complete command block in
 [`docs/testing/keycloak.md`](docs/testing/keycloak.md). Never reuse production
 credentials in test runs.
 
-## Matrix
+## Test Profiles and Matrix
 
 Generate the exact supported cells from the registry:
 
