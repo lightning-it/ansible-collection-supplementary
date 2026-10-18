@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -274,7 +275,9 @@ if sys.argv[1]=='release':
 
 
 class PublishDispatchNoopTests(unittest.TestCase):
-    def run_case(self, *, changed_version=False, changed_state=False, bad_author=False, legacy=False):
+    def run_case(
+        self, *, changed_version=False, changed_state=False, bad_author=False, legacy=False, schema=3, mode="normal"
+    ):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             binary = root / "gh"
@@ -297,7 +300,7 @@ elif '/contents/' in path:
         version='1.0.1' if not base and state['changed_version'] else '1.0.0'
         value='version: '+version+'\ndependencies: '+('{}' if base else '{lit.other: 2.0.0}')+'\n'
     else:
-        receipt={'schema_version':3,'release_mode':'normal',
+        receipt={'schema_version':state['schema'],'release_mode':state['mode'],
             'next_version':('1.0.1' if state['changed_version'] else '1.0.0'),
             'publication':{'github_release':True,'galaxy':True}}
         value=json.dumps(receipt) if name.endswith('.json') else 'generated\n'
@@ -322,7 +325,14 @@ else: raise SystemExit('unexpected API locator '+path)
                 environment()
                 | {
                     "PATH": f"{root}:{os.environ['PATH']}",
-                    "STATE": json.dumps({"changed_version": changed_version, "changed_state": changed_state}),
+                    "STATE": json.dumps(
+                        {
+                            "changed_version": changed_version,
+                            "changed_state": changed_state,
+                            "schema": schema,
+                            "mode": mode,
+                        }
+                    ),
                     "CALLS": str(calls),
                     "GITHUB_OUTPUT": str(output),
                     "RUNNER_TEMP": str(root),
@@ -365,6 +375,18 @@ else: raise SystemExit('unexpected API locator '+path)
         result, outputs, _unused = self.run_case(bad_author=True)
         self.assertNotEqual(0, result.returncode)
         self.assertNotIn("release_needed", outputs)
+
+    def test_unchanged_schema2_normal_and_security_state_noops_without_writes(self):
+        for mode in ("normal", "security"):
+            with self.subTest(mode=mode):
+                result, outputs, calls = self.run_case(schema=2, mode=mode)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual("false", outputs.get("release_needed"))
+                self.assertNotIn("POST", calls)
+                self.assertNotIn("release_version", outputs)
+                result, outputs, _unused = self.run_case(schema=2, mode=mode, changed_version=True)
+                self.assertNotEqual(0, result.returncode)
+                self.assertNotIn("release_needed", outputs)
 
 
 class CanonicalAncestryOwnershipTests(unittest.TestCase):
@@ -423,7 +445,7 @@ class CanonicalAncestryOwnershipTests(unittest.TestCase):
         gh.chmod(0o700)
         # Bind a real variant commit for non-release and legacy fallthrough.
         main = fixture.release
-        if ordinary or schema != 3 or not github_release:
+        if ordinary or schema != 3:
             fixture.git("checkout", "-q", "--detach", fixture.release)
             if ordinary:
                 path = fixture.root / "galaxy.yml"
@@ -453,16 +475,45 @@ class CanonicalAncestryOwnershipTests(unittest.TestCase):
         )
         return result
 
-    def exercise_order(self, sync_first):
+    def exercise_order(self, sync_first, *, github_release=True):
+        # The producer advisory flag does not override enforced publication.
+        # Feed the real guard this receipt without changing the proven Git/PR
+        # relationships used by the actual publication back-sync fixture.
+        if not github_release:
+            fixture = self.fixture
+            graph = fixture.fixture
+            graph.receipt["publication"]["github_release"] = False
+            (fixture.root / "changelogs/release-preparation.json").write_text(json.dumps(graph.receipt))
+            fixture.git("add", "changelogs/release-preparation.json")
+            graph.prepared = graph.commit("chore(release): prepare v1.0.1", [graph.content_base])
+            fixture.develop = graph.commit("Merge preparation PR", [graph.content_base, graph.prepared])
+            fixture.release = graph.commit("Merge normal promotion PR", [graph.main_base, fixture.develop])
+            graph.develop, graph.release = fixture.develop, fixture.release
+            fixture.state.update(
+                {
+                    "main": fixture.release,
+                    "develop": fixture.develop,
+                    "proof": {"main_merge": fixture.release, "develop_merge": fixture.develop},
+                }
+            )
+            fixture.git(
+                "push",
+                "-q",
+                "--force",
+                "origin",
+                f"{fixture.release}:refs/heads/main",
+                f"{fixture.develop}:refs/heads/develop",
+            )
+            fixture.make_tag()
         if sync_first:
-            result = self.run_sync_guard()
+            result = self.run_sync_guard(github_release=github_release)
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertNotIn("ORDINARY_ANCESTRY_WRITER", result.stdout)
             self.assertEqual("", self.fixture.branches())
         result, _unused = self.fixture.run_step()
         self.assertEqual(0, result.returncode, result.stderr)
         head = self.fixture.state["pull"]["head"]["sha"]
-        result = self.run_sync_guard()
+        result = self.run_sync_guard(github_release=github_release)
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertNotIn("ORDINARY_ANCESTRY_WRITER", result.stdout)
         self.assertEqual(head, self.fixture.state["pull"]["head"]["sha"])
@@ -474,8 +525,14 @@ class CanonicalAncestryOwnershipTests(unittest.TestCase):
     def test_publication_first_leaves_one_fresh_canonical_writer(self):
         self.exercise_order(False)
 
-    def test_ordinary_legacy_and_unpublished_modes_keep_existing_ancestry_path(self):
-        for changes in ({"ordinary": True}, {"schema": 2}, {"github_release": False}):
+    def test_false_advisory_publication_sync_first_still_has_one_writer(self):
+        self.exercise_order(True, github_release=False)
+
+    def test_false_advisory_publication_publication_first_still_has_one_writer(self):
+        self.exercise_order(False, github_release=False)
+
+    def test_ordinary_and_legacy_keep_existing_ancestry_path(self):
+        for changes in ({"ordinary": True}, {"schema": 2}):
             with self.subTest(changes=changes):
                 result = self.run_sync_guard(**changes)
                 self.assertEqual(0, result.returncode, result.stderr)
@@ -486,3 +543,200 @@ class CanonicalAncestryOwnershipTests(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertNotIn("ORDINARY_ANCESTRY_WRITER", result.stdout)
         self.assertEqual("", self.fixture.branches())
+
+
+class LegacyPublicationReadOnlyTests(unittest.TestCase):
+    def run_publication(self, name, *, present=True, legacy=True):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary, remote = root / "bin", root / "remote"
+            binary.mkdir()
+            remote.mkdir()
+            (root / "dist/release").mkdir(parents=True)
+            (root / "incoming/candidate").mkdir(parents=True)
+            (root / "incoming/candidate/collection.tar.gz").write_bytes(b"tested artifact")
+            (root / "dist/release/collection.tar.gz").write_bytes(b"tested artifact")
+            (root / "dist/release-notes.rst").write_text("published notes\n")
+            calls = root / "calls"
+            calls.write_text("")
+            env = environment() | {
+                "PATH": f"{binary}:{os.environ['PATH']}",
+                "CALLS": str(calls),
+                "REMOTE": str(remote),
+                "RUNNER_TEMP": str(root),
+                "RELEASE_SHA": "a" * 40,
+                "RELEASE_TAG": "v1.0.0",
+                "GITHUB_REPOSITORY": REPOSITORY,
+                "GH_TOKEN": "offline-read-only",
+                "RELEASE_VERSION": "1.0.0",
+                "CANDIDATE_NAME": "collection.tar.gz",
+                "GALAXY_REQUIRED": "true",
+                "SECURITY_RELEASE": "false",
+                "LEGACY_NORMAL_RECHECK": str(legacy).lower(),
+            }
+            script = step("collection-publish.yml", "publish", name)["run"]
+            if name == "Finalize immutable release attachments and notes":
+                # Exercise the actual checksum/signing shell; the following
+                # Python block only renders local notes for a later step.
+                script = script.split("python - <<'PY'", 1)[0]
+                generated = shell(script.split('publish_identity="', 1)[0], root, env)
+                self.assertEqual(0, generated.returncode, generated.stderr)
+                if present:
+                    shutil.copyfile(root / "dist/release/SHA256SUMS", remote / "SHA256SUMS")
+                    (remote / "SHA256SUMS.sigstore.json").write_text("existing bundle")
+            elif name == "Attach signed post-publication verification receipt":
+                # Generate the existing historical receipt with the actual
+                # payload emitter, then make only the remote pair available.
+                prefix = script.split('receipt="$receipt_root/post-release-verification.json"', 1)[0]
+                generated = shell(prefix, root, env)
+                self.assertEqual(0, generated.returncode, generated.stderr)
+                if present:
+                    shutil.copyfile(
+                        root / "dist/post-release/post-release-verification.json",
+                        remote / "post-release-verification.json",
+                    )
+                    (remote / "post-release-verification.json.sigstore.json").write_text("existing bundle")
+            elif present:
+                shutil.copyfile(root / "dist/release/collection.tar.gz", remote / "collection.tar.gz")
+            gh = binary / "gh"
+            gh.write_text(
+                "#!"
+                + sys.executable
+                + "\n"
+                + r"""
+import json,os,shutil,sys
+from pathlib import Path
+args=sys.argv[1:]; remote=Path(os.environ['REMOTE'])
+with Path(os.environ['CALLS']).open('a') as stream: stream.write(json.dumps(['gh',*args])+'\n')
+if args[:2]==['release','view']:
+    if '--json' not in args: raise SystemExit(0)
+    fields=args[args.index('--json')+1]
+    if fields!='assets':
+        print(json.dumps({'body':'published notes','isDraft':False,'isPrerelease':False,
+                          'name':'v1.0.0','tagName':'v1.0.0'}))
+    else:
+        assets=[{'name':p.name} for p in sorted(remote.iterdir())]
+        if '--jq' not in args: print(json.dumps({'assets':assets}))
+        else:
+            query=args[args.index('--jq')+1]
+            if '| length' in query: print(sum(p['name'].startswith('post-release-') for p in assets))
+            else:
+                for p in assets:
+                    if 'select(' not in query or not p['name'].startswith('post-release-'): print(p['name'])
+elif args[:2]==['release','download']:
+    target=Path(args[args.index('--dir')+1])
+    for index,arg in enumerate(args):
+        if arg=='--pattern': shutil.copyfile(remote/args[index+1],target/args[index+1])
+elif args[:2]==['release','upload']:
+    for name in args[3:args.index('--repo')]: shutil.copyfile(name,remote/Path(name).name)
+else: raise SystemExit('unexpected fixture command')
+"""
+            )
+            gh.chmod(0o700)
+            curl = binary / "curl"
+            curl.write_text(
+                "#!"
+                + sys.executable
+                + "\n"
+                + r"""
+import json,os,sys
+from pathlib import Path
+args=sys.argv[1:]
+with Path(os.environ['CALLS']).open('a') as stream: stream.write(json.dumps(['curl',*args])+'\n')
+assert '--request' not in args and '-X' not in args
+Path(args[args.index('--output')+1]).write_text(json.dumps(
+    {'assets':[{'name':p.name} for p in Path(os.environ['REMOTE']).iterdir()]}))
+print('200')
+"""
+            )
+            curl.chmod(0o700)
+            cosign = binary / "cosign"
+            cosign.write_text(
+                "#!"
+                + sys.executable
+                + "\n"
+                + r"""
+import json,os,sys
+from pathlib import Path
+args=sys.argv[1:]
+with Path(os.environ['CALLS']).open('a') as stream: stream.write(json.dumps(['cosign',*args])+'\n')
+if args[0]=='sign-blob': Path(args[args.index('--bundle')+1]).write_text('new bundle')
+elif args[0]!='verify-blob': raise SystemExit('unexpected cosign operation')
+"""
+            )
+            cosign.chmod(0o700)
+            git = binary / "git"
+            git.write_text("#!/bin/sh\nprintf '%s\\trefs/heads/main\\n' \"$RELEASE_SHA\"\n")
+            git.chmod(0o700)
+            result = shell(script, root, env)
+            return result, [json.loads(line) for line in calls.read_text().splitlines()]
+
+    def test_legacy_missing_assets_and_receipts_fail_without_publication_writes(self):
+        for name in (
+            "Finalize immutable release attachments and notes",
+            "Create or verify GitHub Release and immutable assets",
+            "Attach signed post-publication verification receipt",
+        ):
+            with self.subTest(step=name):
+                result, calls = self.run_publication(name, present=False)
+                writes = [
+                    call
+                    for call in calls
+                    if call[:2] == ["cosign", "sign-blob"] or call[:3] == ["gh", "release", "upload"]
+                ]
+                self.assertEqual([], writes)
+                self.assertNotEqual(0, result.returncode)
+
+    def test_existing_legacy_assets_and_signed_receipts_are_verified_without_replacement(self):
+        for name in (
+            "Finalize immutable release attachments and notes",
+            "Create or verify GitHub Release and immutable assets",
+            "Attach signed post-publication verification receipt",
+        ):
+            with self.subTest(step=name):
+                result, calls = self.run_publication(name)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertTrue(any(call[:3] == ["gh", "release", "download"] for call in calls))
+                self.assertFalse(
+                    any(
+                        call[:2] == ["cosign", "sign-blob"] or call[:3] == ["gh", "release", "upload"] for call in calls
+                    )
+                )
+
+    def test_legacy_recheck_neither_mints_nor_dispatches_backsync(self):
+        for name in ("Mint exact back-sync dispatch App token", "Trigger release back-sync after verified publication"):
+            condition = step("collection-publish.yml", "publish", name)["if"]
+            self.assertIn("env.LEGACY_NORMAL_RECHECK != 'true'", condition)
+            # These comparisons/operators have the same string/boolean
+            # semantics in the job predicate and the offline shell harness.
+            condition = re.sub(r"env\.([A-Z_]+)", r'"$\1"', condition)
+            for security, galaxy, legacy in (
+                ("false", "true", "true"),
+                ("false", "true", "false"),
+                ("true", "true", "false"),
+                ("true", "false", "false"),
+            ):
+                result = shell(
+                    f"if [[ {condition} ]]; then echo EFFECT_ENABLED; fi",
+                    ROOT,
+                    environment()
+                    | {"SECURITY_RELEASE": security, "GALAXY_REQUIRED": galaxy, "LEGACY_NORMAL_RECHECK": legacy},
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
+                enabled = legacy != "true" and (security != "true" or galaxy != "true")
+                self.assertEqual(enabled, "EFFECT_ENABLED" in result.stdout)
+
+    def test_current_publication_keeps_its_existing_signing_and_upload_effects(self):
+        for name in (
+            "Finalize immutable release attachments and notes",
+            "Create or verify GitHub Release and immutable assets",
+            "Attach signed post-publication verification receipt",
+        ):
+            with self.subTest(step=name):
+                result, calls = self.run_publication(name, present=False, legacy=False)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertTrue(
+                    any(
+                        call[:2] == ["cosign", "sign-blob"] or call[:3] == ["gh", "release", "upload"] for call in calls
+                    )
+                )

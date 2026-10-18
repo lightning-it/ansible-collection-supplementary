@@ -162,8 +162,9 @@ jobs:
                 test "${#normal_parents[@]}" -gt 0
                 normal_version="$(git show "${main_sha}:galaxy.yml" | sed -n 's/^version: //p')"
                 parent_version="$(git show "${normal_parents[0]}:galaxy.yml" | sed -n 's/^version: //p')"
-                if [ "$normal_version" != "$parent_version" ] && \
-                    jq -e '.publication.github_release == true' <<<"$normal_receipt" >/dev/null; then
+                # GitHub publication is mandatory in the protected publisher
+                # policy, regardless of the receipt's advisory input.
+                if [ "$normal_version" != "$parent_version" ]; then
                   [[ "$normal_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
                   jq -e --arg version "$normal_version" '.next_version == $version' <<<"$normal_receipt" >/dev/null
                   test "${#normal_parents[@]}" -eq 2

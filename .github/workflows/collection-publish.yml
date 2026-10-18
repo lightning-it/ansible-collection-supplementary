@@ -125,9 +125,6 @@ jobs:
               gh api "repos/${GITHUB_REPOSITORY}/contents/changelogs/release-preparation.json?ref=${MERGE_SHA}" \
                 --jq .content | base64 --decode
             )"
-            jq -e --arg version "$release_version" '
-              .schema_version == 3 and .release_mode == "normal" and .next_version == $version
-            ' <<<"$receipt_json" >/dev/null
             # Ordinary product promotions retain the published release state.
             # Compare the version, rather than all galaxy metadata, and the
             # exact generated blobs before classification or any App mint.
@@ -168,6 +165,9 @@ jobs:
               echo 'release_needed=false' >>"$GITHUB_OUTPUT"
               exit 0
             fi
+            jq -e --arg version "$release_version" '
+              .schema_version == 3 and .release_mode == "normal" and .next_version == $version
+            ' <<<"$receipt_json" >/dev/null
           else
             test "$HEAD_REF" = "release/v${release_version}"
           fi
@@ -1614,6 +1614,10 @@ jobs:
             cp "$existing_pair/SHA256SUMS.sigstore.json" \
               dist/release/SHA256SUMS.sigstore.json
           else
+            if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then
+              echo 'Legacy normal recheck requires the existing signed checksum pair.' >&2
+              exit 1
+            fi
             cosign sign-blob --yes \
               --bundle dist/release/SHA256SUMS.sigstore.json \
               dist/release/SHA256SUMS
@@ -1912,6 +1916,10 @@ jobs:
               test "$(sha256sum "$verify_dir/$name" | awk '{print $1}')" = \
                 "$(sha256sum "$asset" | awk '{print $1}')"
             else
+              if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then
+                echo 'Legacy normal recheck cannot add missing GitHub Release assets.' >&2
+                exit 1
+              fi
               gh release upload "$RELEASE_TAG" "$asset" \
                 --repo "$GITHUB_REPOSITORY"
             fi
@@ -2155,7 +2163,9 @@ jobs:
             ansible-playbook --syntax-check "$installed_playbook"
 
       - name: Mint exact back-sync dispatch App token
-        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        if: >-
+          (env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true') &&
+          env.LEGACY_NORMAL_RECHECK != 'true'
         id: back-sync-app
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
@@ -2166,7 +2176,9 @@ jobs:
           permission-actions: write
 
       - name: Trigger release back-sync after verified publication
-        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        if: >-
+          (env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true') &&
+          env.LEGACY_NORMAL_RECHECK != 'true'
         env:
           GH_TOKEN: ${{ steps.back-sync-app.outputs.token }}
           RELEASE_TAG_APP_SLUG: ${{ steps.release-tag-token.outputs.app-slug }}
@@ -2298,6 +2310,10 @@ jobs:
               "$(sha256sum "$receipt" | awk '{print $1}')"
             cp "$existing_root/$(basename "$bundle")" "$bundle"
           else
+            if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then
+              echo 'Legacy normal recheck requires the existing signed post-release receipt pair.' >&2
+              exit 1
+            fi
             cosign sign-blob --yes --bundle "$bundle" "$receipt"
             gh release upload "$RELEASE_TAG" "$receipt" "$bundle" \
               --repo "$GITHUB_REPOSITORY"
