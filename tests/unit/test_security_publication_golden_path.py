@@ -374,6 +374,16 @@ clock.write_text(str(int(clock.read_text()) + int(sys.argv[1])))
         )
 
     def test_only_initial_modulix_dispatch_token_can_write_actions(self) -> None:
+        self.assertEqual(
+            {
+                "actions": "read",
+                "attestations": "read",
+                "contents": "write",
+                "id-token": "write",
+                "pull-requests": "read",
+            },
+            self.finalize["permissions"],
+        )
         dispatch = self.steps["Mint exact ModuLix validation App token"]["with"]
         finalize = self.finalize_steps["Mint exact ModuLix App token for finalization"]["with"]
         for token in (dispatch, finalize):
