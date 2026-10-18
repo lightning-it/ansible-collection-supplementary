@@ -102,6 +102,8 @@ class NormalReleaseProofTests(unittest.TestCase):
             "GIT_COMMITTER_NAME": PROOF.APP[0],
             "GIT_COMMITTER_EMAIL": PROOF.git_contract.CONTRACT.RELEASE_APP_EMAIL,
         }
+        for variable in ("GIT_COMMON_DIR", "GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"):
+            self.git_env.pop(variable, None)
         self.git("init", "--quiet")
         (self.root / "galaxy.yml").write_text("---\nnamespace: lit\nname: supplementary\nversion: 1.0.0\n")
         self.git("add", ".")

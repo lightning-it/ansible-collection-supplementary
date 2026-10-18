@@ -85,6 +85,18 @@ def preparation(root, base, head, workflow_source, repository, repository_id):
     return receipt
 
 
+def preparation_changelog(root, base, head, workflow_source, repository, repository_id, head_ref, check_worktree):
+    receipt = preparation(root, base, head, workflow_source, repository, repository_id)
+    require(head_ref == f"release/v{receipt['next_version']}", "preparation-release-ref-drift")
+    if check_worktree:
+        paths = sorted(git_contract.RELEASE_GENERATED_PATHS | {"changelogs/fragments"})
+        require(not text(root, "diff", "--name-only", head, "--", "."), "preparation-worktree-drift")
+        require(
+            not text(root, "ls-files", "--others", "--exclude-standard", "--", *paths), "preparation-untracked-state"
+        )
+    return receipt
+
+
 def merged_pull(api, repository, merge, base_ref, head_ref, base, head):
     matches = [
         p
@@ -293,6 +305,8 @@ def main():
     parser.add_argument("--base", required=True)
     parser.add_argument("--head", required=True)
     parser.add_argument("--workflow-source")
+    parser.add_argument("--head-ref")
+    parser.add_argument("--check-worktree", action="store_true")
     parser.add_argument("--release")
     parser.add_argument("--repository", required=True)
     parser.add_argument("--repository-id", required=True)
@@ -300,9 +314,21 @@ def main():
     args = parser.parse_args()
     try:
         if args.operation == "preparation":
-            result = preparation(
-                args.root, args.base, args.head, args.workflow_source, args.repository, args.repository_id
-            )
+            if args.head_ref is not None or args.check_worktree:
+                result = preparation_changelog(
+                    args.root,
+                    args.base,
+                    args.head,
+                    args.workflow_source,
+                    args.repository,
+                    args.repository_id,
+                    args.head_ref,
+                    args.check_worktree,
+                )
+            else:
+                result = preparation(
+                    args.root, args.base, args.head, args.workflow_source, args.repository, args.repository_id
+                )
         else:
             core = load_control(args.control_root)
             result = publish(

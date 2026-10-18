@@ -14,6 +14,14 @@ if [ "${GITHUB_EVENT_NAME:-}" = push ] && [ -z "${GITHUB_BASE_REF:-}" ]; then
   export GITHUB_BASE_REF="${GITHUB_REF_NAME:-}"
 fi
 
+# Keep the actual native repository ID at this existing caller boundary. The
+# container receives no additional environment or self-asserted admission flag.
+if [[ "${GITHUB_HEAD_REF:-}" == release/v* ]] && [ "${GITHUB_BASE_REF:-}" = develop ] && \
+    [ -n "${GITHUB_EVENT_NAME:-}" ]; then
+  test "${GITHUB_REPOSITORY:-}" = lightning-it/ansible-collection-supplementary
+  test "${GITHUB_REPOSITORY_ID:-}" = 1103407173
+fi
+
 bash scripts/wunder-devtools-ee.sh bash -lc '
   set -euo pipefail
 
@@ -166,6 +174,43 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
         is_trusted_release_branch=false
         ;;
     esac
+  fi
+  if [[ "$head_ref" == release/v* ]] && [ "$base_ref" = main ] && \
+      git show "${HEAD_SHA:-HEAD}:changelogs/release-preparation.json" 2>/dev/null | \
+        jq -e ".schema_version == 3 and .release_mode == \"normal\"" >/dev/null; then
+    echo "::error::Schema3 normal preparation must enter Develop before Main promotion."
+    exit 1
+  fi
+  if [[ "$head_ref" == release/v* ]] && [ "$base_ref" = develop ]; then
+    # This is preparation ingress, not a Main release or published-baseline
+    # import. Branch shape and an App login alone cannot qualify its contents.
+    case "${GITHUB_EVENT_NAME:-}" in
+      pull_request|push|"") ;;
+      *) echo "::error::Unsupported normal preparation event."; exit 1 ;;
+    esac
+    if [ -n "${GITHUB_EVENT_NAME:-}" ]; then
+      test "$release_pr_author" = "lightning-it-release-automation[bot]"
+      test "${GITHUB_REPOSITORY:-}" = lightning-it/ansible-collection-supplementary
+      test "${GITHUB_HEAD_REPOSITORY:-}" = "$GITHUB_REPOSITORY"
+    fi
+    test -n "${BASE_SHA:-}" && test -n "${HEAD_SHA:-}"
+    normal_head="$HEAD_SHA"
+    if [ "${GITHUB_EVENT_NAME:-}" = push ]; then
+      read -r -a normal_parents <<<"$(git rev-list --parents -n 1 "$HEAD_SHA")"
+      test "${#normal_parents[@]}" -eq 3
+      test "${normal_parents[1]}" = "$BASE_SHA"
+      test "$(git rev-parse "refs/remotes/origin/develop^{commit}")" = "$HEAD_SHA"
+      normal_head="${normal_parents[2]}"
+      test "$(git rev-parse "${HEAD_SHA}^{tree}")" = "$(git rev-parse "${normal_head}^{tree}")"
+    else
+      test "$(git rev-parse "refs/remotes/origin/develop^{commit}")" = "$BASE_SHA"
+    fi
+    normal_source="$(git rev-parse "refs/remotes/origin/main^{commit}")"
+    python3 scripts/normal_release_proof.py preparation --root . \
+      --base "$BASE_SHA" --head "$normal_head" --workflow-source "$normal_source" \
+      --repository lightning-it/ansible-collection-supplementary --repository-id 1103407173 \
+      --head-ref "$head_ref" --check-worktree
+    is_trusted_release_branch=true
   fi
   if [[ "$head_ref" == develop && "$base_ref" == main ]]; then
     case "${GITHUB_EVENT_NAME:-}" in
