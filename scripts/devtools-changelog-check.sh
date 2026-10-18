@@ -62,10 +62,71 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   is_release_branch=false
   is_trusted_release_branch=false
   is_release_promotion=false
+  is_published_baseline_import=false
   head_ref="${GITHUB_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD)}"
   base_ref="${GITHUB_BASE_REF:-${GITHUB_REF_NAME:-}}"
   release_pr_author="${GITHUB_PR_AUTHOR:-${PR_AUTHOR:-}}"
   head_ref="$(bash scripts/resolve-changelog-head-ref.sh "$head_ref")"
+
+  # Recover only the exact local candidate of a deterministic integration test.
+  # This grants no identity: the independent published-byte proof still runs.
+  import_pattern="^reconcile/release-v((0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*))-to-develop$"
+  if [ -z "${GITHUB_EVENT_NAME:-}" ] && [ "$head_ref" = HEAD ] && \
+      [ "$(git log -1 --format=%s HEAD)" = "Synthetic pull-request integration" ]; then
+    read -r -a import_parents <<<"$(git rev-list --parents -n 1 HEAD)"
+    if [ "${#import_parents[@]}" -eq 3 ] && \
+        [ "$(git rev-parse HEAD^{tree})" = "$(git rev-parse "${import_parents[2]}^{tree}")" ]; then
+      import_refs=()
+      while IFS= read -r import_ref; do
+        if [[ "$import_ref" =~ $import_pattern ]]; then import_refs+=("$import_ref"); fi
+      done < <(git for-each-ref --format="%(refname:short)" --points-at "${import_parents[2]}" \
+        "refs/heads/reconcile/release-v*-to-develop")
+      if [ "${#import_refs[@]}" -eq 1 ]; then head_ref="${import_refs[0]}"; fi
+    fi
+  fi
+  if [[ "$head_ref" =~ $import_pattern ]]; then
+    import_tag="v${BASH_REMATCH[1]}"
+    import_push_args=()
+    case "${GITHUB_EVENT_NAME:-}" in
+      pull_request)
+        if [ "$base_ref" != develop ] || [ "$release_pr_author" != litroc ] || \
+            [ "${GITHUB_REPOSITORY:-}" != lightning-it/ansible-collection-supplementary ] || \
+            [ "${GITHUB_HEAD_REPOSITORY:-}" != "${GITHUB_REPOSITORY:-}" ]; then
+          echo "::error::Published baseline import requires the personal same-repository litroc PR to develop."
+          exit 1
+        fi
+        ;;
+      push)
+        # These identity/ref facts are supplied only after the existing CI
+        # associated-PR read proves the unique actual merged personal PR.
+        if [ "$base_ref" != develop ] || [ "$release_pr_author" != litroc ] || \
+            [ "${GITHUB_REPOSITORY:-}" != lightning-it/ansible-collection-supplementary ] || \
+            [ "${GITHUB_HEAD_REPOSITORY:-}" != "${GITHUB_REPOSITORY:-}" ] || \
+            [ -z "${BASE_SHA:-}" ] || [ -z "${HEAD_SHA:-}" ]; then
+          echo "::error::Published baseline push lacks its actual merged personal PR binding."
+          exit 1
+        fi
+        import_push_args=(--merged-push)
+        ;;
+      "") ;; # Offline proof only; no App or native review acceptance is asserted.
+      *) echo "::error::Published baseline import requires a pull request or offline check."; exit 1 ;;
+    esac
+    import_develop="$(git rev-parse --verify refs/remotes/origin/develop^{commit})"
+    if [ "${#import_push_args[@]}" -ne 0 ]; then
+      import_develop="$BASE_SHA"
+    elif [ -n "${BASE_SHA:-}" ] && [ "$BASE_SHA" != "$import_develop" ]; then
+      echo "::error::Published baseline import has a stale protected Develop base."
+      exit 1
+    fi
+    python3 scripts/verify_release_back_sync.py --published-baseline-import --check-worktree \
+      "${import_push_args[@]}" \
+      --develop-tip "$import_develop" \
+      --release-sha "$(git rev-parse --verify refs/remotes/origin/main^{commit})" \
+      --head-sha "${HEAD_SHA:-${PRE_COMMIT_TO_REF:-$(git rev-parse HEAD)}}" \
+      --tag "$import_tag" --branch "$head_ref"
+    is_published_baseline_import=true
+    echo "Published release bytes verified; ordinary code and current-head human review requirements still apply."
+  fi
 
   if [[ "$head_ref" == release/v* || "$head_ref" == backsync/release-* ]]; then
     is_release_branch=true
@@ -121,7 +182,8 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
   fi
 
   if grep -E "$generated_re" <<<"$changed"; then
-    if [ "$is_trusted_release_branch" != "true" ] && [ "$is_release_promotion" != "true" ]; then
+    if [ "$is_trusted_release_branch" != "true" ] && [ "$is_release_promotion" != "true" ] && \
+        [ "$is_published_baseline_import" != "true" ]; then
       echo "::error::Generated changelog files require a trusted same-repository Release App release/back-sync PR"
       echo "::error::or a develop-to-main promotion. A release-shaped branch name alone grants no privilege."
       exit 1

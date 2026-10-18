@@ -201,10 +201,48 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_REF: ${{ github.ref_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
 
           head_ref="$(bash scripts/resolve-changelog-head-ref.sh HEAD)"
+          # An ordinary human import remains an ordinary reviewed PR. Bind its
+          # real merge before passing any import facts to the read-only guard.
+          if [ "$TARGET_REF" = develop ] && [[ "$head_ref" != backsync/release-* ]] && \
+              [ -n "$PUSH_BEFORE" ] && git diff --name-only "$PUSH_BEFORE" "$SOURCE_SHA" -- \
+              CHANGELOG.rst changelogs/changelog.yaml changelogs/.plugin-cache.yaml | grep -q .; then
+            test "$GITHUB_REPOSITORY" = lightning-it/ansible-collection-supplementary
+            read -r -a import_merge <<<"$(git rev-list --parents -n 1 "$SOURCE_SHA")"
+            test "${#import_merge[@]}" -eq 3
+            test "${import_merge[1]}" = "$PUSH_BEFORE"
+            test "$(git rev-parse refs/remotes/origin/develop^{commit})" = "$SOURCE_SHA"
+            test "$(git rev-parse "${SOURCE_SHA}^{tree}")" = \
+              "$(git rev-parse "${import_merge[2]}^{tree}")"
+            import_prs="$(
+              gh api -H 'Accept: application/vnd.github+json' --paginate --slurp \
+                "repos/${GITHUB_REPOSITORY}/commits/${SOURCE_SHA}/pulls"
+            )"
+            matching_imports="$(
+              jq --arg merge "$SOURCE_SHA" --arg base "$PUSH_BEFORE" \
+                --arg head "${import_merge[2]}" --arg repo "$GITHUB_REPOSITORY" '[
+                  .[][] | select(
+                    .merged_at != null and .merge_commit_sha == $merge
+                    and .base.ref == "develop" and .base.sha == $base
+                    and .base.repo.full_name == $repo
+                    and .head.sha == $head and .head.repo.full_name == $repo
+                    and .user.login == "litroc"
+                    and (.head.ref | test("^reconcile/release-v(0|[1-9][0-9]*)\\."
+                      + "(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)-to-develop$"))
+                  )
+                ]' <<<"$import_prs"
+            )"
+            test "$(jq length <<<"$matching_imports")" -eq 1
+            import_head_ref="$(jq -r '.[0].head.ref' <<<"$matching_imports")"
+            echo "author=litroc" >>"$GITHUB_OUTPUT"
+            echo "head_repository=$GITHUB_REPOSITORY" >>"$GITHUB_OUTPUT"
+            echo "import_head_ref=$import_head_ref" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
           case "$head_ref" in
             release/v*) expected_target=main ;;
             backsync/release-*-to-develop) expected_target=develop ;;
@@ -264,6 +302,9 @@ jobs:
           GITHUB_PR_AUTHOR: >-
             ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login ||
             steps.release-push.outputs.author || '' }}
+          GITHUB_HEAD_REF: >-
+            ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref ||
+            steps.release-push.outputs.import_head_ref || '' }}
           LABELS_JSON: >-
             ${{ github.event_name == 'pull_request' &&
             toJson(github.event.pull_request.labels.*.name) || '[]' }}
