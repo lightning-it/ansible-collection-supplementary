@@ -285,14 +285,17 @@ class NormalReleaseProofTests(unittest.TestCase):
                 self.publish()
 
     def test_preparation_must_be_single_app_commit_and_generated_only(self):
-        self.assertEqual(self.receipt, PROOF.preparation(self.root, self.content_base, self.prepared, self.main_base))
+        self.assertEqual(
+            self.receipt,
+            PROOF.preparation(self.root, self.content_base, self.prepared, self.main_base, REPOSITORY, "1103407173"),
+        )
         (self.root / "executable.py").write_text("print('unreviewed')\n")
         self.git("add", ".")
         changed = self.commit("chore(release): prepare v1.0.1", [self.content_base])
         with self.assertRaisesRegex(ValueError, "non-generated"):
-            PROOF.preparation(self.root, self.content_base, changed, self.main_base)
+            PROOF.preparation(self.root, self.content_base, changed, self.main_base, REPOSITORY, "1103407173")
         with self.assertRaisesRegex(ValueError, "base SHA differs"):
-            PROOF.preparation(self.root, self.main_base, self.prepared, self.main_base)
+            PROOF.preparation(self.root, self.main_base, self.prepared, self.main_base, REPOSITORY, "1103407173")
 
     def test_native_approval_is_rechecked(self):
         self.core.native_approval.return_value = {"user": "different"}
@@ -342,6 +345,135 @@ class NormalReleaseProofTests(unittest.TestCase):
         self.core.ingress_candidates.side_effect = [[self.run], [newer]]
         with self.assertRaisesRegex(ValueError, "newer-promotion-generation"):
             self.publish()
+
+    def test_actual_readiness_steps_distinguish_consumed_unjoined_and_pending_tips(self):
+        jobs = yaml.safe_load((ROOT / ".github/workflows/release-prepare.yml").read_text())["jobs"]
+        steps = {step["id"]: step for step in jobs["normal-readiness"]["steps"] if "id" in step}
+        self.git("remote", "add", "origin", str(self.root))
+        (self.root / "scripts").mkdir()
+        for name in ("release-version.py", "security_release_contract.py"):
+            shutil.copyfile(ROOT / "scripts" / name, self.root / "scripts" / name)
+        content = self.root / "release-readiness-content"
+        (content / "changelogs/fragments").mkdir(parents=True)
+        (content / "galaxy.yml").write_text("---\nversion: 1.0.1\n")
+        pending = self.root / "changelogs/fragments/next.yml"
+        pending.parent.mkdir(parents=True, exist_ok=True)
+        pending.write_text("---\nbugfixes:\n  - Reviewed next change.\n")
+        self.git("add", "changelogs/fragments/next.yml")
+        unjoined = self.commit("next Develop ingress", [self.develop])
+        joined = self.commit("next ingress after Main ancestry", [self.release])
+        executable = shutil.which("bash")
+        assert executable
+        native = r"""gh() {
+          printf '%s\n' "$2" >>"$NATIVE_CALLS"
+          case "$2" in
+            */branches/main) printf '{"protected":true,"commit":{"sha":"%s"}}\n' "$GITHUB_SHA";;
+            */branches/develop) printf '{"protected":true,"commit":{"sha":"%s"}}\n' "$CONTENT_SHA";;
+            */git/ref/heads/main) echo "$GITHUB_SHA";;
+            */git/ref/heads/develop) echo "$CONTENT_SHA";;
+            *) return 1;;
+          esac
+        }
+        """
+        for label, head, has_fragments, expected_status in (
+            ("consumed-unjoined", self.develop, False, 0),
+            ("pending-unjoined", unjoined, True, 1),
+            ("pending-joined", joined, True, 0),
+        ):
+            with self.subTest(case=label):
+                fragment = content / "changelogs/fragments/next.yml"
+                if has_fragments:
+                    fragment.write_bytes(pending.read_bytes())
+                else:
+                    fragment.unlink(missing_ok=True)
+                calls = self.root / f"{label}-native-calls"
+                output = self.root / f"{label}-output"
+                environment = {
+                    **self.git_env,
+                    "GITHUB_REPOSITORY": REPOSITORY,
+                    "GITHUB_SHA": self.release,
+                    "CONTENT_SHA": head,
+                    "VERSION_INPUT": "",
+                    "BASE_INPUT": "",
+                    "TARGET_INPUT": "",
+                    "NATIVE_CALLS": str(calls),
+                    "GITHUB_OUTPUT": str(output),
+                }
+                bind = subprocess.run(  # noqa: S603 -- actual read-only steps with offline native fixture.
+                    [executable, "-c", native + steps["tips"]["run"]],
+                    cwd=self.root,
+                    env=environment,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(0, bind.returncode, bind.stderr)
+                self.assertEqual(f"content_sha={head}\n", output.read_text())
+                output.unlink()
+                need = subprocess.run(  # noqa: S603 -- actual Main parser and real Git topology.
+                    [executable, "-c", native + steps["need"]["run"]],
+                    cwd=self.root,
+                    env=environment,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(expected_status, need.returncode, need.stderr)
+                if label == "consumed-unjoined":
+                    self.assertEqual("ready=false\n", output.read_text())
+                    self.assertIn("no-op", need.stdout)
+                elif label == "pending-unjoined":
+                    self.assertFalse(output.exists())
+                else:
+                    self.assertEqual("ready=true\n", output.read_text())
+                native_reads = calls.read_text().splitlines()
+                expected_reads = [f"repos/{REPOSITORY}/branches/main", f"repos/{REPOSITORY}/branches/develop"]
+                if label == "pending-joined":
+                    expected_reads += [
+                        f"repos/{REPOSITORY}/git/ref/heads/main",
+                        f"repos/{REPOSITORY}/git/ref/heads/develop",
+                    ]
+                self.assertEqual(expected_reads, native_reads)
+
+    def test_standalone_preparation_cli_rejects_foreign_receipt_identity(self):
+        for repository, repository_id, expected_error in (
+            ("other/collection", "1103407173", "repository differs"),
+            (REPOSITORY, "999999", "repository id differs"),
+        ):
+            with self.subTest(repository=repository, repository_id=repository_id):
+                receipt = copy.deepcopy(self.receipt)
+                receipt["repository"] = repository
+                receipt["repository_id"] = repository_id
+                receipt["workflow"]["ref"] = f"{repository}/.github/workflows/release-prepare.yml@refs/heads/main"
+                (self.root / PROOF.RECEIPT).write_bytes(PROOF.git_contract.CONTRACT.canonical_document_bytes(receipt))
+                self.git("add", PROOF.RECEIPT)
+                foreign = self.commit("chore(release): prepare v1.0.1", [self.content_base])
+                result = subprocess.run(  # noqa: S603 -- actual read-only CLI, fixed fixture arguments.
+                    [
+                        sys.executable,
+                        str(ROOT / "scripts/normal_release_proof.py"),
+                        "preparation",
+                        "--root",
+                        str(self.root),
+                        "--base",
+                        self.content_base,
+                        "--head",
+                        foreign,
+                        "--workflow-source",
+                        self.main_base,
+                        "--repository",
+                        REPOSITORY,
+                        "--repository-id",
+                        "1103407173",
+                    ],
+                    cwd=self.root,
+                    env=self.git_env,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn(expected_error, result.stderr)
 
     def test_empty_fragment_guard_is_actual_noop(self):
         prepare = yaml.safe_load((ROOT / ".github/workflows/release-prepare.yml").read_text())["jobs"]

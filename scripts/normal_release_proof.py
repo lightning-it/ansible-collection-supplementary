@@ -49,7 +49,7 @@ def document(root, revision):
     return value
 
 
-def preparation(root, base, head, workflow_source):
+def preparation(root, base, head, workflow_source, repository, repository_id):
     for revision in (base, head, workflow_source):
         require(isinstance(revision, str) and re.fullmatch(r"[0-9a-f]{40}", revision), "invalid-revision")
     receipt = document(root, head)
@@ -57,8 +57,8 @@ def preparation(root, base, head, workflow_source):
     require(receipt["workflow"]["source_sha"] == workflow_source, "preparation-workflow-source-drift")
     version_module().verify_preparation_receipt(
         receipt,
-        expected_repository=receipt["repository"],
-        expected_repository_id=receipt["repository_id"],
+        expected_repository=repository,
+        expected_repository_id=repository_id,
         expected_base_sha=base,
         expected_version=version,
         root=root,
@@ -226,7 +226,10 @@ def publish(root, api, core, repository, repository_id, release, base, head):
         git_contract.is_ancestor(root, workflow_source, base) and git_contract.is_ancestor(root, base, content_base),
         "protected-main-ancestry-required",
     )
-    require(preparation(root, content_base, prepared, workflow_source) == receipt, "preparation-receipt-drift")
+    require(
+        preparation(root, content_base, prepared, workflow_source, repository, repository_id) == receipt,
+        "preparation-receipt-drift",
+    )
     prep = merged_pull(api, repository, head, "develop", f"release/v{receipt['next_version']}", content_base, prepared)
     promotion = merged_pull(api, repository, release, "main", "develop", base, head)
     config = core.policy(api, repository, base, CONTROL_SOURCE)
@@ -291,13 +294,15 @@ def main():
     parser.add_argument("--head", required=True)
     parser.add_argument("--workflow-source")
     parser.add_argument("--release")
-    parser.add_argument("--repository")
-    parser.add_argument("--repository-id")
+    parser.add_argument("--repository", required=True)
+    parser.add_argument("--repository-id", required=True)
     parser.add_argument("--control-root", type=Path)
     args = parser.parse_args()
     try:
         if args.operation == "preparation":
-            result = preparation(args.root, args.base, args.head, args.workflow_source)
+            result = preparation(
+                args.root, args.base, args.head, args.workflow_source, args.repository, args.repository_id
+            )
         else:
             core = load_control(args.control_root)
             result = publish(

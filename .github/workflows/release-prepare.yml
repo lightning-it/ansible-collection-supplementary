@@ -156,7 +156,6 @@ jobs:
           content_sha="$(jq -er 'select(.protected == true) | .commit.sha' <<<"$develop")"
           [[ "$content_sha" =~ ^[0-9a-f]{40}$ ]]
           git fetch --no-tags origin "$content_sha"
-          git merge-base --is-ancestor "$GITHUB_SHA" "$content_sha"
           echo "content_sha=$content_sha" >>"$GITHUB_OUTPUT"
       - name: Checkout exact protected Develop content as data
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
@@ -187,6 +186,8 @@ jobs:
             echo 'ready=false' >>"$GITHUB_OUTPUT"
             exit 0
           fi
+          # Consumed releases need no joined ancestry; a new release must have it.
+          git merge-base --is-ancestor "$GITHUB_SHA" "$CONTENT_SHA"
           # Execute only the protected Main parser against the exact Develop data.
           resolution="$(
             python scripts/release-version.py \
@@ -604,7 +605,8 @@ jobs:
           else
             python "$workflow_source/scripts/normal_release_proof.py" preparation \
               --root "$GITHUB_WORKSPACE" --head "$pushed_sha" --base "$BASE_SHA" \
-              --workflow-source "$WORKFLOW_SOURCE_SHA"
+              --workflow-source "$WORKFLOW_SOURCE_SHA" \
+              --repository "$GITHUB_REPOSITORY" --repository-id "$REPOSITORY_ID"
             # Reusing an immutable branch also reuses its approved publication settings.
             test "$(jq -er '.publication.github_release | tostring' changelogs/release-preparation.json)" = \
               "$CREATE_GITHUB_RELEASE"
