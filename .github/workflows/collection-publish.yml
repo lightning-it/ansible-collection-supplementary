@@ -677,7 +677,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           repository: lightning-it/.github
-          ref: f263bac1a19c7b7a0f727e744c35360666925820
+          ref: bb1a5df9f54c5f98547048297e7e367cc382543e
           path: release-control-source
           persist-credentials: false
 

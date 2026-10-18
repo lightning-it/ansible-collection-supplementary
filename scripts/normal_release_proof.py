@@ -16,7 +16,7 @@ from pathlib import Path
 
 import security_main_promotion as git_contract
 
-CONTROL_SOURCE = "f263bac1a19c7b7a0f727e744c35360666925820"
+CONTROL_SOURCE = "bb1a5df9f54c5f98547048297e7e367cc382543e"
 APP = ("lightning-it-release-automation[bot]", 307565056, "Bot")
 RECEIPT = "changelogs/release-preparation.json"
 

@@ -25,6 +25,51 @@ SPEC.loader.exec_module(PROOF)
 REPOSITORY = "lightning-it/ansible-collection-supplementary"
 
 
+class NativeControlPolicyContractTests(unittest.TestCase):
+    def test_actual_adopted_producer_is_accepted_by_real_pinned_source(self):
+        # Qualification loads the immutable donor checkout, never a mocked policy
+        # or an inferred Git ancestry list. Generic source-only clones may omit
+        # the separately staged offline fixture; that is not qualification.
+        directory = Path(os.environ.get("LIT_RELEASE_CONTROL_FIXTURE", ROOT / ".cache/release-control-source"))
+        if not directory.is_dir():
+            self.skipTest("immutable offline native-control fixture not staged; qualification not executed")
+        previous = sys.modules.pop("workflow_control", None)
+        try:
+            core = PROOF.load_control(directory)
+            self.assertEqual((directory / "scripts/workflow_control.py").resolve(), Path(core.__file__).resolve())
+            producer = "bb1a5df9f54c5f98547048297e7e367cc382543e"
+            unknown = "0" * 40
+            protected = json.loads((ROOT / ".lit/workflow-control.json").read_text())
+            lineage = json.loads((directory / ".lit/workflow-source-lineage.json").read_text())
+            self.assertNotIn(producer, lineage["accepted_predecessors"])
+            self.assertNotIn(unknown, lineage["accepted_predecessors"])
+            api = Mock()
+            api.file.return_value = json.dumps(protected).encode()
+            config = core.policy(api, REPOSITORY, "a" * 40, PROOF.CONTROL_SOURCE)
+            api.file.assert_called_once_with(REPOSITORY, ".lit/workflow-control.json", "a" * 40)
+            self.assertIn(producer, config["accepted_sources"])
+            self.assertNotIn(unknown, config["accepted_sources"])
+            self.assertEqual({producer, *lineage["accepted_predecessors"]}, set(config["accepted_sources"]))
+            old_reader = core.policy(api, REPOSITORY, "a" * 40, "f263bac1a19c7b7a0f727e744c35360666925820")
+            self.assertNotIn(producer, old_reader["accepted_sources"])
+            protected["accepted_sources"] = [unknown]
+            api.file.return_value = json.dumps(protected).encode()
+            with self.assertRaisesRegex(core.ControlError, "consumer-cannot-admit-central-source"):
+                core.policy(api, REPOSITORY, "a" * 40, PROOF.CONTROL_SOURCE)
+            # The existing publisher pins the exact same defining source.
+            workflow = yaml.safe_load((ROOT / ".github/workflows/collection-publish.yml").read_text())
+            checkout = next(
+                step
+                for step in workflow["jobs"]["publish"]["steps"]
+                if step.get("name") == "Checkout immutable public native-control verifier"
+            )
+            self.assertEqual(producer, checkout["with"]["ref"])
+        finally:
+            sys.modules.pop("workflow_control", None)
+            if previous is not None:
+                sys.modules["workflow_control"] = previous
+
+
 class NormalReleaseProofTests(unittest.TestCase):
     def git(self, *args):
         executable = shutil.which("git")
