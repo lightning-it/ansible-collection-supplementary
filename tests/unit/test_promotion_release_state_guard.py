@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -233,7 +234,14 @@ class NormalPreparationPromotionShellTests(unittest.TestCase):
     """Actual promoter guard + real Git; native proof seam tested by its direct suite."""
 
     def setUp(self):
-        import test_normal_release_proof as normal
+        # Discovery from tests/ and from tests/unit/ gives different package
+        # names. Load this fixed fixture file explicitly in both entry points.
+        spec = importlib.util.spec_from_file_location(
+            "normal_promotion_fixture", Path(__file__).with_name("test_normal_release_proof.py")
+        )
+        assert spec is not None and spec.loader is not None
+        normal = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(normal)
 
         self.fixture = normal.NormalReleaseProofTests()
         self.fixture.extra_baseline = {
