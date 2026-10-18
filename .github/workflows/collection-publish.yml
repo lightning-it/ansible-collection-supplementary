@@ -51,7 +51,8 @@ jobs:
       github.event_name == 'pull_request' &&
       github.event.pull_request.merged == true &&
       github.event.pull_request.base.ref == 'main' &&
-      startsWith(github.event.pull_request.head.ref, 'release/v')
+      (github.event.pull_request.head.ref == 'develop' ||
+       startsWith(github.event.pull_request.head.ref, 'release/v'))
     name: Dispatch collection publish from main
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -70,6 +71,9 @@ jobs:
           REVIEWED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_AUTHOR_ID: ${{ github.event.pull_request.user.id }}
+          PR_AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
         run: |
           set -euo pipefail
 
@@ -112,7 +116,21 @@ jobs:
             echo "Merged galaxy.yml does not contain a stable semantic version." >&2
             exit 1
           fi
-          test "$HEAD_REF" = "release/v${release_version}"
+          if [ "$HEAD_REF" = develop ]; then
+            test "$PR_AUTHOR" = 'lightning-it-release-automation[bot]'
+            test "$PR_AUTHOR_ID" = 307565056
+            test "$PR_AUTHOR_TYPE" = Bot
+            # Dispatch only locates work. The consumer independently proves both PRs.
+            receipt_json="$(
+              gh api "repos/${GITHUB_REPOSITORY}/contents/changelogs/release-preparation.json?ref=${MERGE_SHA}" \
+                --jq .content | base64 --decode
+            )"
+            jq -e --arg version "$release_version" '
+              .schema_version == 3 and .release_mode == "normal" and .next_version == $version
+            ' <<<"$receipt_json" >/dev/null
+          else
+            test "$HEAD_REF" = "release/v${release_version}"
+          fi
 
           create_github_release=true
           publish_galaxy=true
@@ -123,6 +141,12 @@ jobs:
             publish_galaxy=false
           fi
 
+          if [ "$HEAD_REF" = develop ]; then
+            create_github_release="$(jq -er '.publication.github_release | tostring' <<<"$receipt_json")"
+            publish_galaxy="$(jq -er '.publication.galaxy | tostring' <<<"$receipt_json")"
+            [[ "$create_github_release" = true || "$create_github_release" = false ]]
+            [[ "$publish_galaxy" = true || "$publish_galaxy" = false ]]
+          fi
           {
             echo "release_version=$release_version"
             echo "release_sha=$MERGE_SHA"
@@ -536,6 +560,31 @@ jobs:
           test "${parents[1]}" = "$REVIEWED_HEAD_SHA"
           git diff --quiet "$REVIEWED_HEAD_SHA" "$RELEASE_SHA" -- .
 
+          if [ "$(jq -er '.schema_version' changelogs/release-preparation.json)" = 3 ]; then
+            test "$(jq -er '.release_mode' changelogs/release-preparation.json)" = normal
+            echo 'NORMAL_TWO_STAGE=true' >>"$GITHUB_ENV"
+            exit 0  # The native two-stage proof below owns this route.
+          fi
+
+          if [ "$(jq -er '.release_mode' changelogs/release-preparation.json)" = normal ]; then
+            # Schema 2 is historical read/recheck compatibility, never a new normal release.
+            legacy_version="$(jq -er '.next_version' changelogs/release-preparation.json)"
+            [[ "$legacy_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+            legacy_tag="v${legacy_version}"
+            git fetch --no-tags origin "refs/tags/${legacy_tag}"
+            test "$(git cat-file -t FETCH_HEAD)" = tag
+            test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$RELEASE_SHA"
+            published="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${legacy_tag}")"
+            # target_commitish may be a historical Develop tag-creation hint.
+            # The live immutable tag above binds the actual release target.
+            jq -e --arg tag "$legacy_tag" '
+              .tag_name == $tag and .draft == false and .prerelease == false
+              and (.id | type == "number") and .id > 0
+              and (.published_at | type == "string" and length > 0)
+            ' <<<"$published" >/dev/null
+            echo 'LEGACY_NORMAL_RECHECK=true' >>"$GITHUB_ENV"
+          fi
+
           mapfile -t preparation_parents < <(
             git show -s --format='%P' "$REVIEWED_HEAD_SHA" | tr ' ' '\n'
           )
@@ -623,12 +672,41 @@ jobs:
             ansible-core==2.18.18 \
             PyYAML==6.0.3
 
+      - name: Checkout immutable public native-control verifier
+        if: env.NORMAL_TWO_STAGE == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          repository: lightning-it/.github
+          ref: f263bac1a19c7b7a0f727e744c35360666925820
+          path: release-control-source
+          persist-credentials: false
+
+      - name: Prove normal preparation ingress and exact approved promotion
+        if: env.NORMAL_TWO_STAGE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_HEAD_SHA: ${{ inputs.reviewed_head_sha }}
+          REVIEWED_BASE_SHA: ${{ inputs.reviewed_base_sha }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          proof="$RUNNER_TEMP/normal-release-proof.json"
+          python scripts/normal_release_proof.py publish \
+            --root "$GITHUB_WORKSPACE" --control-root "$GITHUB_WORKSPACE/release-control-source" \
+            --repository "$GITHUB_REPOSITORY" --repository-id "$REPOSITORY_ID" \
+            --release "$RELEASE_SHA" --base "$REVIEWED_BASE_SHA" --head "$REVIEWED_HEAD_SHA" >"$proof"
+          {
+            echo "PREPARATION_BASE_SHA=$(jq -er '.content_base' "$proof")"
+            echo "PREPARATION_HEAD_SHA=$(jq -er '.prepared_head' "$proof")"
+          } >>"$GITHUB_ENV"
+
       - name: Re-prove fragment-derived version and authorized preparation
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY_ID: ${{ github.repository_id }}
-          REVIEWED_HEAD_SHA: ${{ inputs.reviewed_head_sha }}
-          REVIEWED_BASE_SHA: ${{ inputs.reviewed_base_sha }}
+          REVIEWED_HEAD_SHA: ${{ env.PREPARATION_HEAD_SHA || inputs.reviewed_head_sha }}
+          REVIEWED_BASE_SHA: ${{ env.PREPARATION_BASE_SHA || inputs.reviewed_base_sha }}
         run: |
           set -euo pipefail
 
@@ -649,7 +727,14 @@ jobs:
           test ! -e "$base_tree"
           git worktree add --detach --quiet "$base_tree" "$REVIEWED_BASE_SHA"
           test "$(git -C "$base_tree" rev-parse HEAD)" = "$REVIEWED_BASE_SHA"
-          python "$base_tree/scripts/release-version.py" \
+          workflow_source="$(jq -er '.workflow.source_sha' "$receipt")"
+          workflow_tree="$base_tree"
+          if [ "${NORMAL_TWO_STAGE:-false}" = true ]; then
+            workflow_tree="$RUNNER_TEMP/release-preparation-workflow-source"
+            test ! -e "$workflow_tree"
+            git worktree add --detach --quiet "$workflow_tree" "$workflow_source"
+          fi
+          python "$workflow_tree/scripts/release-version.py" \
             --verify-preparation-receipt "$receipt" \
             --repository "$GITHUB_REPOSITORY" \
             --repository-id "$REPOSITORY_ID" \
@@ -690,7 +775,7 @@ jobs:
               ;;
           esac
           recomputed="$(
-            python "$base_tree/scripts/release-version.py" \
+            python "$workflow_tree/scripts/release-version.py" \
               --galaxy "$base_tree/galaxy.yml" \
               --fragments "$base_tree/changelogs/fragments" \
               "${version_args[@]}"
@@ -710,7 +795,7 @@ jobs:
           )"
           jq -e \
             --arg repository "$GITHUB_REPOSITORY" \
-            --arg base_sha "$REVIEWED_BASE_SHA" \
+            --arg base_sha "$workflow_source" \
             --arg run_id "$preparation_run_id" \
             --arg run_attempt "$preparation_attempt" \
             --arg actor "$preparation_actor" '
@@ -1651,6 +1736,10 @@ jobs:
               raise SystemExit("existing release tag annotation differs")
           PY
           else
+            if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then
+              echo 'Legacy normal recheck cannot create a tag.' >&2
+              exit 1
+            fi
             tag_object="$(
               gh api --method POST \
                 "repos/${GITHUB_REPOSITORY}/git/tags" \
@@ -1709,6 +1798,10 @@ jobs:
               raise SystemExit("existing GitHub Release notes differ from the changelog")
           PY
           else
+            if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then
+              echo 'Legacy normal recheck cannot create a GitHub Release.' >&2
+              exit 1
+            fi
             gh release create "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --verify-tag \
@@ -1833,6 +1926,10 @@ jobs:
           )"
 
           if [ "$status" = 404 ]; then
+            if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then
+              echo 'Legacy normal recheck cannot create a Galaxy version.' >&2
+              exit 1
+            fi
             ansible-galaxy collection publish "$candidate" \
               --api-key "$GALAXY_API_TOKEN"
           elif [ "$status" != 200 ]; then
@@ -2786,6 +2883,7 @@ jobs:
         run: bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
 
       - name: Create or verify immutable tag with dedicated App
+        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
         env:
           APP_SLUG: ${{ steps.release-tag-token.outputs.app-slug }}
           GH_TOKEN: ${{ steps.release-tag-token.outputs.token }}
@@ -2841,6 +2939,10 @@ jobs:
               raise SystemExit("existing release tag annotation differs")
           PY
           else
+            if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then
+              echo 'Legacy normal recheck cannot create a tag.' >&2
+              exit 1
+            fi
             tag_object="$(
               gh api --method POST \
                 "repos/${GITHUB_REPOSITORY}/git/tags" \
@@ -2864,6 +2966,7 @@ jobs:
           fi
 
       - name: Create or verify GitHub Release and immutable assets
+        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -2898,6 +3001,10 @@ jobs:
               raise SystemExit("existing GitHub Release notes differ from the changelog")
           PY
           else
+            if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then
+              echo 'Legacy normal recheck cannot create a GitHub Release.' >&2
+              exit 1
+            fi
             gh release create "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --verify-tag \
@@ -2963,7 +3070,9 @@ jobs:
         run: bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
 
       - name: Publish or verify validated artifact on Ansible Galaxy
-        if: env.GALAXY_REQUIRED == 'true'
+        if: >-
+          (env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true') &&
+          (env.GALAXY_REQUIRED == 'true')
         env:
           GALAXY_API_TOKEN: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
         run: |
@@ -3019,6 +3128,10 @@ jobs:
           )"
 
           if [ "$status" = 404 ]; then
+            if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then
+              echo 'Legacy normal recheck cannot create a Galaxy version.' >&2
+              exit 1
+            fi
             ansible-galaxy collection publish "$candidate" \
               --api-key "$GALAXY_API_TOKEN"
           elif [ "$status" != 200 ]; then

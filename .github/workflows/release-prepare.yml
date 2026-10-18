@@ -13,13 +13,13 @@ on:
         required: false
         default: ""
       base_branch:
-        description: Base branch. Leave empty to use protected main.
+        description: Content base. Normal preparation requires develop; Security requires main.
         required: false
         default: ""
       target_branch:
-        description: Release PR target branch. Must be main.
+        description: Release PR target. Normal preparation requires develop; Security requires main.
         required: false
-        default: main
+        default: ""
       create_github_release:
         description: Create a GitHub release after merge.
         required: false
@@ -120,12 +120,104 @@ jobs:
               --binding-root security-binding-base
           fi
 
+  normal-readiness:
+    name: Check normal release need before environment or App access
+    needs: security-classification
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      needs.security-classification.outputs.security-release == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      ready: ${{ steps.need.outputs.ready }}
+      content-sha: ${{ steps.tips.outputs.content_sha }}
+    steps:
+      - name: Checkout protected Main tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bind current protected Main and Develop tips
+        id: tips
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_INPUT: ${{ inputs.base_branch || '' }}
+          TARGET_INPUT: ${{ inputs.target_branch || '' }}
+        run: |
+          set -euo pipefail
+          test "${BASE_INPUT:-develop}" = develop
+          test "${TARGET_INPUT:-develop}" = develop
+          main="$(gh api "repos/${GITHUB_REPOSITORY}/branches/main")"
+          develop="$(gh api "repos/${GITHUB_REPOSITORY}/branches/develop")"
+          jq -e --arg sha "$GITHUB_SHA" '.protected == true and .commit.sha == $sha' <<<"$main" >/dev/null
+          content_sha="$(jq -er 'select(.protected == true) | .commit.sha' <<<"$develop")"
+          [[ "$content_sha" =~ ^[0-9a-f]{40}$ ]]
+          git fetch --no-tags origin "$content_sha"
+          git merge-base --is-ancestor "$GITHUB_SHA" "$content_sha"
+          echo "content_sha=$content_sha" >>"$GITHUB_OUTPUT"
+      - name: Checkout exact protected Develop content as data
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ steps.tips.outputs.content_sha }}
+          path: release-readiness-content
+          persist-credentials: false
+      - name: Setup Python for trusted Main preflight
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: "3.14"
+      - name: Install pinned receipt parser
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.3
+      - name: Check actual unreleased fragments and recheck bound tips
+        id: need
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTENT_SHA: ${{ steps.tips.outputs.content_sha }}
+          VERSION_INPUT: ${{ inputs.version || '' }}
+        run: |
+          set -euo pipefail
+          content=release-readiness-content
+          fragments="$content/changelogs/fragments"
+          test -d "$fragments"
+          test ! -L "$fragments"
+          if [ -z "$(find "$fragments" -maxdepth 1 \( -name '*.yml' -o -name '*.yaml' \) -print -quit)" ]; then
+            echo '::notice::No unreleased Develop fragments remain; release preparation is a no-op.'
+            echo 'ready=false' >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Execute only the protected Main parser against the exact Develop data.
+          resolution="$(
+            python scripts/release-version.py \
+              --galaxy "$content/galaxy.yml" --fragments "$fragments" \
+              --requested-version "$VERSION_INPUT" --root "$content"
+          )"
+          main_version="$(python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          print(yaml.safe_load(Path("galaxy.yml").read_text())["version"])
+          PY
+          )"
+          if [ "$(jq -er '.current_version' <<<"$resolution")" != "$main_version" ]; then
+            echo '::error::Develop release baseline differs from Main;' \
+              'complete the existing release or baseline convergence first.'
+            exit 1
+          fi
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/develop" --jq .object.sha)" = "$CONTENT_SHA"
+          echo 'ready=true' >>"$GITHUB_OUTPUT"
+
   prepare:
     name: Prepare release PR
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: security-classification
+    needs: [security-classification, normal-readiness]
     if: >-
+      always() && needs.security-classification.result == 'success' &&
+      (needs.security-classification.outputs.security-release == 'true' ||
+       (needs.normal-readiness.result == 'success' && needs.normal-readiness.outputs.ready == 'true')) &&
       (
         (
           github.event_name == 'workflow_dispatch' &&
@@ -148,6 +240,16 @@ jobs:
             'ansible-collection-release-prepare' }}
 
     steps:
+      - name: Recheck normal protected tips before minting App credentials
+        if: needs.security-classification.outputs.security-release == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTENT_SHA: ${{ needs.normal-readiness.outputs.content-sha }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/develop" --jq .object.sha)" = "$CONTENT_SHA"
+
       - name: Mint release automation App token
         id: release-app
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
@@ -209,6 +311,7 @@ jobs:
           REPOSITORY_ID: ${{ github.repository_id }}
           SECURITY_RELEASE: ${{ needs.security-classification.outputs.security-release }}
           SECURITY_VERSION: ${{ needs.security-classification.outputs.security-version }}
+          NORMAL_CONTENT_SHA: ${{ needs.normal-readiness.outputs.content-sha }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
           WORKFLOW_EVENT: ${{ github.event_name }}
           WORKFLOW_ACTOR: ${{ github.actor }}
@@ -222,18 +325,27 @@ jobs:
           }
 
           VERSION="${VERSION_INPUT:-}"
-          TARGET_BRANCH="${TARGET_BRANCH_INPUT:-main}"
+          TARGET_BRANCH="${TARGET_BRANCH_INPUT:-}"
           CREATE_GITHUB_RELEASE="${CREATE_GITHUB_RELEASE_INPUT:-true}"
           PUBLISH_GALAXY="${PUBLISH_GALAXY_INPUT:-true}"
 
-          BASE_BRANCH="${BASE_BRANCH_INPUT:-main}"
-          if [ "$BASE_BRANCH" != "main" ]; then
-            echo "::error::Collection release PRs must be prepared from protected main."
-            exit 1
-          fi
-          if [ "$TARGET_BRANCH" != "main" ]; then
-            echo "::error::Collection release PRs must target main."
-            exit 1
+          # Credentials and executable tooling stay on the protected Main event.
+          test "$GITHUB_REF" = refs/heads/main
+          WORKFLOW_SOURCE_SHA="$GITHUB_SHA"
+          workflow_source="$RUNNER_TEMP/release-workflow-source"
+          test ! -e "$workflow_source"
+          git worktree add --detach "$workflow_source" "$WORKFLOW_SOURCE_SHA"
+          if [ "$SECURITY_RELEASE" = true ]; then
+            BASE_BRANCH="${BASE_BRANCH_INPUT:-main}"
+            TARGET_BRANCH="${TARGET_BRANCH:-main}"
+            test "$BASE_BRANCH" = main
+            test "$TARGET_BRANCH" = main
+          else
+            test "$SECURITY_RELEASE" = false
+            BASE_BRANCH="${BASE_BRANCH_INPUT:-develop}"
+            TARGET_BRANCH="${TARGET_BRANCH:-develop}"
+            test "$BASE_BRANCH" = develop
+            test "$TARGET_BRANCH" = develop
           fi
 
           git config user.name "${{ steps.release-bot.outputs.login }}"
@@ -242,6 +354,10 @@ jobs:
           git switch -C release-prepare-base "origin/$BASE_BRANCH"
           BASE_SHA="$(git rev-parse HEAD)"
           export BASE_SHA
+          if [ "$SECURITY_RELEASE" = false ]; then
+            test "$BASE_SHA" = "$NORMAL_CONTENT_SHA"
+            git merge-base --is-ancestor "$WORKFLOW_SOURCE_SHA" "$BASE_SHA"
+          fi
 
           fragment_count="$(
             find changelogs/fragments \
@@ -266,13 +382,16 @@ jobs:
             version_args=(--requested-version "$VERSION")
           fi
           version_resolution="$(
-            python scripts/release-version.py \
+            python "$workflow_source/scripts/release-version.py" \
               --galaxy galaxy.yml \
               --fragments changelogs/fragments \
               --write-preparation-receipt changelogs/release-preparation.json \
               --repository "$GITHUB_REPOSITORY" \
               --repository-id "$REPOSITORY_ID" \
               --base-sha "$BASE_SHA" \
+              --workflow-source-sha "$WORKFLOW_SOURCE_SHA" \
+              --create-github-release "$CREATE_GITHUB_RELEASE" \
+              --publish-galaxy "$PUBLISH_GALAXY" \
               --workflow-run-id "$GITHUB_RUN_ID" \
               --workflow-attempt "$GITHUB_RUN_ATTEMPT" \
               --workflow-ref "$WORKFLOW_REF" \
@@ -475,12 +594,25 @@ jobs:
           promotion_base="$RUNNER_TEMP/release-promotion-base"
           test ! -e "$promotion_base"
           git worktree add --detach "$promotion_base" "$BASE_SHA"
-          python "$promotion_base/scripts/security_main_promotion.py" \
-            --base-root "$promotion_base" \
-            --head-root "$GITHUB_WORKSPACE" \
-            --base-sha "$BASE_SHA" \
-            --head-sha "$pushed_sha" \
-            --head-ref "$RELEASE_BRANCH" >/dev/null
+          if [ "$PREPARATION_MODE" = security ]; then
+            python "$promotion_base/scripts/security_main_promotion.py" \
+              --base-root "$promotion_base" \
+              --head-root "$GITHUB_WORKSPACE" \
+              --base-sha "$BASE_SHA" \
+              --head-sha "$pushed_sha" \
+              --head-ref "$RELEASE_BRANCH" >/dev/null
+          else
+            python "$workflow_source/scripts/normal_release_proof.py" preparation \
+              --root "$GITHUB_WORKSPACE" --head "$pushed_sha" --base "$BASE_SHA" \
+              --workflow-source "$WORKFLOW_SOURCE_SHA"
+            # Reusing an immutable branch also reuses its approved publication settings.
+            test "$(jq -er '.publication.github_release | tostring' changelogs/release-preparation.json)" = \
+              "$CREATE_GITHUB_RELEASE"
+            test "$(jq -er '.publication.galaxy | tostring' changelogs/release-preparation.json)" = "$PUBLISH_GALAXY"
+            # The protected branches cannot drift between preparing and pushing.
+            test "$(git ls-remote origin refs/heads/develop | awk '{print $1}')" = "$BASE_SHA"
+            test "$(git ls-remote origin refs/heads/main | awk '{print $1}')" = "$WORKFLOW_SOURCE_SHA"
+          fi
           git worktree remove "$promotion_base"
 
           if [ -z "$remote_release_sha" ]; then
@@ -655,14 +787,16 @@ jobs:
               and .head.sha == $sha
               and .base.ref == $base
             ' <<<"$owned_pull" >/dev/null
-          gh workflow run release-bot-exact-head-review.yml \
-            -f bounded_mode=single \
-            --repo "$GITHUB_REPOSITORY" \
-            --ref "$(jq -r .base.ref <<<"$owned_pull")" \
-            -f "pr_number=${existing}" \
-            -f "base_ref=$(jq -r .base.ref <<<"$owned_pull")" \
-            -f "expected_base=$(jq -r .base.sha <<<"$owned_pull")" \
-            -f "expected_head=$(jq -r .head.sha <<<"$owned_pull")"
+          if [ "$PREPARATION_MODE" = security ]; then
+            gh workflow run release-bot-exact-head-review.yml \
+              -f bounded_mode=single \
+              --repo "$GITHUB_REPOSITORY" \
+              --ref "$(jq -r .base.ref <<<"$owned_pull")" \
+              -f "pr_number=${existing}" \
+              -f "base_ref=$(jq -r .base.ref <<<"$owned_pull")" \
+              -f "expected_base=$(jq -r .base.sha <<<"$owned_pull")" \
+              -f "expected_head=$(jq -r .head.sha <<<"$owned_pull")"
+          fi
 
           if [ "$SECURITY_RELEASE" = true ]; then
             test "$WORKFLOW_ACTOR" = 'lightning-it-release-automation[bot]'
