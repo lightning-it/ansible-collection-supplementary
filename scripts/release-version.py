@@ -26,7 +26,7 @@ IMPACT_CATEGORIES = {
 NEUTRAL_CATEGORIES = {"known_issues", "release_summary", "trivial"}
 KNOWN_CATEGORIES = set().union(*IMPACT_CATEGORIES.values(), NEUTRAL_CATEGORIES)
 MAX_FRAGMENT_BYTES = 1024 * 1024
-RELEASE_PREPARATION_SCHEMA_VERSION = 2
+RELEASE_PREPARATION_SCHEMA_VERSION = 3
 RELEASE_PREPARER = {
     "login": CONTRACT.RELEASE_APP_LOGIN,
     "account_id": CONTRACT.RELEASE_APP_ACCOUNT_ID,
@@ -283,6 +283,9 @@ def build_preparation_receipt(
     workflow_ref: str,
     workflow_event: str,
     workflow_actor: str,
+    workflow_source_sha: str = "",
+    create_github_release: bool = True,
+    publish_galaxy: bool = True,
     root: Path | None = None,
     checked_at: datetime | None = None,
 ) -> dict[str, Any]:
@@ -307,7 +310,7 @@ def build_preparation_receipt(
             "human_actions": security_binding["human_actions"],
         }
     payload: dict[str, Any] = {
-        "schema_version": RELEASE_PREPARATION_SCHEMA_VERSION,
+        "schema_version": 2 if release_mode == "security" else RELEASE_PREPARATION_SCHEMA_VERSION,
         "repository": repository,
         "repository_id": repository_id,
         "base_sha": base_sha,
@@ -322,7 +325,7 @@ def build_preparation_receipt(
         "workflow": {
             "path": ".github/workflows/release-prepare.yml",
             "ref": workflow_ref,
-            "source_sha": base_sha,
+            "source_sha": workflow_source_sha or base_sha,
             "run_id": workflow_run_id,
             "run_attempt": workflow_attempt,
             "event": workflow_event,
@@ -330,6 +333,9 @@ def build_preparation_receipt(
             "actor": workflow_actor,
         },
     }
+    if release_mode == "normal":
+        payload["content_base"] = {"ref": "refs/heads/develop", "sha": base_sha}
+        payload["publication"] = {"github_release": create_github_release, "galaxy": publish_galaxy}
     verify_preparation_receipt(
         payload,
         expected_repository=repository,
@@ -369,13 +375,15 @@ def verify_preparation_receipt(
         "preparer",
         "workflow",
     }
+    if receipt.get("schema_version") == 3:
+        required |= {"content_base", "publication"}
     if set(receipt) != required:
         raise VersionError("release preparation receipt has missing or unknown fields")
     schema_version = receipt.get("schema_version")
     if (
         not isinstance(schema_version, int)
         or isinstance(schema_version, bool)
-        or schema_version != RELEASE_PREPARATION_SCHEMA_VERSION
+        or schema_version not in {2, RELEASE_PREPARATION_SCHEMA_VERSION}
     ):
         raise VersionError("release preparation receipt schema is unsupported")
     if receipt.get("repository") != expected_repository or not re.fullmatch(
@@ -386,6 +394,16 @@ def verify_preparation_receipt(
         raise VersionError("release preparation receipt repository id differs")
     if receipt.get("base_sha") != expected_base_sha or re.fullmatch(r"[0-9a-f]{40}", expected_base_sha) is None:
         raise VersionError("release preparation receipt base SHA differs")
+
+    if schema_version == 3:
+        if receipt.get("release_mode") != "normal":
+            raise VersionError("schema 3 is exclusively the normal two-stage release route")
+        if receipt.get("content_base") != {"ref": "refs/heads/develop", "sha": expected_base_sha}:
+            raise VersionError("release preparation content base differs from protected develop")
+        publication = receipt.get("publication")
+        if (not isinstance(publication, dict) or set(publication) != {"github_release", "galaxy"}
+                or any(type(value) is not bool for value in publication.values())):  # pylint: disable=unidiomatic-typecheck
+            raise VersionError("release preparation publication policy is malformed")
 
     current = parse_stable_version(receipt.get("current_version"), label="receipt current version")
     impact = str(receipt.get("impact", ""))
@@ -476,7 +494,9 @@ def verify_preparation_receipt(
     if (
         workflow.get("path") != ".github/workflows/release-prepare.yml"
         or workflow.get("ref") != expected_workflow_ref
-        or workflow.get("source_sha") != expected_base_sha
+        or not isinstance(workflow.get("source_sha"), str)
+        or re.fullmatch(r"[0-9a-f]{40}", workflow["source_sha"]) is None
+        or (schema_version == 2 and workflow.get("source_sha") != expected_base_sha)
         or workflow.get("git_ref") != "refs/heads/main"
         or workflow.get("event") not in {"push", "workflow_dispatch"}
         or not isinstance(workflow.get("actor"), str)
@@ -509,6 +529,9 @@ def main() -> int:
     parser.add_argument("--workflow-ref", default="")
     parser.add_argument("--workflow-event", default="")
     parser.add_argument("--workflow-actor", default="")
+    parser.add_argument("--workflow-source-sha", default="")
+    parser.add_argument("--create-github-release", choices=("true", "false"), default="true")
+    parser.add_argument("--publish-galaxy", choices=("true", "false"), default="true")
     parser.add_argument("--expected-version", default="")
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--checked-at", default="")
@@ -549,6 +572,9 @@ def main() -> int:
                 workflow_ref=args.workflow_ref,
                 workflow_event=args.workflow_event,
                 workflow_actor=args.workflow_actor,
+                workflow_source_sha=args.workflow_source_sha,
+                create_github_release=args.create_github_release == "true",
+                publish_galaxy=args.publish_galaxy == "true",
                 root=args.root,
                 checked_at=checked_at,
             )

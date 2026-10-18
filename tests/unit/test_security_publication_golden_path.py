@@ -533,14 +533,75 @@ clock.write_text(str(int(clock.read_text()) + int(sys.argv[1])))
         self.assertEqual("${{ needs.publish.outputs.request-id }}", receipt["env"]["REQUEST_ID"])
         self.assertEqual("${{ needs.publish.outputs.controller-sha }}", receipt["env"]["CONTROLLER_SHA"])
 
-        deferred_names = self.step_names[self.step_names.index("Finalize immutable release attachments and notes") :]
+        completion_names = [
+            "Prepare completed normal publication evidence",
+            "Attest completed normal publication",
+            "Publish and verify completed normal publication evidence",
+        ]
+        for name in completion_names:
+            self.assertIn("env.NORMAL_TWO_STAGE == 'true'", self.steps[name]["if"])
+            self.assertNotIn(name, self.finalize_names)
+        self.assertIn(
+            "env.NORMAL_TWO_STAGE != 'true'", self.steps["Attach signed post-publication verification receipt"]["if"]
+        )
+        deferred_names = [
+            name
+            for name in self.step_names[self.step_names.index("Finalize immutable release attachments and notes") :]
+            if name not in completion_names
+        ]
         final_names = self.finalize_names[
             self.finalize_names.index("Finalize immutable release attachments and notes") :
         ]
         self.assertEqual(deferred_names, final_names)
+        # Historical normal rechecks cannot create missing publication proof.
+        # Remove only these exact normal-only guards; every shared Security
+        # line and environment field must still compare exactly below.
+        normal_legacy_guards = {
+            "Finalize immutable release attachments and notes": (
+                '  if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then\n'
+                "    echo 'Legacy normal recheck requires the existing signed checksum pair.' >&2\n"
+                "    exit 1\n"
+                "  fi\n"
+            ),
+            "Create or verify GitHub Release and immutable assets": (
+                '    if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then\n'
+                "      echo 'Legacy normal recheck cannot add missing GitHub Release assets.' >&2\n"
+                "      exit 1\n"
+                "    fi\n"
+            ),
+            "Attach signed post-publication verification receipt": (
+                '  if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then\n'
+                "    echo 'Legacy normal recheck requires the existing signed post-release receipt pair.' >&2\n"
+                "    exit 1\n"
+                "  fi\n"
+            ),
+        }
+        self.assertTrue(normal_legacy_guards.keys() <= set(deferred_names))
         for name in deferred_names:
             stage = {key: value for key, value in self.steps[name].items() if key != "if"}
             final = {key: value for key, value in self.finalize_steps[name].items() if key != "if"}
+            if name in normal_legacy_guards:
+                legacy_guard = normal_legacy_guards[name]
+                self.assertEqual(1, stage["run"].count(legacy_guard), name)
+                self.assertNotIn(legacy_guard, final["run"], name)
+                stage["run"] = stage["run"].replace(legacy_guard, "", 1)
+                self.assertNotIn(legacy_guard, stage["run"], name)
+            if name == "Verify GitHub Release download, install, and smoke":
+                # Only normal publication has this archive. Preserve exact
+                # equality of every shared Security verification line and env.
+                archive_guard = (
+                    'if [ "${NORMAL_TWO_STAGE:-false}" = true ]; then\n'
+                    "  python scripts/normal_release_archive.py \\\n"
+                    '    --snapshot "$verify_root/normal-release-native-evidence.json" \\\n'
+                    '    --bundle "$verify_root/normal-release-native-evidence.sigstore.json" \\\n'
+                    '    --repository "$GITHUB_REPOSITORY" --repository-id "$REPOSITORY_ID" --release "$RELEASE_SHA"\n'
+                    "fi\n"
+                )
+                self.assertEqual(1, stage["run"].count(archive_guard))
+                self.assertNotIn("normal_release_archive.py", final["run"])
+                self.assertEqual("${{ github.repository_id }}", stage["env"]["REPOSITORY_ID"])
+                stage["env"] = {key: value for key, value in stage["env"].items() if key != "REPOSITORY_ID"}
+                stage["run"] = stage["run"].replace(archive_guard, "", 1)
             self.assertEqual(stage, final, name)
             if name != "Upload exact release attachment set":
                 self.assertIn("env.SECURITY_RELEASE != 'true'", self.steps[name]["if"])

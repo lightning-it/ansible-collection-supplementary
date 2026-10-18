@@ -26,9 +26,15 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           GITHUB_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-          GITHUB_PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          GITHUB_PR_AUTHOR: >-
+            ${{ (github.event.pull_request.user.login != 'lightning-it-release-automation[bot]' ||
+            (github.event.pull_request.user.id == 307565056 && github.event.pull_request.user.type == 'Bot' &&
+             github.repository_id == '1103407173')) && github.event.pull_request.user.login || '' }}
           LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_AUTHOR: >-
+            ${{ (github.event.pull_request.user.login != 'lightning-it-release-automation[bot]' ||
+            (github.event.pull_request.user.id == 307565056 && github.event.pull_request.user.type == 'Bot' &&
+             github.repository_id == '1103407173')) && github.event.pull_request.user.login || '' }}
           PR_BASE: ${{ github.event.pull_request.base.ref }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
         run: |

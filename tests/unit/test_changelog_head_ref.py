@@ -76,7 +76,9 @@ class ChangelogHeadRefTests(unittest.TestCase):
         self.assertIn(
             "GITHUB_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}", changelog_workflow
         )
-        self.assertIn("GITHUB_PR_AUTHOR: ${{ github.event.pull_request.user.login }}", changelog_workflow)
+        self.assertIn("GITHUB_PR_AUTHOR: >-", changelog_workflow)
+        self.assertIn("github.event.pull_request.user.id == 307565056", changelog_workflow)
+        self.assertIn("github.event.pull_request.user.type == 'Bot'", changelog_workflow)
 
         self.assertIn("Bind a release push to its unique merged Release App PR", workflow)
         self.assertIn('"repos/${GITHUB_REPOSITORY}/commits/${SOURCE_SHA}/pulls"', workflow)

@@ -1628,8 +1628,12 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn('--root "$base_tree"', publish)
         self.assertEqual(
             2,
-            publish.count('python "$base_tree/scripts/release-version.py"'),
+            publish.count('python "$workflow_tree/scripts/release-version.py"'),
         )
+        self.assertIn('workflow_tree="$base_tree"', publish)
+        self.assertIn('git worktree add --detach --quiet "$workflow_tree" "$workflow_source"', publish)
+        self.assertIn('--galaxy "$base_tree/galaxy.yml"', publish)
+        self.assertIn('--fragments "$base_tree/changelogs/fragments"', publish)
         self.assertNotIn("pull_request_target:", exact_revision)
         self.assertIn("workflow_dispatch:", exact_revision)
         self.assertIn("github.actor == 'lightning-it-release-automation[bot]'", exact_revision)
@@ -1850,6 +1854,38 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn("scripts/modulix-validation-receipt.py", workflow)
         self.assertNotIn("scripts/dispatch-transition-validation.py", workflow)
         self.assertNotIn("transition-noop", workflow)
+
+    def test_security_finalizer_publication_guards_allow_validated_release(self) -> None:
+        jobs = load_yaml(WORKFLOWS / "collection-publish.yml")["jobs"]
+        finalizer = jobs["publish-security-finalize"]
+        environment = finalizer["env"]
+        self.assertEqual("true", environment["SECURITY_RELEASE"])
+        self.assertEqual("true", environment["GALAXY_REQUIRED"])
+        steps = {step.get("name"): step for step in finalizer["steps"]}
+        for name in (
+            "Create or verify immutable tag with dedicated App",
+            "Create or verify GitHub Release and immutable assets",
+            "Publish or verify validated artifact on Ansible Galaxy",
+        ):
+            with self.subTest(step=name):
+                condition = steps[name].get("if", "'true' == 'true'")
+                # These publication guards use only string comparisons. Execute
+                # that boolean expression with the actual finalizer environment.
+                condition = re.sub(
+                    r"env\.([A-Z_]+)",
+                    lambda match: "'" + environment[match[1]] + "'",
+                    condition,
+                )
+                self.assertRegex(condition, r"^[a-z' =!&|()\s]+$")
+                executable = shutil.which("bash")
+                assert executable
+                result = subprocess.run(  # noqa: S603 -- repository-owned boolean guard, constrained above.
+                    [executable, "-c", "[[ " + condition + " ]]"],
+                    check=False,
+                    capture_output=True,
+                    timeout=5,
+                )
+                self.assertEqual(0, result.returncode, result.stderr.decode())
 
     def test_publish_security_release_is_metadata_bound_and_dispatches_after_acceptance(self) -> None:
         workflow_path = WORKFLOWS / "collection-publish.yml"
