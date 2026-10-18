@@ -385,7 +385,7 @@ class PublishedBaselineImportTests(unittest.TestCase):
             "merge_commit_sha": self.head,
             "base": {"ref": "develop", "sha": self.develop, "repo": {"full_name": MODULE.REPOSITORY}},
             "head": {"ref": BRANCH, "sha": candidate, "repo": {"full_name": MODULE.REPOSITORY}},
-            "user": {"login": "litroc"},
+            "user": {"login": "litroc", "id": 76040632, "type": "User"},
         }
 
     def test_existing_native_push_step_binds_the_actual_personal_merge_and_rejects_bad_relationships(self) -> None:
@@ -446,6 +446,8 @@ class PublishedBaselineImportTests(unittest.TestCase):
             ("merged_at", None),
             ("merge_commit_sha", self.base),
             ("user.login", APP_NAME),
+            ("user.id", 1),
+            ("user.type", "Bot"),
             ("base.sha", self.base),
             ("base.ref", "main"),
             ("head.sha", self.base),

@@ -1,6 +1,7 @@
 # Import an already published release baseline
 
-An ordinary personal `litroc` pull request from the same Supplementary repository
+An ordinary personal `litroc` (GitHub user ID `76040632`) pull request from the
+same Supplementary repository
 may use `reconcile/release-v<VERSION>-to-develop` to import an existing published
 Main baseline into Develop. This is a read-only source check, not a Release-App
 identity, an ancestry-only exception, review acceptance, or permission to merge.
