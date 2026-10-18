@@ -662,6 +662,84 @@ class NormalReleaseProofTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "published-baseline-release-drift"):
             PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", self.release)
 
+    def test_published_baseline_allows_download_counter_changes_from_its_own_asset_reads(self):
+        self.baseline_api(self.release)
+        self.published_release["assets"] = [
+            {
+                "id": 70,
+                "name": PROOF.archive.SNAPSHOT,
+                "size": 100,
+                "digest": "sha256:" + "a" * 64,
+                "state": "uploaded",
+                "download_count": 1,
+            },
+            {
+                "id": 71,
+                "name": PROOF.archive.BUNDLE,
+                "size": 200,
+                "digest": "sha256:" + "b" * 64,
+                "state": "uploaded",
+                "download_count": 1,
+            },
+        ]
+        original_read = self.api.call.side_effect
+        original_download = PROOF.archive.download_pair.side_effect
+
+        def read(path):
+            # Each REST response is a new JSON value, not the fixture's shared dict.
+            return copy.deepcopy(original_read(path))
+
+        def download(published, repository, directory):
+            original_download(published, repository, directory)
+            for asset in self.published_release["assets"]:
+                asset["download_count"] += 1
+
+        self.api.call.side_effect = read
+        with patch.object(PROOF.archive, "download_pair", side_effect=download):
+            result = PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", self.release)
+        self.assertEqual(self.release, result["main_merge"])
+        self.assertEqual([2, 2], [item["download_count"] for item in self.published_release["assets"]])
+
+    def test_published_baseline_still_rejects_asset_identity_digest_size_name_or_state_drift(self):
+        for field, changed in (
+            ("id", 99),
+            ("digest", "sha256:" + "c" * 64),
+            ("size", 999),
+            ("name", "foreign-evidence.json"),
+            ("state", "new"),
+        ):
+            with self.subTest(field=field):
+                self.baseline_api(self.release)
+                self.published_release["assets"] = [
+                    {
+                        "id": 70,
+                        "name": PROOF.archive.SNAPSHOT,
+                        "size": 100,
+                        "digest": "sha256:" + "a" * 64,
+                        "state": "uploaded",
+                        "download_count": 1,
+                    }
+                ]
+                original_read = self.api.call.side_effect
+                original_download = PROOF.archive.download_pair.side_effect
+
+                def read(path, original=original_read):
+                    return copy.deepcopy(original(path))
+
+                def download(
+                    published, repository, directory, selected=field, value=changed, original=original_download
+                ):
+                    original(published, repository, directory)
+                    self.published_release["assets"][0][selected] = value
+
+                self.api.call.side_effect = read
+                with (
+                    patch.object(PROOF.archive, "download_pair", side_effect=download),
+                    self.assertRaisesRegex(ValueError, "published-baseline-release-drift"),
+                ):
+                    PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", self.release)
+                self.git("tag", "-d", "v1.0.1")
+
     def test_published_baseline_rechecks_immutable_tag_after_proof(self):
         self.baseline_api(self.release)
         original = self.api.call.side_effect

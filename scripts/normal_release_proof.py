@@ -481,7 +481,10 @@ def published_baseline(root, api, core, repository, repository_id, current_main,
         and api.call(f"repos/{repository}/git/tags/{ref['object']['sha']}") == tag_object,
         "published-baseline-tag-drift",
     )
-    require(api.call(f"repos/{repository}/releases/tags/{tag}") == published, "published-baseline-release-drift")
+    require(
+        archive.release_state(api.call(f"repos/{repository}/releases/tags/{tag}")) == archive.release_state(published),
+        "published-baseline-release-drift",
+    )
     require(
         api.call(f"repos/{repository}/git/ref/heads/main")["object"]["sha"] == current_main, "protected-main-tip-drift"
     )

@@ -38,6 +38,18 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False).encode() + b"\n"
 
 
+def release_state(published):
+    """Keep every release/asset field except mutable per-asset download counts."""
+    require(isinstance(published, dict), "archive-release-response")
+    result = copy.deepcopy(published)
+    if "assets" in result:
+        require(isinstance(result["assets"], list), "archive-release-assets")
+        for asset in result["assets"]:
+            require(isinstance(asset, dict), "archive-release-asset")
+            asset.pop("download_count", None)
+    return result
+
+
 def unique(pairs):
     result = {}
     for key, value in pairs:
@@ -296,7 +308,7 @@ def verify_files(snapshot, bundle, repository, repository_id, release):
     bundle_raw = bounded_file(bundle, MAX_BUNDLE_BYTES)
     executable = shutil.which("gh")
     require(executable, "archive-verifier-unavailable")
-    result = subprocess.run(  # noqa: S603 -- fixed attestation verifier; no shell.
+    result = subprocess.run(  # noqa: S603, RUF100 -- fixed attestation verifier; no shell.
         [
             executable,
             "attestation",
@@ -357,7 +369,7 @@ def download_pair(published, repository, directory):
         selected.append((name, maximum, asset))
     require(len({asset["id"] for _name, _maximum, asset in selected}) == 2, "archive-release-asset-identity")
     for name, maximum, asset in selected:
-        with subprocess.Popen(  # noqa: S603 -- exact repository asset ID, bounded read, no shell.
+        with subprocess.Popen(  # noqa: S603, RUF100 -- exact repository asset ID, bounded read, no shell.
             [
                 executable,
                 "api",
