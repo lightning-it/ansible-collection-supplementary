@@ -354,7 +354,9 @@ class CompletionTests(unittest.TestCase):
         self.assertEqual(39, len(self.manifest))
         self.assertNotIn("back_sync", self.value)
         self.assertNotIn("release_back_sync_dispatched", self.value["gates"])
-        self.assertTrue(all(type(gate) is bool and gate for gate in self.value["gates"].values()))
+        for gate in self.value["gates"].values():
+            self.assertIsInstance(gate, bool)
+            self.assertTrue(gate)
 
     def test_missing_duplicate_foreign_or_changed_assets_deny_complete_signed_claim(self):
         original = copy.deepcopy(self.published)
