@@ -28,6 +28,8 @@ class NormalBackSyncTests(unittest.TestCase):
     def setUp(self):
         self.fixture = FIXTURE.NormalReleaseProofTests("runTest")
         self.fixture.setUp()
+        # Image startup must not reorder PATH ahead of the offline native seam.
+        self.fixture.git_env["BASH_ENV"] = os.devnull
         self.addCleanup(self.fixture.doCleanups)
         self.root, self.git = self.fixture.root, self.fixture.git
         self.release, self.develop = self.fixture.release, self.fixture.develop
@@ -408,7 +410,7 @@ class AdoptedBackSyncSourceContractTests(unittest.TestCase):
                     self.assertIn(f"normal_two_stage={expected}\n", output.read_text())
 
     def test_real_bb1_ancestry_verifier_accepts_exact_graph_and_rejects_wrong_component_or_tree(self):
-        directory = ROOT / ".cache/release-control-source"
+        directory = Path(os.environ.get("LIT_RELEASE_CONTROL_FIXTURE", ROOT / ".cache/release-control-source"))
         if not directory.is_dir():
             self.skipTest("immutable bb1 fixture must be staged for qualification")
         fixture = NormalBackSyncTests("runTest")

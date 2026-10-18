@@ -177,6 +177,8 @@ jobs:
           test "$(git -C repository rev-parse origin/main)" = "${expected_base}"
           test "$(git -C repository rev-parse origin/develop)" = "${expected_head}"
           # LI-139 release-state guard:start
+          # Both fresh proof processes must leave the pinned verifier checkout clean.
+          export PYTHONDONTWRITEBYTECODE=1
           # An ancestry-only merge does not import release-generated state.
           # Normal promotions must preserve that state, including failed pre-tag
           # preparations. Only the governed release/back-sync paths advance it.

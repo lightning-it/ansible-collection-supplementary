@@ -128,6 +128,46 @@ jobs:
             jq -e --arg version "$release_version" '
               .schema_version == 3 and .release_mode == "normal" and .next_version == $version
             ' <<<"$receipt_json" >/dev/null
+            # Ordinary product promotions retain the published release state.
+            # Compare the version, rather than all galaxy metadata, and the
+            # exact generated blobs before classification or any App mint.
+            parent_galaxy="$RUNNER_TEMP/parent-galaxy.yml"
+            gh api "repos/${GITHUB_REPOSITORY}/contents/galaxy.yml?ref=${parents[0]}" \
+              --jq .content | base64 --decode >"$parent_galaxy"
+            parent_version="$(PARENT_GALAXY="$parent_galaxy" python -I - <<'PYVERSION'
+          import os
+          import re
+          from pathlib import Path
+
+          versions = re.findall(
+              r"(?m)^version:\s*[\"']?([^\s\"']+)[\"']?\s*$",
+              Path(os.environ["PARENT_GALAXY"]).read_text(encoding="utf-8"),
+          )
+          if len(versions) != 1:
+              raise SystemExit("parent galaxy.yml must have exactly one version")
+          print(versions[0])
+          PYVERSION
+          )"
+            release_state_changed=false
+            if [ "$parent_version" != "$release_version" ]; then
+              release_state_changed=true
+            else
+              for path in CHANGELOG.rst changelogs/.plugin-cache.yaml \
+                  changelogs/changelog.yaml changelogs/release-preparation.json; do
+                parent_blob="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=${parents[0]}" --jq .sha)"
+                merged_blob="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=${MERGE_SHA}" --jq .sha)"
+                test -n "$parent_blob" && test "$parent_blob" != null
+                test -n "$merged_blob" && test "$merged_blob" != null
+                if [ "$parent_blob" != "$merged_blob" ]; then
+                  release_state_changed=true
+                fi
+              done
+            fi
+            if [ "$release_state_changed" = false ]; then
+              echo 'Main promotion preserves release state; no publication needed.'
+              echo 'release_needed=false' >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
           else
             test "$HEAD_REF" = "release/v${release_version}"
           fi
@@ -148,6 +188,7 @@ jobs:
             [[ "$publish_galaxy" = true || "$publish_galaxy" = false ]]
           fi
           {
+            echo "release_needed=true"
             echo "release_version=$release_version"
             echo "release_sha=$MERGE_SHA"
             echo "reviewed_head_sha=$REVIEWED_HEAD_SHA"
@@ -157,6 +198,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout exact merge for Security classification
+        if: steps.release.outputs.release_needed == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ steps.release.outputs.release_sha }}
@@ -164,6 +206,7 @@ jobs:
           persist-credentials: false
 
       - name: Resolve immutable pre-consumption Security binding
+        if: steps.release.outputs.release_needed == 'true'
         id: binding
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.release_version }}
@@ -182,6 +225,7 @@ jobs:
           echo "base_sha=$base_sha" >>"$GITHUB_OUTPUT"
 
       - name: Checkout immutable pre-consumption Security binding
+        if: steps.release.outputs.release_needed == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ steps.binding.outputs.base_sha }}
@@ -189,6 +233,7 @@ jobs:
           persist-credentials: false
 
       - name: Classify evidence-bound release version
+        if: steps.release.outputs.release_needed == 'true'
         id: security
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.release_version }}
@@ -199,6 +244,7 @@ jobs:
           --binding-root security-binding-base
 
       - name: Mint exact publish-dispatch App token
+        if: steps.release.outputs.release_needed == 'true'
         id: publish-dispatch-app
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
@@ -209,6 +255,7 @@ jobs:
           permission-actions: write
 
       - name: Dispatch exact-SHA publish workflow on main
+        if: steps.release.outputs.release_needed == 'true'
         env:
           GH_TOKEN: ${{ steps.publish-dispatch-app.outputs.token }}
           CREATE_GITHUB_RELEASE: ${{ steps.release.outputs.create_github_release }}
