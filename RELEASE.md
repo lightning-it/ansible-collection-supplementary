@@ -5,6 +5,7 @@ This Ansible collection uses a reviewed, exact-SHA, fail-closed release flow.
 ## Repository classification
 
 - Collection: `lit.supplementary`
+- Repository type: `ansible_collection`
 - Stable branch: `main`
 - Integration branch: `develop`
 - Artifact: Ansible collection tarball
