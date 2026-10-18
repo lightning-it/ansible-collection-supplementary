@@ -2224,7 +2224,7 @@ jobs:
       github.actor == 'lightning-it-release-automation[bot]' &&
       github.actor_id == '307565056' &&
       needs.publish.outputs.validation-required == 'true'
-    name: Bound ModuLix validation window 1/4
+    name: Bound ModuLix validation window 1/6
     needs: [security-classification, release-validation, publish]
     uses: ./.github/workflows/modulix-validation-window.yml
     permissions:
@@ -2241,7 +2241,7 @@ jobs:
       request_id: ${{ needs.publish.outputs.request-id }}
       prior_run_id: ${{ needs.publish.outputs.controller-run-id }}
       prior_run_attempt: ${{ needs.publish.outputs.controller-run-attempt }}
-      wait_seconds: 4500
+      wait_seconds: 2700
       final_window: false
       publish_runner: ${{ needs.security-classification.outputs.publish-runner }}
     secrets:
@@ -2254,7 +2254,7 @@ jobs:
       github.actor == 'lightning-it-release-automation[bot]' &&
       github.actor_id == '307565056' &&
       needs.publish.outputs.validation-required == 'true'
-    name: Bound ModuLix validation window 2/4
+    name: Bound ModuLix validation window 2/6
     needs: [security-classification, release-validation, publish, modulix-validation-window-1]
     uses: ./.github/workflows/modulix-validation-window.yml
     permissions:
@@ -2271,7 +2271,7 @@ jobs:
       request_id: ${{ needs.publish.outputs.request-id }}
       prior_run_id: ${{ needs.modulix-validation-window-1.outputs.controller-run-id }}
       prior_run_attempt: ${{ needs.modulix-validation-window-1.outputs.controller-run-attempt }}
-      wait_seconds: 4500
+      wait_seconds: 2700
       final_window: false
       publish_runner: ${{ needs.security-classification.outputs.publish-runner }}
     secrets:
@@ -2284,7 +2284,7 @@ jobs:
       github.actor == 'lightning-it-release-automation[bot]' &&
       github.actor_id == '307565056' &&
       needs.publish.outputs.validation-required == 'true'
-    name: Bound ModuLix validation window 3/4
+    name: Bound ModuLix validation window 3/6
     needs: [security-classification, release-validation, publish, modulix-validation-window-2]
     uses: ./.github/workflows/modulix-validation-window.yml
     permissions:
@@ -2301,7 +2301,7 @@ jobs:
       request_id: ${{ needs.publish.outputs.request-id }}
       prior_run_id: ${{ needs.modulix-validation-window-2.outputs.controller-run-id }}
       prior_run_attempt: ${{ needs.modulix-validation-window-2.outputs.controller-run-attempt }}
-      wait_seconds: 4500
+      wait_seconds: 2700
       final_window: false
       publish_runner: ${{ needs.security-classification.outputs.publish-runner }}
     secrets:
@@ -2314,7 +2314,7 @@ jobs:
       github.actor == 'lightning-it-release-automation[bot]' &&
       github.actor_id == '307565056' &&
       needs.publish.outputs.validation-required == 'true'
-    name: Bound ModuLix validation window 4/4
+    name: Bound ModuLix validation window 4/6
     needs: [security-classification, release-validation, publish, modulix-validation-window-3]
     uses: ./.github/workflows/modulix-validation-window.yml
     permissions:
@@ -2332,6 +2332,66 @@ jobs:
       prior_run_id: ${{ needs.modulix-validation-window-3.outputs.controller-run-id }}
       prior_run_attempt: ${{ needs.modulix-validation-window-3.outputs.controller-run-attempt }}
       wait_seconds: 2700
+      final_window: false
+      publish_runner: ${{ needs.security-classification.outputs.publish-runner }}
+    secrets:
+      release_automation_app_private_key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+
+  modulix-validation-window-5:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'lightning-it-release-automation[bot]' &&
+      github.actor_id == '307565056' &&
+      needs.publish.outputs.validation-required == 'true'
+    name: Bound ModuLix validation window 5/6
+    needs: [security-classification, release-validation, publish, modulix-validation-window-4]
+    uses: ./.github/workflows/modulix-validation-window.yml
+    permissions:
+      actions: read
+      contents: read
+    with:
+      release_sha: ${{ inputs.release_sha }}
+      release_version: ${{ needs.publish.outputs.release-version }}
+      ci_run_id: ${{ needs.release-validation.outputs.ci-run-id }}
+      ci_run_attempt: ${{ needs.release-validation.outputs.ci-run-attempt }}
+      security_evidence_id: ${{ needs.security-classification.outputs.security-evidence-id }}
+      handoff_sha256: ${{ needs.publish.outputs.handoff-sha256 }}
+      controller_sha: ${{ needs.publish.outputs.controller-sha }}
+      request_id: ${{ needs.publish.outputs.request-id }}
+      prior_run_id: ${{ needs.modulix-validation-window-4.outputs.controller-run-id }}
+      prior_run_attempt: ${{ needs.modulix-validation-window-4.outputs.controller-run-attempt }}
+      wait_seconds: 2700
+      final_window: false
+      publish_runner: ${{ needs.security-classification.outputs.publish-runner }}
+    secrets:
+      release_automation_app_private_key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+
+  modulix-validation-window-6:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'lightning-it-release-automation[bot]' &&
+      github.actor_id == '307565056' &&
+      needs.publish.outputs.validation-required == 'true'
+    name: Bound ModuLix validation window 6/6
+    needs: [security-classification, release-validation, publish, modulix-validation-window-5]
+    uses: ./.github/workflows/modulix-validation-window.yml
+    permissions:
+      actions: read
+      contents: read
+    with:
+      release_sha: ${{ inputs.release_sha }}
+      release_version: ${{ needs.publish.outputs.release-version }}
+      ci_run_id: ${{ needs.release-validation.outputs.ci-run-id }}
+      ci_run_attempt: ${{ needs.release-validation.outputs.ci-run-attempt }}
+      security_evidence_id: ${{ needs.security-classification.outputs.security-evidence-id }}
+      handoff_sha256: ${{ needs.publish.outputs.handoff-sha256 }}
+      controller_sha: ${{ needs.publish.outputs.controller-sha }}
+      request_id: ${{ needs.publish.outputs.request-id }}
+      prior_run_id: ${{ needs.modulix-validation-window-5.outputs.controller-run-id }}
+      prior_run_attempt: ${{ needs.modulix-validation-window-5.outputs.controller-run-attempt }}
+      wait_seconds: 2700
       final_window: true
       publish_runner: ${{ needs.security-classification.outputs.publish-runner }}
     secrets:
@@ -2344,9 +2404,9 @@ jobs:
       github.actor == 'lightning-it-release-automation[bot]' &&
       github.actor_id == '307565056' &&
       needs.publish.outputs.validation-required == 'true' &&
-      needs.modulix-validation-window-4.outputs.complete == 'true'
+      needs.modulix-validation-window-6.outputs.complete == 'true'
     name: Finalize exact Security collection release
-    needs: [security-classification, release-validation, publish, modulix-validation-window-4]
+    needs: [security-classification, release-validation, publish, modulix-validation-window-6]
     runs-on: ${{ fromJSON(needs.security-classification.outputs.publish-runner) }}
     timeout-minutes: 90
     environment: mlx90-security-publish
@@ -2375,6 +2435,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Re-prove protected release and reviewed merge
@@ -2479,8 +2540,8 @@ jobs:
           SECURITY_EVIDENCE_ID: ${{ needs.security-classification.outputs.security-evidence-id }}
           CONTROLLER_SHA: ${{ needs.publish.outputs.controller-sha }}
           REQUEST_ID: ${{ needs.publish.outputs.request-id }}
-          BOUND_RUN_ID: ${{ needs.modulix-validation-window-4.outputs.controller-run-id }}
-          BOUND_RUN_ATTEMPT: ${{ needs.modulix-validation-window-4.outputs.controller-run-attempt }}
+          BOUND_RUN_ID: ${{ needs.modulix-validation-window-6.outputs.controller-run-id }}
+          BOUND_RUN_ATTEMPT: ${{ needs.modulix-validation-window-6.outputs.controller-run-attempt }}
         run: |
           set -euo pipefail
           test "$APP_SLUG" = lightning-it-release-automation

@@ -11,6 +11,8 @@ from pathlib import Path
 from types import ModuleType
 from unittest import mock
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "modulix-validation-receipt.py"
 SOURCE_SHA = "a" * 40
@@ -399,6 +401,43 @@ class ModuLixValidationReceiptTests(unittest.TestCase):
         self.assertEqual(success, run)
         self.assertEqual(bound, carried)
         self.assertEqual(0, client.dispatches)
+
+    def test_workflow_checkpoint_precedes_installation_token_expiry(self) -> None:
+        request, request_id = request_payload()
+        queued = run_payload(request_id, status="in_progress", conclusion=None)
+        workflow = yaml.safe_load((ROOT / ".github/workflows/collection-publish.yml").read_text())
+        duration = workflow["jobs"]["modulix-validation-window-1"]["with"]["wait_seconds"]
+
+        def observe(wait_seconds):
+            client = FakeController(request, request_id, queued)
+            clock = [0.0]
+
+            def api_with_expiring_token():
+                if clock[0] >= 3600:
+                    raise MODULE.ReceiptError("installation token expired (401)")
+                return [queued]
+
+            def sleep(seconds):
+                clock[0] += seconds
+
+            client.workflow_runs = api_with_expiring_token
+            result = MODULE.poll_window(
+                client,
+                request_id,
+                CONTROLLER_SHA,
+                wait_seconds,
+                bound_run=(998877, 1),
+                monotonic=lambda: clock[0],
+                sleep=sleep,
+            )
+            return result, clock[0], client.dispatches
+
+        with self.assertRaisesRegex(MODULE.ReceiptError, "token expired"):
+            observe(4500)
+        result, elapsed, dispatches = observe(duration)
+        self.assertEqual((None, (998877, 1)), result)
+        self.assertLess(elapsed, 3600)
+        self.assertEqual(0, dispatches)
 
     def test_bounded_window_rejects_late_rerun_after_checkpoint(self) -> None:
         request, request_id = request_payload()

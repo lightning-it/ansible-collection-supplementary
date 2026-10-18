@@ -283,8 +283,8 @@ clock.write_text(str(int(clock.read_text()) + int(sys.argv[1])))
         self.assertLess(nexus, dispatch)
         self.assertLess(receipt, finalize)
         self.assertLess(finalize, galaxy)
-        self.assertIn("modulix-validation-window-4", self.finalize["needs"])
-        self.assertIn("needs.modulix-validation-window-4.outputs.complete == 'true'", self.finalize["if"])
+        self.assertIn("modulix-validation-window-6", self.finalize["needs"])
+        self.assertIn("needs.modulix-validation-window-6.outputs.complete == 'true'", self.finalize["if"])
         self.assertIn(
             "--phase window --final-window", self.finalize_steps["Reverify the same signed ModuLix receipt"]["run"]
         )
@@ -363,6 +363,34 @@ clock.write_text(str(int(clock.read_text()) + int(sys.argv[1])))
         self.assertIn("--final-window", poll)
         self.assertNotIn("--phase dispatch", poll)
 
+    def test_finalizer_fetches_reviewed_merge_parents_before_verification(self) -> None:
+        checkout = self.finalize_steps["Checkout exact source for Security finalization"]
+        self.assertEqual(0, checkout["with"]["fetch-depth"])
+        self.assertFalse(checkout["with"]["persist-credentials"])
+        self.assertEqual("${{ inputs.release_sha }}", checkout["with"]["ref"])
+        self.assertLess(
+            self.finalize_names.index(checkout["name"]),
+            self.finalize_names.index("Re-prove protected release and reviewed merge"),
+        )
+
+    def test_polling_rejects_token_expiry_window_before_minting(self) -> None:
+        reusable = yaml.safe_load(MODULIX_WINDOW_PATH.read_text(encoding="utf-8"))
+        steps = reusable["jobs"]["window"]["steps"]
+        names = [step["name"] for step in steps]
+        guard = next(step for step in steps if step["name"] == "Validate token-safe polling bound")
+        self.assertLess(names.index(guard["name"]), names.index("Mint exact ModuLix validation App token"))
+        for value, expected in (("1", 0), ("2700", 0), ("2701", 1), ("4500", 1), ("0", 1), ("-1", 1), ("x", 1)):
+            with self.subTest(wait_seconds=value):
+                result = subprocess.run(  # noqa: S603 -- exact repository-owned guard with fixed input cases.
+                    ["/bin/bash", "-c", guard["run"]],
+                    env={**os.environ, "WAIT_SECONDS": value},
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                self.assertEqual(expected, result.returncode)
+
     def test_bound_windows_and_finalizer_preserve_one_release_identity(self) -> None:
         jobs = self.workflow["jobs"]
         for job in (self.publish, self.finalize):
@@ -370,12 +398,12 @@ clock.write_text(str(int(clock.read_text()) + int(sys.argv[1])))
             self.assertEqual("max", job["concurrency"]["queue"])
             self.assertFalse(job["concurrency"]["cancel-in-progress"])
         previous = "publish"
-        for index, wait_seconds in enumerate((4500, 4500, 4500, 2700), start=1):
+        for index, wait_seconds in enumerate((2700,) * 6, start=1):
             job = jobs[f"modulix-validation-window-{index}"]
             self.assertEqual("./.github/workflows/modulix-validation-window.yml", job["uses"])
             self.assertIn(previous, job["needs"])
             self.assertEqual(wait_seconds, job["with"]["wait_seconds"])
-            self.assertEqual(index == 4, job["with"]["final_window"])
+            self.assertEqual(index == 6, job["with"]["final_window"])
             self.assertEqual("${{ inputs.release_sha }}", job["with"]["release_sha"])
             self.assertEqual("${{ needs.publish.outputs.handoff-sha256 }}", job["with"]["handoff_sha256"])
             self.assertEqual("${{ needs.publish.outputs.controller-sha }}", job["with"]["controller_sha"])
@@ -387,6 +415,14 @@ clock.write_text(str(int(clock.read_text()) + int(sys.argv[1])))
                     job["with"]["prior_run_attempt"],
                 )
             previous = f"modulix-validation-window-{index}"
+        self.assertEqual(
+            16_200,
+            sum(
+                job["with"]["wait_seconds"]
+                for name, job in jobs.items()
+                if name.startswith("modulix-validation-window-")
+            ),
+        )
         self.assertIn(previous, self.finalize["needs"])
         self.assertIn(f"needs.{previous}.outputs.complete == 'true'", self.finalize["if"])
         self.assertEqual(

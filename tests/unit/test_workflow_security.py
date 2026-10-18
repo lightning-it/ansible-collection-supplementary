@@ -1838,9 +1838,9 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
             finalize_names.index("Reverify the same signed ModuLix receipt"),
             finalize_names.index("Publish or verify validated artifact on Ansible Galaxy"),
         )
-        self.assertIn("modulix-validation-window-4", jobs["publish-security-finalize"]["needs"])
+        self.assertIn("modulix-validation-window-6", jobs["publish-security-finalize"]["needs"])
         self.assertIn(
-            "needs.modulix-validation-window-4.outputs.complete == 'true'", jobs["publish-security-finalize"]["if"]
+            "needs.modulix-validation-window-6.outputs.complete == 'true'", jobs["publish-security-finalize"]["if"]
         )
         self.assertIn("RELEASE_AUTOMATION_APP_CLIENT_ID", workflow)
         self.assertIn("RELEASE_AUTOMATION_APP_PRIVATE_KEY", workflow)
