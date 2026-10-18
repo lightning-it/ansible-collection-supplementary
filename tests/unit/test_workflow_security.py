@@ -1877,8 +1877,10 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
                     condition,
                 )
                 self.assertRegex(condition, r"^[a-z' =!&|()\s]+$")
+                executable = shutil.which("bash")
+                assert executable
                 result = subprocess.run(  # noqa: S603 -- repository-owned boolean guard, constrained above.
-                    ["bash", "-c", "[[ " + condition + " ]]"],
+                    [executable, "-c", "[[ " + condition + " ]]"],
                     check=False,
                     capture_output=True,
                     timeout=5,

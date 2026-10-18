@@ -1,18 +1,25 @@
 """Export only bounded YAML blobs for the trusted Main release preflight."""
+
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import re
+import shutil
 import subprocess
+from pathlib import Path
 
 MAX_BYTES = 1024 * 1024
 MAX_FRAGMENTS = 256
 
 
 def git(*arguments):
+    executable = shutil.which("git")
+    if executable is None:
+        raise ValueError("Git executable unavailable")
     with subprocess.Popen(  # noqa: S603 -- fixed Git operations, validated immutable object IDs.
-        ["git", *arguments], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        [executable, *arguments],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
     ) as process:
         assert process.stdout is not None
         raw = process.stdout.read(MAX_BYTES + 1)
@@ -43,9 +50,14 @@ def export(revision: str, destination: Path):
         if path != "galaxy.yml" and not path.lower().endswith((".yml", ".yaml")):
             continue
         mode, kind, raw_oid = metadata.decode("ascii").split()
-        if path != "galaxy.yml" and re.fullmatch(
-            r"changelogs/fragments/[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml", path,
-        ) is None:
+        if (
+            path != "galaxy.yml"
+            and re.fullmatch(
+                r"changelogs/fragments/[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml",
+                path,
+            )
+            is None
+        ):
             raise ValueError("unsafe fragment path")
         if mode not in {"100644", "100755"} or kind != "blob" or re.fullmatch(r"[0-9a-f]{40}", raw_oid) is None:
             raise ValueError("regular release data blob required")
