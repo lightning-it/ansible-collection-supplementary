@@ -383,11 +383,10 @@ jobs:
             read -r -a normal_release_parents <<<"$(git rev-list --parents -n 1 "$release_sha")"
             test "${#normal_release_parents[@]}" -eq 3
             proof="$RUNNER_TEMP/normal-back-sync-publication-proof.json"
-            python scripts/normal_release_proof.py publish \
+            python scripts/normal_release_proof.py baseline \
               --root "$GITHUB_WORKSPACE" --control-root "$GITHUB_WORKSPACE/back-sync-control-source" \
               --repository "$REPO" --repository-id "$GITHUB_REPOSITORY_ID" \
-              --release "$release_sha" --base "${normal_release_parents[1]}" \
-              --head "${normal_release_parents[2]}" >"$proof"
+              --base "$release_sha" >"$proof"
             test "$(jq -er .main_merge "$proof")" = "$release_sha"
             test "$(jq -er .develop_merge "$proof")" = "${normal_release_parents[2]}"
             git merge-base --is-ancestor "${normal_release_parents[2]}" "$develop_tip"

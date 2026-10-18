@@ -36,6 +36,7 @@ class NormalPreparationChangelogTests(unittest.TestCase):
             "devtools-changelog-check.sh",
             "resolve-changelog-head-ref.sh",
             "normal_release_proof.py",
+            "normal_release_archive.py",
             "release-version.py",
             "security_main_promotion.py",
             "security_release_contract.py",

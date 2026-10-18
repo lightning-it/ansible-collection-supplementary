@@ -179,6 +179,46 @@ class ArchiveTests(unittest.TestCase):
             with self.subTest(run=changed), self.assertRaisesRegex(ValueError, "order-or-binding"):
                 replay.artifact(None, None, REPO, changed, "control-proof-1", "control-proof.json")
 
+    def test_preparation_input_protocol_is_exact_attempt_bound_and_replayed_without_download(self):
+        run = {"id": 10, "run_attempt": 2, "head_sha": HEAD}
+        name, filename = "normal-release-preparation-2", "preparation-inputs.json"
+        metadata = {"id": 99, "name": name, "expired": False, "size_in_bytes": 100}
+        original_record = {
+            "schema": "collection-normal-preparation/v1",
+            "head": HEAD,
+            "version_selection": {"requested": "1.2.3-rc.1"},
+            "publication": {"github_release": True, "galaxy": False},
+        }
+        api = Mock()
+        api.pages.return_value = [metadata]
+
+        def reader(source, repository, observed, artifact, selected_file):
+            self.assertEqual(name, artifact)
+            self.assertEqual(filename, selected_file)
+            source.pages(f"repos/{repository}/actions/runs/{observed['id']}/artifacts", "artifacts")
+            return copy.deepcopy(original_record)
+
+        recorder = ARCHIVE.Record(api, EXPECTED)
+        self.assertEqual(original_record, recorder.artifact(reader, recorder, REPO, run, name, filename))
+        value = ARCHIVE.decode(recorder.finish({"verified": True}))
+        replay = ARCHIVE.Replay(value, EXPECTED, SHA)
+        with patch.object(api, "pages", side_effect=AssertionError("historical source expired")):
+            self.assertEqual(original_record, replay.artifact(None, None, REPO, run, name, filename))
+        replay.finish({"verified": True})
+        for wrong_run, wrong_name, wrong_file in (
+            (run, "normal-release-preparation-1", filename),
+            (run, "normal-release-preparation-0", filename),
+            (run, "control-proof-2", filename),
+            (run, name, "other-inputs.json"),
+            (run | {"run_attempt": True}, "normal-release-preparation-True", filename),
+            (run | {"run_attempt": 0}, "normal-release-preparation-0", filename),
+            (run | {"run_attempt": -1}, "normal-release-preparation--1", filename),
+        ):
+            original = Mock()
+            with self.subTest(run=wrong_run, name=wrong_name, filename=wrong_file), self.assertRaises(ValueError):
+                recorder.artifact(original, recorder, REPO, wrong_run, wrong_name, wrong_file)
+            original.assert_not_called()
+
     def test_record_writes_other_repository_or_unbounded_history_are_closed(self):
         api = Mock()
         recorder = ARCHIVE.Record(api, EXPECTED)

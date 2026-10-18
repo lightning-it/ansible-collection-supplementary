@@ -1121,7 +1121,7 @@ class RealNativeArchiveTests(unittest.TestCase):
                 (target / filename).write_text(json.dumps(records[(run_id, name)]))
                 downloads.append((run_id, name))
                 return subprocess.CompletedProcess(args, 0, b"", b"")
-            return original_run(args, **kwargs)
+            return original_run(args, check=kwargs.pop("check", False), **kwargs)
 
         snapshot = fixture.root / "native-snapshot.json"
         with patch.object(subprocess, "run", side_effect=transport):
@@ -1139,7 +1139,7 @@ class RealNativeArchiveTests(unittest.TestCase):
         self.assertEqual([(20, "control-proof-1"), (30, "control-proof-1"), (30, "control-operation-1")], downloads)
         value = PROOF.archive.decode(snapshot.read_bytes())
         snapshot.unlink()
-        current, _ = fixture.ordinary_main(fixture.release, fixture.develop, 1)
+        current, _develop = fixture.ordinary_main(fixture.release, fixture.develop, 1)
         expected = PROOF.archive.binding(
             REPOSITORY, "1103407173", fixture.release, fixture.main_base, fixture.develop, PROOF.CONTROL_SOURCE
         )
@@ -1169,7 +1169,7 @@ class RealNativeArchiveTests(unittest.TestCase):
         def expired_transport(args, **kwargs):
             if args[0] == "gh":
                 raise AssertionError("original artifact download must not execute during replay")
-            return original_run(args, **kwargs)
+            return original_run(args, check=kwargs.pop("check", False), **kwargs)
 
         def replay(observations):
             adapter = PROOF.archive.Replay(observations, expected, current)

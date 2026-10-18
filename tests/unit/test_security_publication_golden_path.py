@@ -541,6 +541,22 @@ clock.write_text(str(int(clock.read_text()) + int(sys.argv[1])))
         for name in deferred_names:
             stage = {key: value for key, value in self.steps[name].items() if key != "if"}
             final = {key: value for key, value in self.finalize_steps[name].items() if key != "if"}
+            if name == "Verify GitHub Release download, install, and smoke":
+                # Only normal publication has this archive. Preserve exact
+                # equality of every shared Security verification line and env.
+                archive_guard = (
+                    'if [ "${NORMAL_TWO_STAGE:-false}" = true ]; then\n'
+                    "  python scripts/normal_release_archive.py \\\n"
+                    '    --snapshot "$verify_root/normal-release-native-evidence.json" \\\n'
+                    '    --bundle "$verify_root/normal-release-native-evidence.sigstore.json" \\\n'
+                    '    --repository "$GITHUB_REPOSITORY" --repository-id "$REPOSITORY_ID" --release "$RELEASE_SHA"\n'
+                    "fi\n"
+                )
+                self.assertEqual(1, stage["run"].count(archive_guard))
+                self.assertNotIn("normal_release_archive.py", final["run"])
+                self.assertEqual("${{ github.repository_id }}", stage["env"]["REPOSITORY_ID"])
+                stage["env"] = {key: value for key, value in stage["env"].items() if key != "REPOSITORY_ID"}
+                stage["run"] = stage["run"].replace(archive_guard, "", 1)
             self.assertEqual(stage, final, name)
             if name != "Upload exact release attachment set":
                 self.assertIn("env.SECURITY_RELEASE != 'true'", self.steps[name]["if"])

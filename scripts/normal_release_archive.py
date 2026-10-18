@@ -108,12 +108,19 @@ def artifact_identity(repository, run, name, filename):
         and re.fullmatch(r"[0-9a-f]{40}", run.get("head_sha", "")),
         "archive-artifact-origin",
     )
-    require(
-        filename in {"control-proof.json", "control-operation.json"}
-        and re.fullmatch(r"control-(?:proof|operation)-[1-9][0-9]*", name),
-        "archive-artifact-name",
-    )
-    require(name.startswith("control-operation-") == (filename == "control-operation.json"), "archive-artifact-kind")
+    if filename == "preparation-inputs.json":
+        # The original caller still authenticates the protected producer and
+        # requires exact input_record(receipt, prepared) equality on replay.
+        require(name == f"normal-release-preparation-{run['run_attempt']}", "archive-preparation-artifact-attempt")
+    else:
+        require(
+            filename in {"control-proof.json", "control-operation.json"}
+            and re.fullmatch(r"control-(?:proof|operation)-[1-9][0-9]*", name),
+            "archive-artifact-name",
+        )
+        require(
+            name.startswith("control-operation-") == (filename == "control-operation.json"), "archive-artifact-kind"
+        )
     return [repository, run["id"], run["run_attempt"], run["head_sha"], name, filename]
 
 
@@ -348,7 +355,7 @@ def download_pair(published, repository, directory):
             "archive-release-asset-bound",
         )
         selected.append((name, maximum, asset))
-    require(len({asset["id"] for _, _, asset in selected}) == 2, "archive-release-asset-identity")
+    require(len({asset["id"] for _name, _maximum, asset in selected}) == 2, "archive-release-asset-identity")
     for name, maximum, asset in selected:
         with subprocess.Popen(  # noqa: S603 -- exact repository asset ID, bounded read, no shell.
             [

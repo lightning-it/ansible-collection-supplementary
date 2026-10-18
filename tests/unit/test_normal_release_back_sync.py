@@ -123,6 +123,8 @@ import json,os,subprocess,sys
 from pathlib import Path
 args=sys.argv[1:]
 if args[:2]==["scripts/normal_release_proof.py","publish"]:
+    raise SystemExit("Original Actions evidence expired; authenticated published baseline required")
+if args[:2]==["scripts/normal_release_proof.py","baseline"]:
     expected=json.loads(os.environ["EXPECTED_PROOF_ARGUMENTS"])
     if args!=expected: raise SystemExit("publication proof arguments drifted")
     state=json.loads(Path(os.environ["NATIVE_STATE"]).read_text())
@@ -173,7 +175,7 @@ else:
         runner.mkdir(exist_ok=True)
         expected = [
             "scripts/normal_release_proof.py",
-            "publish",
+            "baseline",
             "--root",
             str(self.root),
             "--control-root",
@@ -182,12 +184,8 @@ else:
             REPO,
             "--repository-id",
             "1103407173",
-            "--release",
-            self.release,
             "--base",
-            self.fixture.main_base,
-            "--head",
-            self.fixture.develop,
+            self.release,
         ]
         env = (
             self.fixture.git_env
@@ -253,6 +251,40 @@ else:
         self.assertEqual(0, second.returncode, second.stdout + second.stderr)
         self.assertEqual(1, sum(call[:2] == ["pr", "create"] for call in calls))
         self.assertEqual(1, sum(call[:2] == ["pr", "ready"] for call in calls))
+
+    def test_delayed_backsync_consumes_verified_archive_without_original_actions(self):
+        # Run the actual baseline reader on the same Git graph before passing
+        # its result through the existing offline shell boundary. Signature
+        # transport is mocked by baseline_api; no native approval is invented.
+        self.git("tag", "-d", TAG)
+        self.fixture.baseline_api(self.release)
+        self.make_tag()
+        self.fixture.tag_ref["object"]["sha"] = self.git("rev-parse", f"refs/tags/{TAG}")
+        previous = self.fixture.api.call.side_effect
+
+        def expired_actions(path):
+            if "/actions/" in path:
+                raise AssertionError("expired historical Actions must not be read")
+            return previous(path)
+
+        self.fixture.api.call.side_effect = expired_actions
+        self.fixture.api.pages.side_effect = AssertionError("original artifact inventory expired")
+        self.fixture.core.artifact_record.side_effect = AssertionError("original artifact downloads expired")
+        self.state["proof"] = PROOF.published_baseline(
+            self.root, self.fixture.api, self.fixture.core, REPO, "1103407173", self.release
+        )
+        self.fixture.core.artifact_record.assert_not_called()
+        self.fixture.api.pages.assert_not_called()
+        result, calls = self.run_step()
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        proof_calls = [call for call in calls if call[0] == "read-only-publication-proof"]
+        self.assertEqual(1, len(proof_calls))
+        self.assertEqual("baseline", proof_calls[0][2])
+        self.assertNotIn("--release", proof_calls[0])
+        pull = self.state["pull"]
+        self.assertEqual(f"{self.develop} {self.release}", self.git("show", "-s", "--format=%P", pull["head"]["sha"]))
+        self.assertEqual("", self.git("diff", "--name-only", self.develop, pull["head"]["sha"]))
+        self.assertFalse(any("/actions/" in arg for call in calls for arg in call))
 
     def test_already_ancestor_still_proves_publication_then_noops_without_branch_or_pr(self):
         self.develop = self.release
