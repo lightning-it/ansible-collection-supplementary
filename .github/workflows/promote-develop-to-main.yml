@@ -53,12 +53,36 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: ansible-collection-release-prepare
+    # LI-344 readonly normal proof permissions:start
+    permissions:
+      contents: read
+      actions: read
+    # LI-344 readonly normal proof permissions:end
 
     steps:
       - name: Reject reruns before credential minting
         run: |
           set -euo pipefail
           test "${GITHUB_RUN_ATTEMPT}" -eq 1
+
+      # LI-344 readonly normal proof tools:start
+      - name: Checkout adopted native normal proof source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: lightning-it/.github
+          ref: bb1a5df9f54c5f98547048297e7e367cc382543e
+          path: .native-normal-control
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up normal receipt proof parser
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+
+      - name: Install pinned normal receipt parser
+        run: python -m pip install --disable-pip-version-check --no-input PyYAML==6.0.3
+      # LI-344 readonly normal proof tools:end
 
       - name: Mint release automation App token
         id: release-app
@@ -78,6 +102,10 @@ jobs:
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
           REPOSITORY: ${{ github.repository }}
           REPOSITORY_OWNER: ${{ github.repository_owner }}
+          # LI-344 readonly normal proof bindings:start
+          REPOSITORY_ID: ${{ github.repository_id }}
+          NATIVE_READ_TOKEN: ${{ github.token }}
+          # LI-344 readonly normal proof bindings:end
         run: |
           set -euo pipefail
           test "${GITHUB_RUN_ATTEMPT}" -eq 1
@@ -163,20 +191,43 @@ jobs:
           stable_version='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
           [[ "$base_version" =~ $stable_version ]]
           [[ "$head_version" =~ $stable_version ]]
-          if [ "$head_version" != "$base_version" ]; then
-            echo '::error::Back-sync protected-main release metadata before promoting develop.'
-            exit 1
+          # Generated state may advance only through the real reviewed schema3
+          # preparation merge. Its protected Main tooling stays separate from
+          # Develop's candidate data; the helper never requests review/approval.
+          normal_policy=""
+          load_normal_policy() {
+            if [ -z "$normal_policy" ]; then
+              normal_policy="$RUNNER_TEMP/normal-promotion-policy"
+              test ! -e "$normal_policy"
+              git -C repository worktree add --detach --quiet "$normal_policy" "$expected_base"
+              test -f "$normal_policy/scripts/normal_release_proof.py"
+            fi
+          }
+          generated_delta="$(git -C repository diff --name-only --no-ext-diff --no-textconv \
+            "$expected_base" "$expected_head" -- CHANGELOG.rst changelogs/.plugin-cache.yaml \
+            changelogs/changelog.yaml changelogs/release-preparation.json)"
+          if [ "$head_version" != "$base_version" ] || [ -n "$generated_delta" ]; then
+            load_normal_policy
+            preparation_proof="$(GH_TOKEN="$NATIVE_READ_TOKEN" \
+              python3 "$normal_policy/scripts/normal_release_proof.py" promotion \
+              --root "$normal_policy" --repository "$REPOSITORY" --repository-id "$REPOSITORY_ID" \
+              --base "$expected_base" --head "$expected_head" \
+              --control-root "$GITHUB_WORKSPACE/.native-normal-control")"
+            jq -e --arg version "$head_version" --arg head "$expected_head" \
+              '.next_version == $version and .develop_merge == $head' <<<"$preparation_proof" >/dev/null
+          else
+            for release_path in CHANGELOG.rst changelogs/.plugin-cache.yaml \
+                changelogs/changelog.yaml changelogs/release-preparation.json; do
+              test "$(git -C repository cat-file -t "${expected_base}:${release_path}")" = blob
+              test "$(git -C repository cat-file -t "${expected_head}:${release_path}")" = blob
+              git -C repository diff --exit-code --quiet --no-ext-diff --no-textconv \
+                "$expected_base" "$expected_head" -- "$release_path"
+            done
           fi
-          for release_path in CHANGELOG.rst changelogs/.plugin-cache.yaml \
-              changelogs/changelog.yaml changelogs/release-preparation.json; do
-            test "$(git -C repository cat-file -t "${expected_base}:${release_path}")" = blob
-            test "$(git -C repository cat-file -t "${expected_head}:${release_path}")" = blob
-            git -C repository diff --exit-code --quiet --no-ext-diff --no-textconv \
-              "$expected_base" "$expected_head" -- "$release_path"
-          done
           release_receipt="$(git -C repository show "${expected_base}:changelogs/release-preparation.json")"
           jq -e --arg version "$base_version" '
-            .schema_version == 2 and .next_version == $version
+            (.schema_version == 2 or (.schema_version == 3 and .release_mode == "normal"))
+            and .next_version == $version
             and (
               if .release_mode == "normal" then
                 .security == null and .chain_id == null
@@ -195,6 +246,14 @@ jobs:
               and (.sha256 | type == "string" and test("^[0-9a-f]{64}$")))
             and ([.fragments[].path] | length) == ([.fragments[].path] | unique | length)
           ' <<<"$release_receipt" >/dev/null
+          if [ "$(jq -r '.schema_version' <<<"$release_receipt")" = 3 ]; then
+            # Ordinary later promotions inherit this receipt. Authenticate its
+            # published annotated-tag ancestor; current Main need not be M1.
+            load_normal_policy
+            GH_TOKEN="$NATIVE_READ_TOKEN" python3 "$normal_policy/scripts/normal_release_proof.py" baseline \
+              --root "$normal_policy" --repository "$REPOSITORY" --repository-id "$REPOSITORY_ID" \
+              --base "$expected_base" --control-root "$GITHUB_WORKSPACE/.native-normal-control" >/dev/null
+          fi
           if [ "$(jq -r '.release_mode' <<<"$release_receipt")" = security ]; then
             for security_kind in metadata intake_receipt; do
               security_path="$(jq -er --arg key "${security_kind}_path" '.security[$key]' <<<"$release_receipt")"

@@ -4,6 +4,9 @@ Read-only consumer of the pinned public Required Workflow. No review request,
 workflow dispatch, approval, credential mutation or publication is implemented.
 """
 
+# Exact JSON key/type contracts reject bool-as-int and unknown wire shapes.
+# pylint: disable=unidiomatic-typecheck
+
 from __future__ import annotations
 
 import argparse
@@ -199,6 +202,88 @@ def promotion_control(api, core, repository, pull, config):
     return proof, excluded
 
 
+def promotion_ready(root, api, core, repository, repository_id, base, head):
+    """Prove the reviewed preparation before permitting generated-state advancement."""
+    live = api.call(f"repos/{repository}")
+    require(
+        live.get("full_name") == repository
+        and str(live.get("id")) == repository_id
+        and live.get("archived") is False
+        and live.get("disabled") is False,
+        "promotion-repository-identity-drift",
+    )
+    receipt = document(root, head)
+    content_base = receipt["content_base"]["sha"]
+    parents = text(root, "show", "-s", "--format=%P", head).split()
+    require(len(parents) == 2 and parents[0] == content_base, "exact-preparation-ingress-parents-required")
+    prepared = parents[1]
+    require(
+        text(root, "rev-parse", f"{head}^{{tree}}") == text(root, "rev-parse", f"{prepared}^{{tree}}"),
+        "preparation-ingress-tree-drift",
+    )
+    source = receipt["workflow"]["source_sha"]
+    require(
+        git_contract.is_ancestor(root, source, base) and git_contract.is_ancestor(root, base, content_base),
+        "protected-main-ancestry-required",
+    )
+    require(
+        preparation(root, content_base, prepared, source, repository, repository_id) == receipt,
+        "preparation-receipt-drift",
+    )
+    raw = git_contract.git_bytes(root, "show", f"{base}:galaxy.yml").decode()
+    require(
+        re.findall(r"(?m)^version:\s*[\"']?([^\s\"']+)[\"']?\s*$", raw) == [receipt["current_version"]],
+        "promotion-main-version-drift",
+    )
+    for revision in (base, head):
+        for directory in (".lit/security-releases", ".lit/security-release-intakes"):
+            require(
+                not text(root, "ls-tree", revision, "--", f"{directory}/{receipt['next_version']}.json"),
+                "normal-promotion-security-marker",
+            )
+    pull = merged_pull(api, repository, head, "develop", f"release/v{receipt['next_version']}", content_base, prepared)
+    config = core.policy(api, repository, base, CONTROL_SOURCE)
+    ingress = core.check_native_control(api, repository, pull, config)
+    require(ingress.get("route") == "codex", "genuine-app-ingress-review-required")
+    require(
+        ingress.get("head") == prepared and ingress.get("source_sha") in config["accepted_sources"],
+        "preparation-native-control-drift",
+    )
+    workflow = receipt["workflow"]
+    run = api.call(f"repos/{repository}/actions/runs/{workflow['run_id']}")
+    require(
+        str(run.get("id")) == workflow["run_id"]
+        and str(run.get("run_attempt")) == workflow["run_attempt"]
+        and run.get("repository", {}).get("full_name") == repository
+        and run.get("head_repository", {}).get("full_name") == repository
+        and run.get("head_sha") == source
+        and run.get("head_branch") == "main"
+        and run.get("path") == workflow["path"]
+        and run.get("event") == workflow["event"]
+        and run.get("actor", {}).get("login") == workflow["actor"]
+        and run.get("status") == "completed"
+        and run.get("conclusion") == "success",
+        "protected-main-preparation-run-required",
+    )
+    current = api.call(f"repos/{repository}/pulls/{pull['number']}")
+    require(
+        core.binding(current) == core.binding(pull)
+        and all(current.get(key) == pull.get(key) for key in ("state", "merged", "merged_at", "merge_commit_sha")),
+        "release-pull-changed",
+    )
+    require(api.call(f"repos/{repository}/git/ref/heads/main")["object"]["sha"] == base, "protected-main-tip-drift")
+    require(
+        api.call(f"repos/{repository}/git/ref/heads/develop")["object"]["sha"] == head, "protected-develop-tip-drift"
+    )
+    return {
+        "preparation_pr": pull["number"],
+        "prepared_head": prepared,
+        "develop_merge": head,
+        "next_version": receipt["next_version"],
+        "native_ingress": ingress,
+    }
+
+
 def control_reference(value):
     keys = {"run", "attempt", "job", "head", "source_sha", "route", "artifact", "proof_sha256"}
     require(
@@ -208,8 +293,8 @@ def control_reference(value):
     return {key: value[key] for key in keys}
 
 
-def publish(root, api, core, repository, repository_id, release, base, head):
-    require(text(root, "rev-parse", "HEAD") == release, "exact-release-checkout-required")
+def _publish(root, api, core, repository, repository_id, release, base, head, current_main):
+    require(text(root, "rev-parse", "HEAD") == current_main, "exact-release-checkout-required")
     receipt = document(root, release)
     require(
         receipt["repository"] == repository and receipt["repository_id"] == repository_id,
@@ -278,7 +363,9 @@ def publish(root, api, core, repository, repository_id, release, base, head):
         and run.get("conclusion") == "success",
         "protected-main-preparation-run-required",
     )
-    require(api.call(f"repos/{repository}/git/ref/heads/main")["object"]["sha"] == release, "protected-main-tip-drift")
+    require(
+        api.call(f"repos/{repository}/git/ref/heads/main")["object"]["sha"] == current_main, "protected-main-tip-drift"
+    )
     for pull in (prep, promotion):
         current = api.call(f"repos/{repository}/pulls/{pull['number']}")
         require(
@@ -298,12 +385,81 @@ def publish(root, api, core, repository, repository_id, release, base, head):
     }
 
 
+def publish(root, api, core, repository, repository_id, release, base, head):
+    """Default publication always requires the exact current Main checkout."""
+    return _publish(root, api, core, repository, repository_id, release, base, head, release)
+
+
+def published_baseline(root, api, core, repository, repository_id, current_main):
+    """Authenticate inherited schema3 state against an already-published ancestor.
+
+    Only this existing annotated-tag/release boundary can enter historical proof;
+    there is no caller-controlled historical mode on publication itself.
+    """
+    require(text(root, "rev-parse", "HEAD") == current_main, "exact-baseline-checkout-required")
+    receipt = document(root, current_main)
+    version = receipt["next_version"]
+    require(
+        re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version),
+        "published-baseline-stable-version-required",
+    )
+    tag = f"v{version}"
+    ref = api.call(f"repos/{repository}/git/ref/tags/{tag}")
+    require(
+        ref.get("ref") == f"refs/tags/{tag}"
+        and ref.get("object", {}).get("type") == "tag"
+        and re.fullmatch(r"[0-9a-f]{40}", ref.get("object", {}).get("sha", "")),
+        "published-baseline-annotated-tag-required",
+    )
+    tag_object = api.call(f"repos/{repository}/git/tags/{ref['object']['sha']}")
+    require(
+        tag_object.get("tag") == tag
+        and tag_object.get("object", {}).get("type") == "commit"
+        and re.fullmatch(r"[0-9a-f]{40}", tag_object.get("object", {}).get("sha", "")),
+        "published-baseline-tag-target-required",
+    )
+    release = tag_object["object"]["sha"]
+    published = api.call(f"repos/{repository}/releases/tags/{tag}")
+    require(
+        type(published.get("id")) is int
+        and published["id"] > 0
+        and published.get("tag_name") == tag
+        and published.get("draft") is False
+        and published.get("prerelease") is False
+        and published.get("published_at"),
+        "published-baseline-release-required",
+    )
+    require(git_contract.is_ancestor(root, release, current_main), "published-baseline-not-ancestor")
+    require(
+        text(root, "rev-parse", f"{release}:{RECEIPT}") == text(root, "rev-parse", f"{current_main}:{RECEIPT}"),
+        "published-baseline-receipt-drift",
+    )
+    for path in git_contract.RELEASE_GENERATED_PATHS - {"galaxy.yml", RECEIPT}:
+        require(
+            text(root, "rev-parse", f"{release}:{path}") == text(root, "rev-parse", f"{current_main}:{path}"),
+            "published-baseline-generated-state-drift",
+        )
+    parents = text(root, "show", "-s", "--format=%P", release).split()
+    require(len(parents) == 2, "exact-promotion-merge-parents-required")
+    result = _publish(root, api, core, repository, repository_id, release, parents[0], parents[1], current_main)
+    require(
+        api.call(f"repos/{repository}/git/ref/tags/{tag}") == ref
+        and api.call(f"repos/{repository}/git/tags/{ref['object']['sha']}") == tag_object,
+        "published-baseline-tag-drift",
+    )
+    require(api.call(f"repos/{repository}/releases/tags/{tag}") == published, "published-baseline-release-drift")
+    require(
+        api.call(f"repos/{repository}/git/ref/heads/main")["object"]["sha"] == current_main, "protected-main-tip-drift"
+    )
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("preparation", "publish"))
+    parser.add_argument("operation", choices=("preparation", "promotion", "baseline", "publish"))
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--base", required=True)
-    parser.add_argument("--head", required=True)
+    parser.add_argument("--head")
     parser.add_argument("--workflow-source")
     parser.add_argument("--head-ref")
     parser.add_argument("--check-worktree", action="store_true")
@@ -331,9 +487,16 @@ def main():
                 )
         else:
             core = load_control(args.control_root)
-            result = publish(
-                args.root, core.API(), core, args.repository, args.repository_id, args.release, args.base, args.head
-            )
+            if args.operation == "baseline":
+                result = published_baseline(args.root, core.API(), core, args.repository, args.repository_id, args.base)
+            elif args.operation == "promotion":
+                result = promotion_ready(
+                    args.root, core.API(), core, args.repository, args.repository_id, args.base, args.head
+                )
+            else:
+                result = publish(
+                    args.root, core.API(), core, args.repository, args.repository_id, args.release, args.base, args.head
+                )
     except (ValueError, git_contract.PromotionError, git_contract.CONTRACT.ContractError) as error:
         parser.error(str(error))
     print(json.dumps(result, sort_keys=True))

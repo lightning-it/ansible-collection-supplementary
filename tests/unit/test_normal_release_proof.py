@@ -106,6 +106,15 @@ class NormalReleaseProofTests(unittest.TestCase):
             self.git_env.pop(variable, None)
         self.git("init", "--quiet")
         (self.root / "galaxy.yml").write_text("---\nnamespace: lit\nname: supplementary\nversion: 1.0.0\n")
+        for name, content in getattr(self, "extra_baseline", {}).items():
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+        for name in ("CHANGELOG.rst", "changelogs/changelog.yaml", "changelogs/.plugin-cache.yaml"):
+            path = self.root / name
+            if not path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("generated state\n")
         self.git("add", ".")
         self.main_base = self.commit("protected Main workflow source", [])
         self.git("checkout", "--quiet", "--detach", self.main_base)
@@ -235,6 +244,225 @@ class NormalReleaseProofTests(unittest.TestCase):
         if path.endswith("git/ref/heads/main"):
             return {"object": {"sha": self.release}}
         raise AssertionError(path)
+
+    def promotion_ready(self):
+        previous = self.api.call.side_effect
+
+        def current(path):
+            if path == f"repos/{REPOSITORY}":
+                return {"id": 1103407173, "full_name": REPOSITORY, "archived": False, "disabled": False}
+            if path.endswith("git/ref/heads/main"):
+                return {"object": {"sha": getattr(self, "live_main_tip", self.main_base)}}
+            if path.endswith("git/ref/heads/develop"):
+                return {"object": {"sha": getattr(self, "live_develop_tip", self.develop)}}
+            result = previous(path)
+            if path.endswith("actions/runs/10"):
+                result.update(getattr(self, "preparation_run_override", {}))
+            return result
+
+        self.api.call.side_effect = current
+        return PROOF.promotion_ready(
+            self.root, self.api, self.core, REPOSITORY, "1103407173", self.main_base, self.develop
+        )
+
+    def test_pre_promotion_accepts_only_genuine_reviewed_preparation(self):
+        result = self.promotion_ready()
+        self.assertEqual(result["preparation_pr"], 1)
+        self.assertEqual(result["prepared_head"], self.prepared)
+        self.assertEqual(result["next_version"], "1.0.1")
+        self.core.policy.assert_called_once_with(self.api, REPOSITORY, self.main_base, PROOF.CONTROL_SOURCE)
+        self.core.check_native_control.assert_called_once_with(
+            self.api, REPOSITORY, self.prep, self.core.policy.return_value
+        )
+
+    def test_pre_promotion_rejects_other_native_route(self):
+        self.ingress["route"] = "ancestry"
+        with self.assertRaisesRegex(ValueError, "genuine-app-ingress-review-required"):
+            self.promotion_ready()
+
+    def test_pre_promotion_rejects_unreviewed_or_foreign_app_ingress(self):
+        self.prep["user"]["id"] = 1
+        with self.assertRaisesRegex(ValueError, "release-app-pr-required"):
+            self.promotion_ready()
+
+    def test_pre_promotion_rejects_missing_native_ingress(self):
+        self.core.check_native_control.side_effect = ValueError("native-control-missing")
+        with self.assertRaisesRegex(ValueError, "native-control-missing"):
+            self.promotion_ready()
+
+    def test_pre_promotion_rejects_native_head_or_source_drift(self):
+        for change in ({"head": "0" * 40}, {"source_sha": "0" * 40}):
+            with self.subTest(change=change):
+                original = self.ingress.copy()
+                self.ingress.update(change)
+                with self.assertRaisesRegex(ValueError, "preparation-native-control-drift"):
+                    self.promotion_ready()
+                self.ingress.clear()
+                self.ingress.update(original)
+
+    def test_pre_promotion_rejects_wrong_protected_preparer_generation(self):
+        for change in (
+            {"head_sha": "0" * 40},
+            {"run_attempt": 2},
+            {"conclusion": "failure"},
+            {"head_repository": {"full_name": "elsewhere/fork"}},
+        ):
+            with self.subTest(change=change):
+                self.preparation_run_override = change
+                with self.assertRaisesRegex(ValueError, "protected-main-preparation-run-required"):
+                    self.promotion_ready()
+
+    def test_pre_promotion_rejects_nonidentical_merge_tree(self):
+        self.git("checkout", "--quiet", "--detach", self.develop)
+        (self.root / "unrelated-product.txt").write_text("extra merge delta\n")
+        self.git("add", ".")
+        self.develop = self.commit("drifting preparation merge", [self.content_base, self.prepared])
+        with self.assertRaisesRegex(ValueError, "preparation-ingress-tree-drift"):
+            self.promotion_ready()
+
+    def test_pre_promotion_rechecks_both_current_protected_tips(self):
+        for field, message in (
+            ("live_main_tip", "protected-main-tip-drift"),
+            ("live_develop_tip", "protected-develop-tip-drift"),
+        ):
+            with self.subTest(field=field):
+                setattr(self, field, "0" * 40)
+                with self.assertRaisesRegex(ValueError, message):
+                    self.promotion_ready()
+                delattr(self, field)
+
+    def test_pre_promotion_rejects_extra_commit_after_preparation(self):
+        self.git("checkout", "--quiet", "--detach", self.develop)
+        self.develop = self.commit("unreviewed subsequent Develop delta", [self.develop])
+        with self.assertRaisesRegex(ValueError, "exact-preparation-ingress-parents-required"):
+            self.promotion_ready()
+
+    def baseline_api(self, current_main):
+        previous = self.call
+        self.git("tag", "-a", "-m", "published normal version", "v1.0.1", self.release)
+        self.tag_ref = {
+            "ref": "refs/tags/v1.0.1",
+            "object": {"type": "tag", "sha": self.git("rev-parse", "refs/tags/v1.0.1")},
+        }
+        self.tag_object = {"tag": "v1.0.1", "object": {"type": "commit", "sha": self.release}}
+        self.published_release = {
+            "id": 40,
+            "tag_name": "v1.0.1",
+            "draft": False,
+            "prerelease": False,
+            "published_at": "2026-10-18T00:00:00Z",
+            "target_commitish": "develop",
+        }
+
+        def read(path):
+            if path.endswith("git/ref/heads/main"):
+                return {"object": {"sha": current_main}}
+            if path.endswith("git/ref/tags/v1.0.1"):
+                return self.tag_ref
+            if f"git/tags/{self.tag_ref['object']['sha']}" in path:
+                return self.tag_object
+            if path.endswith("releases/tags/v1.0.1"):
+                return self.published_release
+            return previous(path)
+
+        self.api.call.side_effect = read
+
+    def ordinary_main(self, previous_main, previous_develop, number):
+        self.git("checkout", "--quiet", "--detach", previous_main)
+        backmerge = self.commit("canonical unchanged-tree ancestry", [previous_develop, previous_main])
+        (self.root / f"ordinary-{number}.txt").write_text("ordinary reviewed product work\n")
+        self.git("add", ".")
+        feature = self.commit("ordinary product change", [backmerge])
+        develop = self.commit("ordinary product ingress", [backmerge, feature])
+        main = self.commit("ordinary product promotion", [previous_main, develop])
+        self.git("checkout", "--quiet", "--detach", main)
+        return main, develop
+
+    def test_published_baseline_survives_two_later_ordinary_main_promotions(self):
+        first, develop = self.ordinary_main(self.release, self.develop, 1)
+        second, _unused_develop = self.ordinary_main(first, develop, 2)
+        self.baseline_api(second)
+        for current in (first, second):
+            with self.subTest(current=current):
+                self.git("checkout", "--quiet", "--detach", current)
+                actual = self.api.call.side_effect
+                self.api.call.side_effect = lambda path, current=current, actual=actual: (
+                    {"object": {"sha": current}} if path.endswith("git/ref/heads/main") else actual(path)
+                )
+                result = PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", current)
+                self.assertEqual(result["main_merge"], self.release)
+                with self.assertRaisesRegex(ValueError, "exact-release-checkout-required"):
+                    self.publish()
+
+    def test_published_baseline_requires_existing_annotated_published_version(self):
+        self.baseline_api(self.release)
+        for field, value in (("draft", True), ("prerelease", True), ("id", 0), ("tag_name", "v9.0.0")):
+            with self.subTest(field=field):
+                original = self.published_release.copy()
+                self.published_release[field] = value
+                with self.assertRaisesRegex(ValueError, "published-baseline-release-required"):
+                    PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", self.release)
+                self.published_release = original
+        self.tag_ref["object"]["type"] = "commit"
+        with self.assertRaisesRegex(ValueError, "published-baseline-annotated-tag-required"):
+            PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", self.release)
+
+    def test_published_baseline_rejects_changed_inherited_receipt(self):
+        changed = copy.deepcopy(self.receipt)
+        changed["publication"]["galaxy"] = False
+        (self.root / PROOF.RECEIPT).write_bytes(PROOF.git_contract.CONTRACT.canonical_document_bytes(changed))
+        self.git("add", ".")
+        current = self.commit("invalid inherited receipt change", [self.release])
+        self.git("checkout", "--quiet", "--detach", current)
+        self.baseline_api(current)
+        with self.assertRaisesRegex(ValueError, "published-baseline-receipt-drift"):
+            PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", current)
+
+    def test_published_baseline_rejects_generated_state_drift_and_unrelated_tag(self):
+        (self.root / "CHANGELOG.rst").write_text("unreviewed generated state\n")
+        self.git("add", ".")
+        current = self.commit("invalid generated state", [self.release])
+        self.git("checkout", "--quiet", "--detach", current)
+        self.baseline_api(current)
+        with self.assertRaisesRegex(ValueError, "published-baseline-generated-state-drift"):
+            PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", current)
+        self.tag_object["object"]["sha"] = self.commit("unrelated tagged tree", [])
+        with self.assertRaisesRegex(ValueError, "published-baseline-not-ancestor"):
+            PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", current)
+
+    def test_published_baseline_rechecks_actual_published_release(self):
+        self.baseline_api(self.release)
+        original = self.api.call.side_effect
+        observations = []
+
+        def read(path):
+            value = original(path)
+            if path.endswith("releases/tags/v1.0.1"):
+                observations.append(path)
+                if len(observations) > 1:
+                    value = {**value, "draft": True}
+            return value
+
+        self.api.call.side_effect = read
+        with self.assertRaisesRegex(ValueError, "published-baseline-release-drift"):
+            PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", self.release)
+
+    def test_published_baseline_rechecks_immutable_tag_after_proof(self):
+        self.baseline_api(self.release)
+        original = self.api.call.side_effect
+        observations = []
+
+        def read(path):
+            value = original(path)
+            if path.endswith("git/ref/tags/v1.0.1"):
+                observations.append(path)
+                if len(observations) > 1:
+                    value = {**value, "object": {"type": "tag", "sha": "0" * 40}}
+            return value
+
+        self.api.call.side_effect = read
+        with self.assertRaisesRegex(ValueError, "published-baseline-tag-drift"):
+            PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", self.release)
 
     def publish(self):
         return PROOF.publish(
