@@ -4,6 +4,44 @@ Lightning IT Collection Release Notes Release Notes
 
 .. contents:: Topics
 
+v4.1.0
+======
+
+Minor Changes
+-------------
+
+- Add a default-held, manual Main/first-attempt REP120 caller with one-shot pinned TLS transport and memory-only job OIDC, without activating promotion or a receiver.
+- Prepare bounded native verifier recovery for classified hosted-runner acquisition failures, retaining protected review and policy bindings and disabled rollout.
+- Retire the reciprocal .github counter-verifier after protected central-source cutover, retaining Collection, compatibility, security and release checks. Preserve historical adoption receipts and authenticate the retired inventory separately so future synchronization cannot restore local verifier authority.
+
+Security Fixes
+--------------
+
+- Guard REP120 OIDC job admission and sender preflight to the fixed dispatch actor identity, matching triggering actor and protected Main before transport or OIDC.
+
+Bugfixes
+--------
+
+- Add a fail-closed, read-only inventory of waiting promotion runs with complete pagination, stable totals, unique run and job IDs, optional exact-run job readback, and no cancellation authority.
+- Adopt the protected Source MAIN review gateway and complete runtime closure, including bounded provider responses and protected instruction admission.
+- Bind deferred first-review eligibility to the original protected default controller separately from the later PR-base controller, with fresh controller fences before and after claims and before request effects.
+- Bind the current nine-field ordinary-human neutral review publisher to the live PR metadata revision in the reciprocal dot-github verifier, while retaining legacy human and Renovate contracts.
+- Compare complete streamed patch content when binding Push-Ready evidence so unchanged replanned patches pass while actual plan drift remains blocked.
+- Keep an open pull request with ambiguous current-revision evidence blocked without preventing reconciliation of later independent pull requests.
+- Keep the event verifier dispatcher successful and side-effect free for bot pull requests so protected verification sees one unambiguous legacy check.
+- Keep the protected main helper check name stable for bot-authored ancestry pull requests so the required workflow can match and admit the check.
+- Make normal Copilot diff sizing advisory while retaining all deterministic validation and protected-policy checks.
+- Prepare a protected deferred first-request continuation using the same request budget, preserving original Supplementary authorization and refusing accepted markers for unconfirmed requests.
+- Preserve authenticated ordinary-human fork identity through review handoff, refresh, reconciliation, and the hosted Core verifier while retaining the same-repository litroc-only funding and at-most-once request budget.
+- REP120 caller preserves opaque runner-supplied RFC3986 routing instead of requiring an undocumented endpoint name, with strict origin, traversal, credential-free failure and no-retry boundaries retained.
+- REP120 caller validates opaque runner OIDC routing segments with RFC3986 syntax while preserving the literal idtoken endpoint, origin, audience, query, one-shot transport and native authorization boundaries.
+- REP120 one-shot caller - distinguish rejected OIDC capability predicates using only finite value-free reason codes without changing admission or transport checks.
+- Report only finite source-owned REP120 caller hold stages without exception text or credential disclosure; retain all admission guards and one-shot behavior.
+- Stage the explicitly gated LI-219 review-event pilot with durable request and rerun claims, preserving Supplementary release and promotion contracts.
+- Stream complete Push-Ready patches, fingerprints and secret scans while preserving local review classification and the aggregate workspace budget.
+- Use a static protected main helper check name so GitHub preserves the required context even when the helper job is skipped.
+- Verify the dedicated dot-github ancestry-backmerge review identity and title against the protected main commit, ordered merge parents, and exclusive ancestry proof file, including final revalidation before acceptance.
+
 v4.0.4
 ======
 
