@@ -1,0 +1,4 @@
+---
+bugfixes:
+  - Accept the paired ModuLix receiver's exact compact signed-receipt encoding without rewriting its bytes.
+  - Restrict ModuLix observation and finalization tokens to read-only Actions access while retaining initial dispatch.

@@ -472,7 +472,7 @@ Publishing targets: `github-release, ansible-galaxy`.
 
 <!-- BEGIN LIT_COMPATIBILITY_MATRIX -->
 
-## Compatibility matrix
+## Supported and Tested Platforms
 
 The generated [role coverage report](docs/testing/role-coverage.md) is the
 current matrix. Release attachments contain the executed role/profile/target

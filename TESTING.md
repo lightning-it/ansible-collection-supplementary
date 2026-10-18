@@ -89,7 +89,7 @@ complete command block in
 [`docs/testing/keycloak.md`](docs/testing/keycloak.md). Never reuse production
 credentials in test runs.
 
-## Matrix
+## Test Profiles and Matrix
 
 Generate the exact supported cells from the registry:
 
