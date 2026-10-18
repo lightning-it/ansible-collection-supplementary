@@ -538,9 +538,39 @@ clock.write_text(str(int(clock.read_text()) + int(sys.argv[1])))
             self.finalize_names.index("Finalize immutable release attachments and notes") :
         ]
         self.assertEqual(deferred_names, final_names)
+        # Historical normal rechecks cannot create missing publication proof.
+        # Remove only these exact normal-only guards; every shared Security
+        # line and environment field must still compare exactly below.
+        normal_legacy_guards = {
+            "Finalize immutable release attachments and notes": (
+                '  if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then\n'
+                "    echo 'Legacy normal recheck requires the existing signed checksum pair.' >&2\n"
+                "    exit 1\n"
+                "  fi\n"
+            ),
+            "Create or verify GitHub Release and immutable assets": (
+                '    if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then\n'
+                "      echo 'Legacy normal recheck cannot add missing GitHub Release assets.' >&2\n"
+                "      exit 1\n"
+                "    fi\n"
+            ),
+            "Attach signed post-publication verification receipt": (
+                '  if [ "${LEGACY_NORMAL_RECHECK:-false}" = true ]; then\n'
+                "    echo 'Legacy normal recheck requires the existing signed post-release receipt pair.' >&2\n"
+                "    exit 1\n"
+                "  fi\n"
+            ),
+        }
+        self.assertTrue(normal_legacy_guards.keys() <= set(deferred_names))
         for name in deferred_names:
             stage = {key: value for key, value in self.steps[name].items() if key != "if"}
             final = {key: value for key, value in self.finalize_steps[name].items() if key != "if"}
+            if name in normal_legacy_guards:
+                legacy_guard = normal_legacy_guards[name]
+                self.assertEqual(1, stage["run"].count(legacy_guard), name)
+                self.assertNotIn(legacy_guard, final["run"], name)
+                stage["run"] = stage["run"].replace(legacy_guard, "", 1)
+                self.assertNotIn(legacy_guard, stage["run"], name)
             if name == "Verify GitHub Release download, install, and smoke":
                 # Only normal publication has this archive. Preserve exact
                 # equality of every shared Security verification line and env.
