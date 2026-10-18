@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Keep the protected main helper check name stable for bot-authored ancestry
-    pull requests so the required workflow can match and admit the check.

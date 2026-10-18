@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Preserve an already published release baseline during a personal Develop reconciliation,
+    with exact release-file and fragment verification and the normal current-head review requirements.

@@ -1,9 +1,0 @@
----
-security_fixes:
-  - >-
-    Guard REP120 OIDC job admission and sender preflight to the fixed dispatch actor
-    identity, matching triggering actor and protected Main before transport or OIDC.
-minor_changes:
-  - >-
-    Add a default-held, manual Main/first-attempt REP120 caller with one-shot pinned
-    TLS transport and memory-only job OIDC, without activating promotion or a receiver.

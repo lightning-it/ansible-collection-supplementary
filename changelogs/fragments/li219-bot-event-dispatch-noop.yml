@@ -1,5 +1,0 @@
----
-bugfixes:
-  - >-
-    Keep the event verifier dispatcher successful and side-effect free for bot
-    pull requests so protected verification sees one unambiguous legacy check.
