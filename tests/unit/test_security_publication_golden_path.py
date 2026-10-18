@@ -356,7 +356,7 @@ clock.write_text(str(int(clock.read_text()) + int(sys.argv[1])))
         self.assertIn("scripts/verify-release-ci-run.sh", verify)
         token = steps["Mint exact ModuLix validation App token"]
         self.assertEqual("modulix-validation", token["with"]["repositories"])
-        self.assertEqual("write", token["with"]["permission-actions"])
+        self.assertEqual("read", token["with"]["permission-actions"])
         poll = steps["Poll only the bound ModuLix run"]["run"]
         self.assertIn("--phase window", poll)
         self.assertIn("--bound-run-attempt", poll)
@@ -372,6 +372,15 @@ clock.write_text(str(int(clock.read_text()) + int(sys.argv[1])))
             self.finalize_names.index(checkout["name"]),
             self.finalize_names.index("Re-prove protected release and reviewed merge"),
         )
+
+    def test_only_initial_modulix_dispatch_token_can_write_actions(self) -> None:
+        dispatch = self.steps["Mint exact ModuLix validation App token"]["with"]
+        finalize = self.finalize_steps["Mint exact ModuLix App token for finalization"]["with"]
+        for token in (dispatch, finalize):
+            self.assertEqual("modulix-validation", token["repositories"])
+            self.assertEqual("read", token["permission-contents"])
+        self.assertEqual("write", dispatch["permission-actions"])
+        self.assertEqual("read", finalize["permission-actions"])
 
     def test_polling_rejects_token_expiry_window_before_minting(self) -> None:
         reusable = yaml.safe_load(MODULIX_WINDOW_PATH.read_text(encoding="utf-8"))

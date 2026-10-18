@@ -85,18 +85,31 @@ def reject_json_constant(value: str) -> None:
     raise ReceiptError(f"non-JSON numeric constant: {value}")
 
 
-def load_json(path: Path, label: str) -> dict[str, Any]:
+def read_json(path: Path, label: str) -> tuple[str, dict[str, Any]]:
     if path.is_symlink() or not path.is_file():
         raise ReceiptError(f"{label} must be a regular non-symlink file")
     try:
-        source = path.read_text(encoding="utf-8")
+        source = path.read_bytes().decode("utf-8")
         value = json.loads(source, object_pairs_hook=reject_duplicate_keys, parse_constant=reject_json_constant)
     except json.JSONDecodeError as exc:
         raise ReceiptError(f"{label} is not valid JSON") from exc
     if not isinstance(value, dict):
         raise ReceiptError(f"{label} must be a JSON object")
+    return source, value
+
+
+def load_json(path: Path, label: str) -> dict[str, Any]:
+    source, value = read_json(path, label)
     if source != json.dumps(value, indent=2, sort_keys=True) + "\n":
         raise ReceiptError(f"{label} bytes are not canonical sorted UTF-8 JSON")
+    return value
+
+
+def load_receipt(path: Path) -> dict[str, Any]:
+    """Read the receiver's compact wire format without rewriting signed bytes."""
+    source, value = read_json(path, "ModuLix validation receipt")
+    if source != canonical_json(value) + "\n":
+        raise ReceiptError("ModuLix validation receipt bytes are not canonical receiver JSON")
     return value
 
 
@@ -729,7 +742,7 @@ def download_and_verify_receipt(
         bundle_path = temporary / RECEIPT_BUNDLE_NAME
         if receipt_path.is_symlink() or bundle_path.is_symlink() or not bundle_path.is_file():
             raise ReceiptError("ModuLix receipt artifact contains an unsafe file")
-        receipt = load_json(receipt_path, "ModuLix validation receipt")
+        receipt = load_receipt(receipt_path)
         validate_receipt(receipt, request, request_id, run)
         client.verify_signature(receipt_path, bundle_path, string(run.get("head_sha"), "controller run SHA"))
         require_bound_success(

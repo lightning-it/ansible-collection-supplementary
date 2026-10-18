@@ -2529,7 +2529,7 @@ jobs:
           private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: modulix-validation
-          permission-actions: write
+          permission-actions: read
           permission-contents: read
 
       - name: Reverify the same signed ModuLix receipt

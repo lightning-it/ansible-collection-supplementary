@@ -170,7 +170,7 @@ jobs:
           private-key: ${{ secrets.release_automation_app_private_key }}
           owner: ${{ github.repository_owner }}
           repositories: modulix-validation
-          permission-actions: write
+          permission-actions: read
           permission-contents: read
 
       - name: Poll only the bound ModuLix run

@@ -15,6 +15,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "modulix-validation-receipt.py"
+# Output of the real receiver CLI at 7c333e54; see fixture provenance beside it.
+RECEIVER_RECEIPT = ROOT / "tests/fixtures/modulix-validation-receipt-v2.compact.json"
 SOURCE_SHA = "a" * 40
 CONTROLLER_SHA = "b" * 40
 ARTIFACT_DIGEST = f"sha256:{'c' * 64}"
@@ -142,6 +144,7 @@ class FakeController:
         self.runs = [run]
         self.dispatches = 0
         self.signature_verified = False
+        self.signature_input = None
 
     def installation(self) -> dict[str, object]:
         return {
@@ -198,17 +201,17 @@ class FakeController:
     def download(self, run_id: int, artifact_name: str, destination: Path) -> None:
         if run_id != self.run["id"] or artifact_name != f"{MODULE.ARTIFACT_PREFIX}{self.request_id}":
             raise AssertionError("wrong artifact")
-        receipt = receipt_payload(self.request, self.request_id, self.run)
-        (destination / MODULE.RECEIPT_NAME).write_text(
-            json.dumps(receipt, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        wire_bytes = RECEIVER_RECEIPT.read_bytes()
+        if json.loads(wire_bytes) != receipt_payload(self.request, self.request_id, self.run):
+            raise AssertionError("receiver wire fixture differs from the exact fake run/request")
+        (destination / MODULE.RECEIPT_NAME).write_bytes(wire_bytes)
         (destination / MODULE.RECEIPT_BUNDLE_NAME).write_text("signed-bundle\n", encoding="utf-8")
 
     def verify_signature(self, receipt: Path, bundle: Path, controller_sha: str) -> None:
         if not receipt.is_file() or not bundle.is_file() or controller_sha != CONTROLLER_SHA:
             raise AssertionError("wrong signature inputs")
         self.signature_verified = True
+        self.signature_input = receipt.read_bytes()
 
 
 class ModuLixValidationReceiptTests(unittest.TestCase):
@@ -602,7 +605,30 @@ class ModuLixValidationReceiptTests(unittest.TestCase):
             receipt, bundle = MODULE.download_and_verify_receipt(client, request, request_id, run, output)
             self.assertTrue(receipt.is_file())
             self.assertTrue(bundle.is_file())
+            self.assertEqual(RECEIVER_RECEIPT.read_bytes(), receipt.read_bytes())
+            self.assertEqual(RECEIVER_RECEIPT.read_bytes(), client.signature_input)
         self.assertTrue(client.signature_verified)
+
+    def test_receiver_wire_format_rejects_reencoding_duplicates_and_constants(self) -> None:
+        wire = RECEIVER_RECEIPT.read_bytes()
+        payload = json.loads(wire)
+        cases = (
+            wire.replace(b'"kind":', b'"kind":"duplicate","kind":', 1),
+            b'{"unused":NaN}\n',
+            (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode(),
+            wire.replace(b"\n", b"\r\n"),
+            wire.rstrip(b"\n"),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "receipt.json"
+            path.write_bytes(wire)
+            self.assertEqual(payload, MODULE.load_receipt(path))
+            for changed in cases:
+                with self.subTest(changed=changed[:60]):
+                    path.write_bytes(changed)
+                    with self.assertRaises(MODULE.ReceiptError):
+                        MODULE.load_receipt(path)
+                    self.assertEqual(changed, path.read_bytes())
 
     def test_signed_receipt_rejects_boolean_integer_substitution(self) -> None:
         request, request_id = request_payload()
