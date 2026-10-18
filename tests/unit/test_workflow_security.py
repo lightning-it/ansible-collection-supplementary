@@ -1628,8 +1628,12 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertIn('--root "$base_tree"', publish)
         self.assertEqual(
             2,
-            publish.count('python "$base_tree/scripts/release-version.py"'),
+            publish.count('python "$workflow_tree/scripts/release-version.py"'),
         )
+        self.assertIn('workflow_tree="$base_tree"', publish)
+        self.assertIn('git worktree add --detach --quiet "$workflow_tree" "$workflow_source"', publish)
+        self.assertIn('--galaxy "$base_tree/galaxy.yml"', publish)
+        self.assertIn('--fragments "$base_tree/changelogs/fragments"', publish)
         self.assertNotIn("pull_request_target:", exact_revision)
         self.assertIn("workflow_dispatch:", exact_revision)
         self.assertIn("github.actor == 'lightning-it-release-automation[bot]'", exact_revision)
