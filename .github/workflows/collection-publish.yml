@@ -742,10 +742,12 @@ jobs:
           python scripts/normal_release_proof.py publish \
             --root "$GITHUB_WORKSPACE" --control-root "$GITHUB_WORKSPACE/release-control-source" \
             --repository "$GITHUB_REPOSITORY" --repository-id "$REPOSITORY_ID" \
-            --release "$RELEASE_SHA" --base "$REVIEWED_BASE_SHA" --head "$REVIEWED_HEAD_SHA" >"$proof"
+            --release "$RELEASE_SHA" --base "$REVIEWED_BASE_SHA" --head "$REVIEWED_HEAD_SHA" \
+            --archive-directory "$RUNNER_TEMP/normal-release-native" >"$proof"
           {
             echo "PREPARATION_BASE_SHA=$(jq -er '.content_base' "$proof")"
             echo "PREPARATION_HEAD_SHA=$(jq -er '.prepared_head' "$proof")"
+            echo "NORMAL_NATIVE_ARCHIVE_REUSED=$(jq -er '.archive_reused | tostring' "$proof")"
           } >>"$GITHUB_ENV"
 
       - name: Re-prove fragment-derived version and authorized preparation
@@ -1258,6 +1260,39 @@ jobs:
             sha256sum --check ci-candidate-SHA256SUMS
             sha256sum --check ci-release-assets-SHA256SUMS
           )
+
+      - name: Retain authenticated normal publication observations
+        if: env.NORMAL_TWO_STAGE == 'true'
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/normal-release-native/normal-release-native-evidence.json" dist/release/
+          if [ "$NORMAL_NATIVE_ARCHIVE_REUSED" = true ]; then
+            cp "$RUNNER_TEMP/normal-release-native/normal-release-native-evidence.sigstore.json" dist/release/
+          fi
+
+      - name: Attest normal publication observations
+        id: attest-normal-native-evidence
+        if: env.NORMAL_TWO_STAGE == 'true' && env.NORMAL_NATIVE_ARCHIVE_REUSED != 'true'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4
+        with:
+          subject-path: dist/release/normal-release-native-evidence.json
+
+      - name: Verify and retain normal native evidence attestation
+        if: env.NORMAL_TWO_STAGE == 'true'
+        env:
+          ATTESTATION_BUNDLE: ${{ steps.attest-normal-native-evidence.outputs.bundle-path }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+        run: |
+          set -euo pipefail
+          if [ "$NORMAL_NATIVE_ARCHIVE_REUSED" != true ]; then
+            test -s "$ATTESTATION_BUNDLE"
+            cp "$ATTESTATION_BUNDLE" dist/release/normal-release-native-evidence.sigstore.json
+          fi
+          python scripts/normal_release_archive.py \
+            --snapshot dist/release/normal-release-native-evidence.json \
+            --bundle dist/release/normal-release-native-evidence.sigstore.json \
+            --repository "$GITHUB_REPOSITORY" --repository-id "$REPOSITORY_ID" --release "$RELEASE_SHA"
 
       - name: Prepare deterministic signed Security release evidence
         id: security-evidence
@@ -2031,6 +2066,7 @@ jobs:
         if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          REPOSITORY_ID: ${{ github.repository_id }}
         run: |
           set -euo pipefail
 
@@ -2053,6 +2089,12 @@ jobs:
             "$verify_root/SHA256SUMS"
           test "$(sha256sum "$verify_root/$CANDIDATE_NAME" | awk '{print $1}')" = \
             "$(sha256sum "incoming/candidate/$CANDIDATE_NAME" | awk '{print $1}')"
+          if [ "${NORMAL_TWO_STAGE:-false}" = true ]; then
+            python scripts/normal_release_archive.py \
+              --snapshot "$verify_root/normal-release-native-evidence.json" \
+              --bundle "$verify_root/normal-release-native-evidence.sigstore.json" \
+              --repository "$GITHUB_REPOSITORY" --repository-id "$REPOSITORY_ID" --release "$RELEASE_SHA"
+          fi
           if [ "$SECURITY_RELEASE" = true ]; then
             python scripts/generate-security-release-evidence.py verify \
               --metadata "$SECURITY_METADATA" \

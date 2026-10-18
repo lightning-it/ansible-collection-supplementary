@@ -13,7 +13,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import yaml
 
@@ -218,6 +218,16 @@ class NormalReleaseProofTests(unittest.TestCase):
             return [self.promotion]
         if "actions/runs?" in path:
             return [self.run]
+        if path.endswith("/artifacts"):
+            return [
+                {
+                    "id": 31,
+                    "name": "control-proof-1",
+                    "expired": False,
+                    "size_in_bytes": 100,
+                    "digest": "sha256:" + "b" * 64,
+                }
+            ]
         raise AssertionError(path)
 
     def call(self, path):
@@ -338,6 +348,48 @@ class NormalReleaseProofTests(unittest.TestCase):
             self.promotion_ready()
 
     def baseline_api(self, current_main):
+        # These unit fixtures mock crypto separately from replay semantics.
+        # Dedicated archive tests verify the exact gh verification boundary.
+        checkout = self.git("rev-parse", "HEAD")
+        self.git("checkout", "--quiet", "--detach", self.release)
+
+        def original_record(api, repository, run, _name, _filename):
+            api.pages(f"repos/{repository}/actions/runs/{run['id']}/artifacts", "artifacts")
+            return copy.deepcopy(self.proof)
+
+        self.core.artifact_record.side_effect = original_record
+        snapshot = self.root / "snapshot.json"
+        PROOF.publish_snapshot(
+            self.root,
+            self.api,
+            self.core,
+            REPOSITORY,
+            "1103407173",
+            self.release,
+            self.main_base,
+            self.develop,
+            snapshot,
+        )
+        self.snapshot_bytes = snapshot.read_bytes()
+        snapshot.unlink()
+        self.git("checkout", "--quiet", "--detach", checkout)
+
+        def download(_published, _repository, directory):
+            (directory / PROOF.archive.SNAPSHOT).write_bytes(self.snapshot_bytes)
+            (directory / PROOF.archive.BUNDLE).write_text("unit-crypto-fixture")
+
+        download_patch = patch.object(PROOF.archive, "download_pair", side_effect=download)
+        verify_patch = patch.object(
+            PROOF.archive,
+            "verify_files",
+            side_effect=lambda snapshot, *_args: PROOF.archive.decode(snapshot.read_bytes()),
+        )
+        download_patch.start()
+        verify_patch.start()
+        self.addCleanup(download_patch.stop)
+        self.addCleanup(verify_patch.stop)
+        self.api.reset_mock()
+        self.core.artifact_record.reset_mock()
         previous = self.call
         self.git("tag", "-a", "-m", "published normal version", "v1.0.1", self.release)
         self.tag_ref = {
@@ -377,6 +429,169 @@ class NormalReleaseProofTests(unittest.TestCase):
         main = self.commit("ordinary product promotion", [previous_main, develop])
         self.git("checkout", "--quiet", "--detach", main)
         return main, develop
+
+    def test_publication_archive_reuses_complete_verified_pair_without_original_actions(self):
+        self.baseline_api(self.release)
+        original_pages = self.api.pages.side_effect
+        self.api.pages.side_effect = lambda path, key=None: (
+            [self.published_release] if path.endswith("/releases") else original_pages(path, key)
+        )
+        self.core.artifact_record.side_effect = AssertionError("expired original Actions must not execute")
+        directory = self.root / "archived-pair"
+        result = PROOF.publication_archive(
+            self.root,
+            self.api,
+            self.core,
+            REPOSITORY,
+            "1103407173",
+            self.release,
+            self.main_base,
+            self.develop,
+            directory,
+        )
+        self.assertTrue(result["archive_reused"])
+        self.assertEqual(self.snapshot_bytes, (directory / PROOF.archive.SNAPSHOT).read_bytes())
+        self.assertEqual(b"unit-crypto-fixture", (directory / PROOF.archive.BUNDLE).read_bytes())
+        self.core.artifact_record.assert_not_called()
+
+    def test_existing_partial_pair_never_falls_back_to_new_live_snapshot(self):
+        self.baseline_api(self.release)
+        self.api.pages.return_value = [self.published_release]
+        self.api.pages.side_effect = None
+        with (
+            patch.object(PROOF.archive, "download_pair", side_effect=ValueError("archive-pair-missing")),
+            patch.object(PROOF, "publish_snapshot") as new,
+            self.assertRaisesRegex(ValueError, "archive-pair-missing"),
+        ):
+            PROOF.publication_archive(
+                self.root,
+                self.api,
+                self.core,
+                REPOSITORY,
+                "1103407173",
+                self.release,
+                self.main_base,
+                self.develop,
+                self.root / "partial-pair",
+            )
+        new.assert_not_called()
+
+    def test_new_snapshot_is_written_only_after_complete_live_success(self):
+        original_pages = self.api.pages.side_effect
+        self.api.pages.side_effect = lambda path, key=None: (
+            [] if path.endswith("/releases") else original_pages(path, key)
+        )
+
+        def original_record(api, repository, run, _name, _filename):
+            api.pages(f"repos/{repository}/actions/runs/{run['id']}/artifacts", "artifacts")
+            return copy.deepcopy(self.proof)
+
+        self.core.artifact_record.side_effect = original_record
+        directory = self.root / "new-pair"
+        result = PROOF.publication_archive(
+            self.root,
+            self.api,
+            self.core,
+            REPOSITORY,
+            "1103407173",
+            self.release,
+            self.main_base,
+            self.develop,
+            directory,
+        )
+        self.assertFalse(result["archive_reused"])
+        self.assertTrue((directory / PROOF.archive.SNAPSHOT).is_file())
+        self.assertFalse((directory / PROOF.archive.BUNDLE).exists())
+        self.proof["authorization"]["approval"] = {"user": "wrong"}
+        rejected = self.root / "rejected-pair"
+        with self.assertRaisesRegex(ValueError, "native-human-approval-drift"):
+            PROOF.publication_archive(
+                self.root,
+                self.api,
+                self.core,
+                REPOSITORY,
+                "1103407173",
+                self.release,
+                self.main_base,
+                self.develop,
+                rejected,
+            )
+        self.assertFalse((rejected / PROOF.archive.SNAPSHOT).exists())
+
+    def test_archive_assets_are_attested_before_checksums_and_verified_after_native_download(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/collection-publish.yml").read_text())
+        steps = workflow["jobs"]["publish"]["steps"]
+        names = [step.get("name", "") for step in steps]
+        mapping = {step.get("name"): step for step in steps}
+        retain = "Retain authenticated normal publication observations"
+        attest = "Attest normal publication observations"
+        verify = "Verify and retain normal native evidence attestation"
+        final = "Verify GitHub Release download, install, and smoke"
+        self.assertLess(names.index(retain), names.index(attest))
+        self.assertLess(names.index(attest), names.index(verify))
+        checksum = next(
+            index
+            for index, step in enumerate(steps)
+            if index > names.index(verify)
+            and "sha256sum" in step.get("run", "")
+            and "SHA256SUMS" in step.get("run", "")
+        )
+        self.assertLess(names.index(verify), checksum)
+        self.assertLess(checksum, names.index(final))
+        self.assertEqual("actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6", mapping[attest]["uses"])
+        self.assertIn("NORMAL_NATIVE_ARCHIVE_REUSED != 'true'", mapping[attest]["if"])
+        self.assertEqual("dist/release/" + PROOF.archive.SNAPSHOT, mapping[attest]["with"]["subject-path"])
+        self.assertIn("bundle-path", str(mapping[verify]["env"]))
+        self.assertIn("normal_release_archive.py", mapping[final]["run"])
+        self.assertIn('if [ "${NORMAL_TWO_STAGE:-false}" = true ]; then', mapping[final]["run"])
+        self.assertIn('--release "$RELEASE_SHA"', mapping[final]["run"])
+
+    def test_published_baseline_uses_archive_after_original_actions_artifacts_expire(self):
+        current, _develop = self.ordinary_main(self.release, self.develop, 1)
+        self.baseline_api(current)
+        previous = self.api.call.side_effect
+
+        def expired(path):
+            if "/actions/" in path:
+                raise AssertionError("historical Actions API must not be queried")
+            return previous(path)
+
+        self.api.call.side_effect = expired
+        self.api.pages.side_effect = AssertionError("historical inventory must not be queried")
+        self.core.artifact_record.side_effect = AssertionError("original artifact download must not execute")
+        result = PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", current)
+        self.assertEqual(self.release, result["main_merge"])
+        self.core.artifact_record.assert_not_called()
+        self.api.pages.assert_not_called()
+        self.assertFalse(any("/actions/" in call.args[0] for call in self.api.call.call_args_list))
+
+    def test_archived_proof_drift_still_fails_original_native_checks(self):
+        self.baseline_api(self.release)
+        original = self.snapshot_bytes
+        for change in ("approval", "tree", "binding", "receipt", "source"):
+            with self.subTest(change=change):
+                value = PROOF.archive.decode(original)
+                records = [read for read in value["reads"] if read["kind"] == "artifact"]
+                proof = records[0]["value"]["record"]
+                if change == "approval":
+                    proof["authorization"]["approval"] = {"user": "different"}
+                elif change == "tree":
+                    proof["evidence"]["integration_tree"] = "0" * 40
+                elif change == "binding":
+                    proof["binding"] = {}
+                elif change == "source":
+                    proof["source_sha"] = "0" * 40
+                else:
+                    read = next(
+                        read
+                        for read in value["reads"]
+                        if read["kind"] == "call" and read["args"][0].endswith("actions/runs/10")
+                    )
+                    read["value"]["head_sha"] = "0" * 40
+                self.snapshot_bytes = PROOF.archive.canonical(value)
+                with self.assertRaises(ValueError):
+                    PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", self.release)
+        self.snapshot_bytes = original
 
     def test_published_baseline_survives_two_later_ordinary_main_promotions(self):
         first, develop = self.ordinary_main(self.release, self.develop, 1)
@@ -795,6 +1010,214 @@ class NormalReleaseProofTests(unittest.TestCase):
         proof = steps["Prove normal preparation ingress and exact approved promotion"]
         self.assertIn("normal_release_proof.py publish", proof["run"])
         self.assertEqual("env.NORMAL_TWO_STAGE == 'true'", proof["if"])
+
+
+class RealNativeArchiveTests(unittest.TestCase):
+    """Synthetic native transport, actual pinned reader and actual Git graph."""
+
+    def test_pinned_native_verifiers_replay_all_original_checks_without_actions_transport(self):
+        directory = Path(os.environ.get("LIT_RELEASE_CONTROL_FIXTURE", ROOT / ".cache/release-control-source"))
+        if not directory.is_dir():
+            self.skipTest("immutable offline native-control fixture not staged; qualification not executed")
+        fixture = NormalReleaseProofTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        previous = sys.modules.pop("workflow_control", None)
+
+        def restore_module():
+            sys.modules.pop("workflow_control", None)
+            if previous is not None:
+                sys.modules["workflow_control"] = previous
+
+        self.addCleanup(restore_module)
+        core = PROOF.load_control(directory)
+        for pull in (fixture.prep, fixture.promotion):
+            pull.update(title="Synthetic native-shaped reviewed change", body="Offline regression", labels=[])
+        runs = {}
+        for run_id, pull in ((20, fixture.prep), (30, fixture.promotion)):
+            runs[run_id] = {
+                "id": run_id,
+                "run_attempt": 1,
+                "head_sha": pull["head"]["sha"],
+                "status": "completed",
+                "conclusion": "success",
+                "workflow_id": 123,
+                "workflow_url": f"https://api.github.com/repos/{REPOSITORY}/actions/required_workflows/123",
+                "path": core.WORKFLOW,
+                "pull_requests": [copy.deepcopy(pull)],
+            }
+        prep_record = {
+            "version": 1,
+            "source_sha": PROOF.CONTROL_SOURCE,
+            "route": "codex",
+            "binding": core.binding(fixture.prep),
+        }
+        approval = {
+            "state": "approved",
+            "user": {"login": "fixture-reviewer", "id": 1234, "type": "User"},
+            "environments": [{"name": "normal-release-promotion-approval"}],
+        }
+        promotion_record = copy.deepcopy(fixture.proof)
+        promotion_record["binding"] = core.binding(fixture.promotion)
+        promotion_record["authorization"] = {"run": 30, "approval": approval}
+        promotion_record["evidence"]["ingress"][0]["control"]["proof_sha256"] = core.digest(prep_record)
+        operation = {"version": 1, "source_sha": PROOF.CONTROL_SOURCE, "binding": core.binding(fixture.promotion)}
+        records = {
+            (20, "control-proof-1"): prep_record,
+            (30, "control-proof-1"): promotion_record,
+            (30, "control-operation-1"): operation,
+        }
+        api = Mock()
+        api.file.return_value = (ROOT / ".lit/workflow-control.json").read_bytes()
+
+        def call(path):
+            if path.endswith("/approvals"):
+                return [copy.deepcopy(approval)]
+            if path.endswith("environments/normal-release-promotion-approval"):
+                return {
+                    "name": "normal-release-promotion-approval",
+                    "can_admins_bypass": False,
+                    "protection_rules": [
+                        {"type": "required_reviewers", "prevent_self_review": False, "reviewers": [{"type": "User"}]}
+                    ],
+                }
+            for run_id, run in runs.items():
+                if path.endswith(f"actions/runs/{run_id}"):
+                    return copy.deepcopy(run)
+            return copy.deepcopy(fixture.call(path))
+
+        def pages(path, key=None):
+            for run_id, run in runs.items():
+                if path.endswith(f"actions/runs?head_sha={run['head_sha']}"):
+                    return [copy.deepcopy(run)]
+                if path.endswith(f"actions/runs/{run_id}/attempts/1/jobs"):
+                    return [
+                        {"id": run_id + 1, "run_id": run_id, "name": "Current revision review", "conclusion": "success"}
+                    ]
+                if path.endswith(f"actions/runs/{run_id}/artifacts"):
+                    return [
+                        {
+                            "id": run_id * 10 + index,
+                            "name": name,
+                            "expired": False,
+                            "size_in_bytes": 1024,
+                            "digest": "sha256:" + "a" * 64,
+                        }
+                        for index, (identity, name) in enumerate(records, 1)
+                        if identity == run_id
+                    ]
+            return copy.deepcopy(fixture.pages(path, key))
+
+        api.call.side_effect = call
+        api.pages.side_effect = pages
+        original_run = subprocess.run
+        downloads = []
+
+        def transport(args, **kwargs):
+            if args[:3] == ["gh", "run", "download"]:
+                run_id, name = int(args[3]), args[args.index("--name") + 1]
+                target = Path(args[args.index("--dir") + 1])
+                filename = "control-operation.json" if "operation" in name else "control-proof.json"
+                (target / filename).write_text(json.dumps(records[(run_id, name)]))
+                downloads.append((run_id, name))
+                return subprocess.CompletedProcess(args, 0, b"", b"")
+            return original_run(args, **kwargs)
+
+        snapshot = fixture.root / "native-snapshot.json"
+        with patch.object(subprocess, "run", side_effect=transport):
+            result = PROOF.publish_snapshot(
+                fixture.root,
+                api,
+                core,
+                REPOSITORY,
+                "1103407173",
+                fixture.release,
+                fixture.main_base,
+                fixture.develop,
+                snapshot,
+            )
+        self.assertEqual([(20, "control-proof-1"), (30, "control-proof-1"), (30, "control-operation-1")], downloads)
+        value = PROOF.archive.decode(snapshot.read_bytes())
+        snapshot.unlink()
+        current, _ = fixture.ordinary_main(fixture.release, fixture.develop, 1)
+        expected = PROOF.archive.binding(
+            REPOSITORY, "1103407173", fixture.release, fixture.main_base, fixture.develop, PROOF.CONTROL_SOURCE
+        )
+
+        def expired_pages(path, key=None):
+            if "/actions/" in path:
+                raise ValueError("original native Actions evidence expired")
+            return pages(path, key)
+
+        api.pages.side_effect = expired_pages
+        with self.assertRaisesRegex(ValueError, "original native Actions evidence expired"):
+            PROOF._publish(
+                fixture.root,
+                api,
+                core,
+                REPOSITORY,
+                "1103407173",
+                fixture.release,
+                fixture.main_base,
+                fixture.develop,
+                current,
+            )
+        api.reset_mock()
+        api.call.side_effect = api.pages.side_effect = AssertionError("expired original Actions must not be read")
+        api.file.side_effect = AssertionError("historical protected policy must come from signed observations")
+
+        def expired_transport(args, **kwargs):
+            if args[0] == "gh":
+                raise AssertionError("original artifact download must not execute during replay")
+            return original_run(args, **kwargs)
+
+        def replay(observations):
+            adapter = PROOF.archive.Replay(observations, expected, current)
+            with (
+                patch.object(subprocess, "run", side_effect=expired_transport),
+                PROOF.archive.artifact_reader(core, adapter),
+            ):
+                observed = PROOF._publish(
+                    fixture.root,
+                    adapter,
+                    core,
+                    REPOSITORY,
+                    "1103407173",
+                    fixture.release,
+                    fixture.main_base,
+                    fixture.develop,
+                    current,
+                )
+            adapter.finish(observed)
+            return observed
+
+        self.assertEqual(result, replay(value))
+        api.call.assert_not_called()
+        api.pages.assert_not_called()
+        api.file.assert_not_called()
+        for defect in ("approval", "tree", "preparation-binding", "operation-binding", "source", "run-origin"):
+            changed = copy.deepcopy(value)
+            artifacts = [entry for entry in changed["reads"] if entry["kind"] == "artifact"]
+            if defect == "approval":
+                artifacts[1]["value"]["record"]["authorization"]["approval"]["user"]["id"] = 4321
+            elif defect == "tree":
+                artifacts[1]["value"]["record"]["evidence"]["integration_tree"] = "0" * 40
+            elif defect == "preparation-binding":
+                artifacts[0]["value"]["record"]["binding"]["head"] = "0" * 40
+            elif defect == "operation-binding":
+                artifacts[2]["value"]["record"]["binding"]["head"] = "0" * 40
+            elif defect == "source":
+                artifacts[0]["value"]["record"]["source_sha"] = "0" * 40
+            else:
+                entry = next(
+                    entry
+                    for entry in changed["reads"]
+                    if entry["kind"] == "pages"
+                    and entry["args"][0].endswith(f"actions/runs?head_sha={fixture.prepared}")
+                )
+                entry["value"][0]["workflow_url"] = "https://example.invalid/foreign"
+            with self.subTest(defect=defect), self.assertRaises((ValueError, core.ControlError)):
+                replay(changed)
 
 
 if __name__ == "__main__":

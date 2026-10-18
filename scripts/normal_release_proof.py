@@ -14,9 +14,12 @@ import importlib
 import importlib.util
 import json
 import re
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
+import normal_release_archive as archive
 import security_main_promotion as git_contract
 
 CONTROL_SOURCE = "bb1a5df9f54c5f98547048297e7e367cc382543e"
@@ -390,7 +393,17 @@ def publish(root, api, core, repository, repository_id, release, base, head):
     return _publish(root, api, core, repository, repository_id, release, base, head, release)
 
 
-def published_baseline(root, api, core, repository, repository_id, current_main):
+def publish_snapshot(root, api, core, repository, repository_id, release, base, head, output):
+    """Persist native observations only after the complete live verifier succeeds."""
+    expected = archive.binding(repository, repository_id, release, base, head, CONTROL_SOURCE)
+    recorder = archive.Record(api, expected)
+    with archive.artifact_reader(core, recorder):
+        result = publish(root, recorder, core, repository, repository_id, release, base, head)
+    output.write_bytes(recorder.finish(result))
+    return result
+
+
+def published_baseline(root, api, core, repository, repository_id, current_main, *, export_directory=None):
     """Authenticate inherited schema3 state against an already-published ancestor.
 
     Only this existing annotated-tag/release boundary can enter historical proof;
@@ -441,7 +454,28 @@ def published_baseline(root, api, core, repository, repository_id, current_main)
         )
     parents = text(root, "show", "-s", "--format=%P", release).split()
     require(len(parents) == 2, "exact-promotion-merge-parents-required")
-    result = _publish(root, api, core, repository, repository_id, release, parents[0], parents[1], current_main)
+    # Current Main remains a live observation; historical Actions are never
+    # queried here. The signed snapshot preserves their original observations.
+    require(
+        api.call(f"repos/{repository}/git/ref/heads/main")["object"]["sha"] == current_main,
+        "protected-main-tip-drift",
+    )
+    expected = archive.binding(repository, repository_id, release, parents[0], parents[1], CONTROL_SOURCE)
+    with tempfile.TemporaryDirectory(prefix="normal-release-baseline-") as temporary:
+        directory = Path(temporary)
+        archive.download_pair(published, repository, directory)
+        value = archive.verify_files(
+            directory / archive.SNAPSHOT, directory / archive.BUNDLE, repository, repository_id, release
+        )
+        replay = archive.Replay(value, expected, current_main)
+        with archive.artifact_reader(core, replay):
+            result = _publish(
+                root, replay, core, repository, repository_id, release, parents[0], parents[1], current_main
+            )
+        replay.finish(result)
+        if export_directory is not None:
+            for name in (archive.SNAPSHOT, archive.BUNDLE):
+                shutil.copyfile(directory / name, export_directory / name)
     require(
         api.call(f"repos/{repository}/git/ref/tags/{tag}") == ref
         and api.call(f"repos/{repository}/git/tags/{ref['object']['sha']}") == tag_object,
@@ -452,6 +486,30 @@ def published_baseline(root, api, core, repository, repository_id, current_main)
         api.call(f"repos/{repository}/git/ref/heads/main")["object"]["sha"] == current_main, "protected-main-tip-drift"
     )
     return result
+
+
+def publication_archive(root, api, core, repository, repository_id, release, base, head, directory):
+    """Create one new evidence snapshot, or retain the complete published pair."""
+    require(text(root, "rev-parse", "HEAD") == release, "exact-release-checkout-required")
+    require(
+        text(root, "show", "-s", "--format=%P", release).split() == [base, head],
+        "exact-promotion-merge-parents-required",
+    )
+    directory.mkdir(parents=True, exist_ok=False)
+    tag = "v" + document(root, release)["next_version"]
+    releases = api.pages(f"repos/{repository}/releases")
+    matches = [item for item in releases if item.get("tag_name") == tag]
+    require(len(matches) <= 1, "published-baseline-release-ambiguous")
+    if matches:
+        # No repair or replacement of a partial/foreign existing pair. Its
+        # original signature is retained byte for byte, even after Actions expire.
+        result = published_baseline(root, api, core, repository, repository_id, release, export_directory=directory)
+        require(result["main_merge"] == release, "publication-existing-release-drift")
+        return result | {"archive_reused": True}
+    result = publish_snapshot(
+        root, api, core, repository, repository_id, release, base, head, directory / archive.SNAPSHOT
+    )
+    return result | {"archive_reused": False}
 
 
 def main():
@@ -467,6 +525,7 @@ def main():
     parser.add_argument("--repository", required=True)
     parser.add_argument("--repository-id", required=True)
     parser.add_argument("--control-root", type=Path)
+    parser.add_argument("--archive-directory", type=Path)
     args = parser.parse_args()
     try:
         if args.operation == "preparation":
@@ -492,6 +551,18 @@ def main():
             elif args.operation == "promotion":
                 result = promotion_ready(
                     args.root, core.API(), core, args.repository, args.repository_id, args.base, args.head
+                )
+            elif args.archive_directory is not None:
+                result = publication_archive(
+                    args.root,
+                    core.API(),
+                    core,
+                    args.repository,
+                    args.repository_id,
+                    args.release,
+                    args.base,
+                    args.head,
+                    args.archive_directory,
                 )
             else:
                 result = publish(
