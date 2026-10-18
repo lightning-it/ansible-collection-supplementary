@@ -157,12 +157,12 @@ jobs:
           [[ "$content_sha" =~ ^[0-9a-f]{40}$ ]]
           git fetch --no-tags origin "$content_sha"
           echo "content_sha=$content_sha" >>"$GITHUB_OUTPUT"
-      - name: Checkout exact protected Develop content as data
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-        with:
-          ref: ${{ steps.tips.outputs.content_sha }}
-          path: release-readiness-content
-          persist-credentials: false
+      - name: Export only exact protected Develop YAML data
+        env:
+          CONTENT_SHA: ${{ steps.tips.outputs.content_sha }}
+        run: >-
+          python3 scripts/release_readiness_data.py
+          --revision "$CONTENT_SHA" --destination release-readiness-content
       - name: Setup Python for trusted Main preflight
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
         with:
