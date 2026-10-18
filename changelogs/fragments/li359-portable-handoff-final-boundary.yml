@@ -1,0 +1,6 @@
+---
+bugfixes:
+  - Remove raw attestation download scratch files before sealing staged releases
+    while preserving verified portable bundles.
+  - Observe the final ModuLix polling boundary without exceeding the window budget
+    or weakening run and attempt binding.

@@ -541,7 +541,7 @@ def poll_window(
     if bound_run is not None and require_initial_attempt_one:
         raise ReceiptError("a newly dispatched ModuLix run cannot have a prior binding")
     deadline = monotonic() + timeout_seconds
-    while monotonic() < deadline:
+    while True:
         matches = [run for run in client.workflow_runs() if matching_run(run, request_id, controller_sha)]
         if len(matches) > 1:
             raise ReceiptError("multiple ModuLix runs match the exact validation request")
@@ -566,8 +566,10 @@ def poll_window(
                 return run, bound_run
             if status not in {"queued", "in_progress", "pending", "requested", "waiting"}:
                 raise ReceiptError("exact ModuLix validation run has an unknown status")
-        sleep(DEFAULT_POLL_SECONDS)
-    return None, bound_run
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            return None, bound_run
+        sleep(min(DEFAULT_POLL_SECONDS, remaining))
 
 
 def wait_for_run(

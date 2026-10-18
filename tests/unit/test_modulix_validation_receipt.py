@@ -380,15 +380,19 @@ class ModuLixValidationReceiptTests(unittest.TestCase):
         client = FakeController(request, request_id, queued)
         snapshots = iter([[queued], [queued], [success]])
         client.workflow_runs = lambda: next(snapshots)
-        ticks = iter([0, 0, 1, 2, 0, 0])
+        clock = [0.0]
+
+        def sleep(seconds):
+            clock[0] += seconds
+
         run, bound = MODULE.poll_window(
             client,
             request_id,
             CONTROLLER_SHA,
             2,
             require_initial_attempt_one=True,
-            monotonic=lambda: next(ticks),
-            sleep=lambda _: None,
+            monotonic=lambda: clock[0],
+            sleep=sleep,
         )
         self.assertIsNone(run)
         self.assertEqual((998877, 1), bound)
@@ -398,12 +402,87 @@ class ModuLixValidationReceiptTests(unittest.TestCase):
             CONTROLLER_SHA,
             2,
             bound_run=bound,
-            monotonic=lambda: next(ticks),
-            sleep=lambda _: None,
+            monotonic=lambda: clock[0],
+            sleep=sleep,
         )
         self.assertEqual(success, run)
         self.assertEqual(bound, carried)
         self.assertEqual(0, client.dispatches)
+
+    def test_final_poll_observes_last_interval_and_rejects_changed_identity(self) -> None:
+        request, request_id = request_payload()
+        queued = run_payload(request_id, status="in_progress", conclusion=None)
+        success = run_payload(request_id)
+
+        def run_case(replacement):
+            clock = [0.0]
+            observations = []
+            sleeps = []
+            client = FakeController(request, request_id, queued)
+
+            def observe():
+                observations.append(clock[0])
+                return [replacement if clock[0] >= 2699 else queued]
+
+            def sleep(seconds):
+                sleeps.append(seconds)
+                clock[0] += seconds
+
+            client.workflow_runs = observe
+
+            def poll():
+                return MODULE.poll_window(
+                    client,
+                    request_id,
+                    CONTROLLER_SHA,
+                    2700,
+                    bound_run=(998877, 1),
+                    monotonic=lambda: clock[0],
+                    sleep=sleep,
+                )
+
+            if replacement == success:
+                self.assertEqual((success, (998877, 1)), poll())
+            else:
+                with self.assertRaisesRegex(MODULE.ReceiptError, "identity changed"):
+                    poll()
+            self.assertEqual(2700, observations[-1])
+            self.assertEqual(2700, sum(sleeps))
+            self.assertEqual(0, client.dispatches)
+
+        for replacement in (success, {**success, "id": 998878}, {**success, "run_attempt": 2}):
+            with self.subTest(replacement=replacement):
+                run_case(replacement)
+
+    def test_pending_window_sleeps_only_until_its_exact_boundary(self) -> None:
+        request, request_id = request_payload()
+        queued = run_payload(request_id, status="in_progress", conclusion=None)
+        client = FakeController(request, request_id, queued)
+        clock = [0.0]
+        observations = []
+        sleeps = []
+
+        def observe():
+            observations.append(clock[0])
+            return [queued]
+
+        def sleep(seconds):
+            sleeps.append(seconds)
+            clock[0] += seconds
+
+        client.workflow_runs = observe
+        result = MODULE.poll_window(
+            client,
+            request_id,
+            CONTROLLER_SHA,
+            25,
+            bound_run=(998877, 1),
+            monotonic=lambda: clock[0],
+            sleep=sleep,
+        )
+        self.assertEqual((None, (998877, 1)), result)
+        self.assertEqual([0, 10, 20, 25], observations)
+        self.assertEqual([10, 10, 5], sleeps)
 
     def test_workflow_checkpoint_precedes_installation_token_expiry(self) -> None:
         request, request_id = request_payload()

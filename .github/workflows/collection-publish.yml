@@ -1256,6 +1256,8 @@ jobs:
           SECURITY_EVIDENCE_ID: ${{ needs.security-classification.outputs.security-evidence-id }}
         run: |
           set -euo pipefail
+          # Retain the verified portable copies, not gh's colon-named scratch files.
+          rm -rf -- dist/attestation-download
           binding="$RUNNER_TEMP/release-stage-binding.json"
           jq -S -c -n \
             --arg candidateName "$CANDIDATE_NAME" \

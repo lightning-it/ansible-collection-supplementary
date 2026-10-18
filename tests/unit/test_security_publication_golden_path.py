@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import subprocess
@@ -339,6 +341,81 @@ clock.write_text(str(int(clock.read_text()) + int(sys.argv[1])))
         self.assertIn("incoming/", artifact["with"]["path"])
         self.assertEqual("error", artifact["with"]["if-no-files-found"])
         self.assertEqual("${{ steps.release-handoff.outputs.sha256 }}", self.publish["outputs"]["handoff-sha256"])
+
+    def test_staged_handoff_preserves_portable_attestations_without_download_scratch(self) -> None:
+        candidate = "lit-supplementary-3.2.4.tar.gz"
+        portable = f"{candidate}.attestation.jsonl"
+        raw = f"dist/attestation-download/{candidate}/sha256:{'c' * 64}.jsonl"
+        files = {
+            f"incoming/candidate/{candidate}": b"exact candidate",
+            f"dist/release/{candidate}": b"exact candidate",
+            f"dist/attestation-bundles/{portable}": b"verified attestation\n",
+            f"dist/release/{portable}": b"verified attestation\n",
+            "dist/validation/nexus-stage.json": b'{"staged":true}\n',
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name, payload in {**files, raw: b"verified attestation\n"}.items():
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(payload)
+            (root / "scripts").mkdir()
+            (root / "scripts/release-stage-handoff.py").write_bytes(
+                (ROOT / "scripts/release-stage-handoff.py").read_bytes()
+            )
+            environment = {
+                **os.environ,
+                "CANDIDATE_NAME": candidate,
+                "CI_RUN_ATTEMPT": "1",
+                "CI_RUN_ID": "456",
+                "GITHUB_RUN_ATTEMPT": "2",
+                "GITHUB_RUN_ID": "123",
+                "RELEASE_SHA": "a" * 40,
+                "RELEASE_VERSION": "3.2.4",
+                "SECURITY_EVIDENCE_ID": "MLX90-GHSA-VJJF-WC74-GP86-3.2.4",
+                "RUNNER_TEMP": str(root),
+                "GITHUB_OUTPUT": str(root / "output"),
+            }
+            result = subprocess.run(  # noqa: S603 -- fixed checked-in workflow on disposable fixture files.
+                ["/bin/bash", "-c", self.steps["Create exact staged-release handoff"]["run"]],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            manifest_path = root / "release-stage-handoff.json"
+            manifest = json.loads(manifest_path.read_bytes())
+            rows = {row["path"]: row for row in manifest["files"]}
+            self.assertEqual(set(files), set(rows))
+            self.assertFalse((root / "dist/attestation-download").exists())
+            for name, payload in files.items():
+                self.assertNotRegex(name, r'[":<>|*?\\]')
+                self.assertEqual(payload, (root / name).read_bytes())
+                self.assertEqual(hashlib.sha256(payload).hexdigest(), rows[name]["sha256"])
+            restored = subprocess.run(  # noqa: S603 -- fixed checked-in verifier on the generated fixture handoff.
+                [
+                    sys.executable,
+                    "scripts/release-stage-handoff.py",
+                    "verify",
+                    "--root",
+                    ".",
+                    "--binding",
+                    "release-stage-binding.json",
+                    "--manifest",
+                    "release-stage-handoff.json",
+                    "--expected-sha256",
+                    hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+                ],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+            self.assertEqual(0, restored.returncode, restored.stderr)
 
     def test_reusable_modulix_window_rechecks_handoff_and_never_dispatches(self) -> None:
         workflow = yaml.safe_load(MODULIX_WINDOW_PATH.read_text(encoding="utf-8"))
