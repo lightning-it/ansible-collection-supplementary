@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -226,6 +228,147 @@ class PromotionReleaseStateGuardTests(unittest.TestCase):
         future = {path.replace("4.0.0", "4.0.1"): content for path, content in SECURITY_FILES.items()}
         result = self.run_case(future, historical)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+
+class NormalPreparationPromotionShellTests(unittest.TestCase):
+    """Actual promoter guard + real Git; native proof seam tested by its direct suite."""
+
+    def setUp(self):
+        # Discovery from tests/ and from tests/unit/ gives different package
+        # names. Load this fixed fixture file explicitly in both entry points.
+        spec = importlib.util.spec_from_file_location(
+            "normal_promotion_fixture", Path(__file__).with_name("test_normal_release_proof.py")
+        )
+        assert spec is not None and spec.loader is not None
+        normal = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(normal)
+
+        self.fixture = normal.NormalReleaseProofTests()
+        self.fixture.extra_baseline = {
+            "CHANGELOG.rst": "initial generated changelog\n",
+            "changelogs/changelog.yaml": "initial: []\n",
+            "changelogs/.plugin-cache.yaml": "initial: []\n",
+            "changelogs/release-preparation.json": json.dumps({**RECEIPT, "next_version": "1.0.0"}),
+            "scripts/normal_release_proof.py": (ROOT / "scripts/normal_release_proof.py").read_text(),
+        }
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        outer = tempfile.TemporaryDirectory()
+        self.addCleanup(outer.cleanup)
+        self.outer = Path(outer.name)
+        self.fixture.root.rename(self.outer / "repository")
+        self.fixture.root = self.outer / "repository"
+        (self.outer / "tmp").mkdir()
+        (self.outer / "bin").mkdir()
+        shim = self.outer / "bin/python3"
+        shim.write_text(
+            "#!" + sys.executable + "\n"
+            "import json,os,pathlib,sys\n"
+            "a=sys.argv[1:]; operation=a[1]; args=dict(zip(a[2::2],a[3::2]))\n"
+            "assert pathlib.Path(a[0]).is_file()\n"
+            "assert args['--repository']=='lightning-it/ansible-collection-supplementary'\n"
+            "assert args['--repository-id']=='1103407173'\n"
+            "assert args['--control-root']==os.environ['GITHUB_WORKSPACE']+'/.native-normal-control'\n"
+            "with open(os.environ['PROOF_CALLS'],'a') as f:f.write(operation+chr(10))\n"
+            "if os.environ.get('DENY_NATIVE')=='true':sys.exit(23)\n"
+            "if operation=='promotion':\n"
+            " assert args['--base']==os.environ['expected_base'] and args['--head']==os.environ['expected_head']\n"
+            " print(json.dumps({'next_version':'1.0.1','develop_merge':args['--head']}))\n"
+            "else:\n"
+            " assert operation=='baseline' and args['--base']==os.environ['expected_base']\n"
+            " print('{}')\n"
+        )
+        shim.chmod(0o700)
+        self.guard = (
+            yaml.safe_load(WORKFLOW.read_text())["jobs"]["promote"]["steps"][-1]["run"]
+            .split("# LI-139 release-state guard:start\n", 1)[1]
+            .split("# LI-139 release-state guard:end", 1)[0]
+        )
+
+    def run_guard(self, *, baseline=False, deny=False, original=False):
+        policy = self.outer / "tmp/normal-promotion-policy"
+        if policy.exists():
+            self.fixture.git("worktree", "remove", "--force", str(policy))
+        if baseline:
+            self.fixture.git("checkout", "--quiet", "--detach", self.fixture.release)
+            self.base, develop = self.fixture.ordinary_main(self.fixture.release, self.fixture.develop, 1)
+            if baseline == 2:
+                self.base, develop = self.fixture.ordinary_main(self.base, develop, 2)
+            self.head = self.fixture.commit("ordinary work after normal publication", [self.base])
+        else:
+            self.base = self.fixture.main_base
+            self.head = self.fixture.develop
+        guard = self.guard
+        if original:
+            env = {k: v for k, v in os.environ.items() if k not in {"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"}}
+            document = subprocess.check_output(  # noqa: S603 -- fixed immutable historical workflow blob.
+                [
+                    "/usr/bin/git",
+                    "-c",
+                    f"safe.directory={ROOT}",
+                    "show",
+                    "8e7490994ad15703c6195617a3044464d52628d9:.github/workflows/promote-develop-to-main.yml",
+                ],
+                cwd=ROOT,
+                env=env,
+            ).decode()
+            guard = (
+                yaml.safe_load(document)["jobs"]["promote"]["steps"][-1]["run"]
+                .split("# LI-139 release-state guard:start\n", 1)[1]
+                .split("# LI-139 release-state guard:end", 1)[0]
+            )
+        environment = {
+            "PATH": str(self.outer / "bin") + os.pathsep + os.environ["PATH"],
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "expected_base": self.base,
+            "expected_head": self.head,
+            "REPOSITORY": "lightning-it/ansible-collection-supplementary",
+            "REPOSITORY_ID": "1103407173",
+            "RUNNER_TEMP": str(self.outer / "tmp"),
+            "GITHUB_WORKSPACE": str(self.outer),
+            "PROOF_CALLS": str(self.outer / "calls"),
+            "NATIVE_READ_TOKEN": "fixture-native-read",
+            "DENY_NATIVE": "true" if deny else "false",
+        }
+        return subprocess.run(  # noqa: S603 -- actual trusted repository guard; no provider effects.
+            ["/bin/bash", "-euo", "pipefail", "-c", guard],
+            cwd=self.outer,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=20,
+        )
+
+    def test_actual_old_guard_rejects_both_new_release_states(self):
+        for baseline in (False, True):
+            with self.subTest(baseline=baseline):
+                self.assertNotEqual(self.run_guard(baseline=baseline, original=True).returncode, 0)
+
+    def test_actual_guard_uses_native_preparation_proof_for_new_generated_state(self):
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual((self.outer / "calls").read_text(), "promotion\n")
+
+    def test_actual_guard_closes_without_native_preparation_proof(self):
+        self.assertNotEqual(self.run_guard(deny=True).returncode, 0)
+
+    def test_actual_guard_authenticates_schema3_main_baseline(self):
+        result = self.run_guard(baseline=2)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual((self.outer / "calls").read_text(), "baseline\n")
+
+    def test_actual_guard_closes_without_schema3_main_baseline_proof(self):
+        self.assertNotEqual(self.run_guard(baseline=True, deny=True).returncode, 0)
+
+    def test_actual_workflow_binds_adopted_source_without_widening_app_permissions(self):
+        steps = yaml.safe_load(WORKFLOW.read_text())["jobs"]["promote"]["steps"]
+        checkout = next(s for s in steps if s.get("name") == "Checkout adopted native normal proof source")
+        self.assertEqual(checkout["with"]["ref"], "bb1a5df9f54c5f98547048297e7e367cc382543e")
+        app = next(s for s in steps if s.get("id") == "release-app")
+        self.assertEqual(app["with"]["permission-contents"], "read")
+        self.assertNotIn("permission-actions", app["with"])
 
 
 if __name__ == "__main__":

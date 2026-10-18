@@ -201,10 +201,104 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_REF: ${{ github.ref_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
 
           head_ref="$(bash scripts/resolve-changelog-head-ref.sh HEAD)"
+          if [ "$TARGET_REF" = develop ] && {
+              [[ "$head_ref" == release/v* ]] || {
+                [ -n "$PUSH_BEFORE" ] &&
+                git diff --name-only "$PUSH_BEFORE" "$SOURCE_SHA" -- changelogs/release-preparation.json |
+                  grep -Fxq changelogs/release-preparation.json &&
+                git show "${SOURCE_SHA}:changelogs/release-preparation.json" |
+                  jq -e '.schema_version == 3 and .release_mode == "normal"' >/dev/null
+              }
+            }; then
+            test "$GITHUB_REPOSITORY" = lightning-it/ansible-collection-supplementary
+            test "$GITHUB_REPOSITORY_ID" = 1103407173
+            read -r -a preparation_merge <<<"$(git rev-list --parents -n 1 "$SOURCE_SHA")"
+            test "${#preparation_merge[@]}" -eq 3
+            test "${preparation_merge[1]}" = "$PUSH_BEFORE"
+            test "$(git rev-parse 'refs/remotes/origin/develop^{commit}')" = "$SOURCE_SHA"
+            test "$(git rev-parse "${SOURCE_SHA}^{tree}")" = \
+              "$(git rev-parse "${preparation_merge[2]}^{tree}")"
+            preparation_prs="$(
+              gh api -H 'Accept: application/vnd.github+json' --paginate --slurp \
+                "repos/${GITHUB_REPOSITORY}/commits/${SOURCE_SHA}/pulls"
+            )"
+            matching_preparations="$(
+              jq --arg merge "$SOURCE_SHA" '[.[][] | select(
+                .merged_at != null and .merge_commit_sha == $merge and .base.ref == "develop"
+              )]' <<<"$preparation_prs"
+            )"
+            test "$(jq length <<<"$matching_preparations")" -eq 1
+            preparation_number="$(jq -er '.[0].number | select(type == "number" and . > 0 and floor == .)' \
+              <<<"$matching_preparations")"
+            preparation_pull="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${preparation_number}")"
+            preparation_head_ref="$(jq -er '.head.ref' <<<"$preparation_pull")"
+            jq -e --arg merge "$SOURCE_SHA" --arg base "$PUSH_BEFORE" \
+              --arg head "${preparation_merge[2]}" --arg ref "$preparation_head_ref" --arg repo "$GITHUB_REPOSITORY" \
+              --argjson number "$preparation_number" '
+                .number == $number and .merged == true and .state == "closed" and .draft == false
+                and .merged_at != null and .merge_commit_sha == $merge
+                and .base.ref == "develop" and .base.sha == $base and .base.repo.full_name == $repo
+                and .head.ref == $ref and .head.sha == $head and .head.repo.full_name == $repo
+                and .user.login == "lightning-it-release-automation[bot]"
+                and .user.id == 307565056 and .user.type == "Bot"
+              ' <<<"$preparation_pull" >/dev/null
+            python3 scripts/normal_release_proof.py preparation --root . \
+              --base "$PUSH_BEFORE" --head "${preparation_merge[2]}" \
+              --workflow-source "$(git rev-parse 'refs/remotes/origin/main^{commit}')" \
+              --repository "$GITHUB_REPOSITORY" --repository-id "$GITHUB_REPOSITORY_ID" \
+              --head-ref "$preparation_head_ref" --check-worktree >/dev/null
+            {
+              echo "author=lightning-it-release-automation[bot]"
+              echo "head_repository=$GITHUB_REPOSITORY"
+              echo "import_head_ref=$preparation_head_ref"
+            } >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # An ordinary human import remains an ordinary reviewed PR. Bind its
+          # real merge before passing any import facts to the read-only guard.
+          if [ "$TARGET_REF" = develop ] && [[ "$head_ref" != backsync/release-* ]] && \
+              [ -n "$PUSH_BEFORE" ] && git diff --name-only "$PUSH_BEFORE" "$SOURCE_SHA" -- \
+              CHANGELOG.rst changelogs/changelog.yaml changelogs/.plugin-cache.yaml | grep -q .; then
+            test "$GITHUB_REPOSITORY" = lightning-it/ansible-collection-supplementary
+            read -r -a import_merge <<<"$(git rev-list --parents -n 1 "$SOURCE_SHA")"
+            test "${#import_merge[@]}" -eq 3
+            test "${import_merge[1]}" = "$PUSH_BEFORE"
+            test "$(git rev-parse 'refs/remotes/origin/develop^{commit}')" = "$SOURCE_SHA"
+            test "$(git rev-parse "${SOURCE_SHA}^{tree}")" = \
+              "$(git rev-parse "${import_merge[2]}^{tree}")"
+            import_prs="$(
+              gh api -H 'Accept: application/vnd.github+json' --paginate --slurp \
+                "repos/${GITHUB_REPOSITORY}/commits/${SOURCE_SHA}/pulls"
+            )"
+            matching_imports="$(
+              jq --arg merge "$SOURCE_SHA" --arg base "$PUSH_BEFORE" \
+                --arg head "${import_merge[2]}" --arg repo "$GITHUB_REPOSITORY" '[
+                  .[][] | select(
+                    .merged_at != null and .merge_commit_sha == $merge
+                    and .base.ref == "develop" and .base.sha == $base
+                    and .base.repo.full_name == $repo
+                    and .head.sha == $head and .head.repo.full_name == $repo
+                    and .user.login == "litroc"
+                    and .user.id == 76040632 and .user.type == "User"
+                    and (.head.ref | test("^reconcile/release-v(0|[1-9][0-9]*)\\."
+                      + "(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)-to-develop$"))
+                  )
+                ]' <<<"$import_prs"
+            )"
+            test "$(jq length <<<"$matching_imports")" -eq 1
+            import_head_ref="$(jq -r '.[0].head.ref' <<<"$matching_imports")"
+            {
+              echo "author=litroc"
+              echo "head_repository=$GITHUB_REPOSITORY"
+              echo "import_head_ref=$import_head_ref"
+            } >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
           case "$head_ref" in
             release/v*) expected_target=main ;;
             backsync/release-*-to-develop) expected_target=develop ;;
@@ -262,8 +356,17 @@ jobs:
             ${{ github.event_name == 'push' && github.ref_name ||
             github.event.pull_request.base.ref || '' }}
           GITHUB_PR_AUTHOR: >-
-            ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login ||
+            ${{ github.event_name == 'pull_request' &&
+            (github.event.pull_request.user.login != 'litroc' ||
+             (github.event.pull_request.user.id == 76040632 && github.event.pull_request.user.type == 'User')) &&
+            (github.event.pull_request.user.login != 'lightning-it-release-automation[bot]' ||
+             (github.event.pull_request.user.id == 307565056 && github.event.pull_request.user.type == 'Bot' &&
+              github.repository_id == '1103407173')) &&
+            github.event.pull_request.user.login ||
             steps.release-push.outputs.author || '' }}
+          GITHUB_HEAD_REF: >-
+            ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref ||
+            steps.release-push.outputs.import_head_ref || '' }}
           LABELS_JSON: >-
             ${{ github.event_name == 'pull_request' &&
             toJson(github.event.pull_request.labels.*.name) || '[]' }}
@@ -329,6 +432,7 @@ jobs:
     name: Generate registry quality matrices
     needs: role-coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       tiny: ${{ steps.matrix.outputs.tiny }}
       heavy: ${{ steps.matrix.outputs.heavy }}
@@ -615,6 +719,7 @@ jobs:
     if: always()
     needs: [quality-matrix, tiny-cells, security-classification]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Require every Tiny matrix cell
         env:
@@ -665,6 +770,7 @@ jobs:
     if: always()
     needs: [lint-sanity, build-install, role-coverage, quality-matrix, tiny]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Require every Fast-Lane prerequisite
         env:
@@ -718,6 +824,7 @@ jobs:
       github.ref == 'refs/heads/main'
     needs: [quality-matrix, heavy-cells]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Require every Heavy matrix cell
         env:
@@ -761,6 +868,7 @@ jobs:
       github.ref == 'refs/heads/main'
     needs: [quality-matrix, acceptance-cells]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Require every Application Acceptance matrix cell
         env:
@@ -2153,6 +2261,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: lint-sanity
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.lint-sanity.result }}
@@ -2163,6 +2272,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: build-install
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.build-install.result }}
@@ -2173,6 +2283,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: [tiny, heavy, acceptance]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           TINY_RESULT: ${{ needs.tiny.result }}
@@ -2188,6 +2299,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: lint-sanity
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.lint-sanity.result }}
@@ -2198,6 +2310,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: tiny
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.tiny.result }}
@@ -2208,6 +2321,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: heavy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.heavy.result }}
@@ -2218,6 +2332,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: acceptance
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.acceptance.result }}
@@ -2228,6 +2343,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: evidence
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.evidence.result }}
@@ -2238,6 +2354,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_call' }}
     needs: release-validation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           RESULT: ${{ needs.release-validation.result }}

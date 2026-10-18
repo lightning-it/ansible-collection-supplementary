@@ -201,7 +201,7 @@ class ReleaseVersionTests(unittest.TestCase):
             hashlib.sha256(fragment.read_bytes()).hexdigest(),
             receipt["fragments"][0]["sha256"],
         )
-        self.assertEqual(2, receipt["schema_version"])
+        self.assertEqual(3, receipt["schema_version"])
         self.assertEqual("normal", receipt["release_mode"])
         self.assertIsNone(receipt["chain_id"])
         self.assertIsNone(receipt["security"])
@@ -230,6 +230,55 @@ class ReleaseVersionTests(unittest.TestCase):
                         expected_version="1.41.0",
                         root=Path(self.temporary.name),
                     )
+
+    def test_normal_receipt_separates_main_tooling_and_develop_content(self) -> None:
+        galaxy, fragments = self._fixture("bugfixes")
+        resolution = VERSION.resolve_version(galaxy, fragments)
+        receipt = VERSION.build_preparation_receipt(
+            resolution,
+            repository="lightning-it/ansible-collection-supplementary",
+            repository_id="123456",
+            base_sha="d" * 40,
+            workflow_source_sha="a" * 40,
+            workflow_run_id="10",
+            workflow_attempt="1",
+            workflow_ref="lightning-it/ansible-collection-supplementary/.github/workflows/release-prepare.yml@refs/heads/main",
+            workflow_event="workflow_dispatch",
+            workflow_actor="litroc",
+            root=Path(self.temporary.name),
+            create_github_release=False,
+        )
+        self.assertEqual({"ref": "refs/heads/develop", "sha": "d" * 40}, receipt["content_base"])
+        self.assertEqual("a" * 40, receipt["workflow"]["source_sha"])
+        self.assertEqual({"github_release": False, "galaxy": True}, receipt["publication"])
+        legacy = json.loads(json.dumps(receipt))
+        legacy["schema_version"] = 2
+        legacy.pop("content_base")
+        legacy.pop("publication")
+        legacy["workflow"]["source_sha"] = legacy["base_sha"]
+        VERSION.verify_preparation_receipt(
+            legacy,
+            expected_repository=legacy["repository"],
+            expected_repository_id=legacy["repository_id"],
+            expected_base_sha=legacy["base_sha"],
+            expected_version=legacy["next_version"],
+            root=Path(self.temporary.name),
+        )
+        for field, bad in (
+            ("content_base", {"ref": "refs/heads/main", "sha": "d" * 40}),
+            ("publication", {"github_release": "false", "galaxy": True}),
+        ):
+            changed = json.loads(json.dumps(receipt))
+            changed[field] = bad
+            with self.assertRaises(VERSION.VersionError):
+                VERSION.verify_preparation_receipt(
+                    changed,
+                    expected_repository=receipt["repository"],
+                    expected_repository_id=receipt["repository_id"],
+                    expected_base_sha=receipt["base_sha"],
+                    expected_version=receipt["next_version"],
+                    root=Path(self.temporary.name),
+                )
 
     def test_security_preparation_receipt_binds_exact_v2_intake(self) -> None:
         root = Path(self.temporary.name)
@@ -260,6 +309,7 @@ class ReleaseVersionTests(unittest.TestCase):
             root=root,
             checked_at=checked_at,
         )
+        self.assertEqual(2, receipt["schema_version"])
         self.assertEqual("security", receipt["release_mode"])
         self.assertRegex(str(receipt["chain_id"]), r"^sha256:[0-9a-f]{64}$")
         self.assertEqual(0, receipt["security"]["human_actions"])

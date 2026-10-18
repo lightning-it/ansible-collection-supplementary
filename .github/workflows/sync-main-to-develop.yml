@@ -116,6 +116,7 @@ jobs:
           EXPECTED_PR_AUTHOR: ${{ steps.ancestry-bot.outputs.pr_author }}
           GH_TOKEN: ${{ steps.release-app.outputs.token || steps.workflow-source-app.outputs.token }}
           REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
         run: |
           set -euo pipefail
           token_header="$(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 -w0)"
@@ -145,6 +146,55 @@ jobs:
             echo 'develop already contains the current main ancestry.'
             exit 0
           fi
+
+          # LI-344 normal ancestry owner:start
+          # A fresh normal release has one canonical writer: the existing
+          # published-release back-sync. This only withdraws this writer; the
+          # latter still independently proves publication and both native PRs.
+          if [ "$REPOSITORY" = lightning-it/ansible-collection-supplementary ]; then
+            test "$REPOSITORY_ID" = 1103407173
+            test "$GITHUB_REF" = refs/heads/main
+            test "$GITHUB_SHA" = "$main_sha"
+            if git cat-file -e "${main_sha}:changelogs/release-preparation.json" 2>/dev/null; then
+              normal_receipt="$(git show "${main_sha}:changelogs/release-preparation.json")"
+              if jq -e '.schema_version == 3 and .release_mode == "normal"' <<<"$normal_receipt" >/dev/null; then
+                mapfile -t normal_parents < <(git show -s --format=%P "$main_sha" | tr ' ' '\n')
+                test "${#normal_parents[@]}" -gt 0
+                normal_version="$(git show "${main_sha}:galaxy.yml" | sed -n 's/^version: //p')"
+                parent_version="$(git show "${normal_parents[0]}:galaxy.yml" | sed -n 's/^version: //p')"
+                # GitHub publication is mandatory in the protected publisher
+                # policy, regardless of the receipt's advisory input.
+                if [ "$normal_version" != "$parent_version" ]; then
+                  [[ "$normal_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+                  jq -e --arg version "$normal_version" '.next_version == $version' <<<"$normal_receipt" >/dev/null
+                  test "${#normal_parents[@]}" -eq 2
+                  test "$(git rev-parse "${main_sha}^{tree}")" = \
+                    "$(git rev-parse "${normal_parents[1]}^{tree}")"
+                  normal_pulls="$(gh api --paginate --slurp \
+                    "repos/${REPOSITORY}/commits/${main_sha}/pulls?per_page=100")"
+                  normal_pr="$(jq -er --arg merge "$main_sha" '
+                    [ .[][] | select(.merged_at != null and .merge_commit_sha == $merge and .base.ref == "main") ]
+                    | if length == 1 then .[0].number else error("unique normal promotion required") end
+                  ' <<<"$normal_pulls")"
+                  normal_pull="$(gh api "repos/${REPOSITORY}/pulls/${normal_pr}")"
+                  jq -e --arg repository "$REPOSITORY" --arg merge "$main_sha" \
+                    --arg base "${normal_parents[0]}" --arg head "${normal_parents[1]}" '
+                    .merged == true and .merged_at != null and .state == "closed" and .draft == false
+                    and .merge_commit_sha == $merge
+                    and .user.login == "lightning-it-release-automation[bot]"
+                    and .user.id == 307565056 and .user.type == "Bot"
+                    and .base.ref == "main" and .base.sha == $base
+                    and .head.ref == "develop" and .head.sha == $head
+                    and .base.repo.full_name == $repository and .head.repo.full_name == $repository
+                    and .base.repo.id == 1103407173 and .head.repo.id == 1103407173
+                  ' <<<"$normal_pull" >/dev/null
+                  echo 'Published-release back-sync owns this exact normal promotion ancestry.'
+                  exit 0
+                fi
+              fi
+            fi
+          fi
+          # LI-344 normal ancestry owner:end
 
           git switch --create "${branch}" origin/develop
           # Bind the merge object to an existing Git timestamp so retries

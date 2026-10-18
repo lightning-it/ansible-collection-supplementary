@@ -4,7 +4,9 @@ Source: lightning-it/shared-assets-lit@b3c96a1e8164caaa7313d05998677a883f00e2e1
 Path: .github/workflows/promote-develop-to-main.yml
 The canonical mutation code is unchanged. Rendering retains the repo's
 protected-main relay and approval environment, plus its exact identity binding.
-A repository-local pre-mutation guard requires completed release-state back-sync.
+A repository-local pre-mutation guard authenticates release-state transitions.
+Its explicitly checked read-only normal proof adapter adds no mutation authority;
+normalization below retains the original reviewed donor mutation hash.
 """
 
 from __future__ import annotations
@@ -41,6 +43,50 @@ class ProtectedPromotionAdoptionTests(unittest.TestCase):
             "          # LI-139 release-state guard:end\n"
         )
         rendered = self.text[:guard_start] + self.text[guard_end:]
+        for kind, indentation in (("permissions", "    "), ("tools", "      "), ("bindings", "          ")):
+            start = f"{indentation}# LI-344 readonly normal proof {kind}:start\n"
+            end = f"{indentation}# LI-344 readonly normal proof {kind}:end\n"
+            self.assertEqual(rendered.count(start), 1)
+            self.assertEqual(rendered.count(end), 1)
+            first = rendered.index(start)
+            last = rendered.index(end, first) + len(end)
+            block = yaml.safe_load(rendered[first + len(start) : last - len(end)])
+            if kind == "permissions":
+                self.assertEqual(block, {"permissions": {"contents": "read", "actions": "read"}})
+            elif kind == "bindings":
+                self.assertEqual(
+                    block, {"REPOSITORY_ID": "${{ github.repository_id }}", "NATIVE_READ_TOKEN": "${{ github.token }}"}
+                )
+            else:
+                self.assertEqual(
+                    block,
+                    [
+                        {
+                            "name": "Checkout adopted native normal proof source",
+                            "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+                            "with": {
+                                "repository": "lightning-it/.github",
+                                "ref": "bb1a5df9f54c5f98547048297e7e367cc382543e",
+                                "path": ".native-normal-control",
+                                "fetch-depth": 0,
+                                "persist-credentials": False,
+                            },
+                        },
+                        {
+                            "name": "Set up normal receipt proof parser",
+                            "uses": "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
+                            "with": {"python-version": "3.14"},
+                        },
+                        {
+                            "name": "Install pinned normal receipt parser",
+                            "run": "python -m pip install --disable-pip-version-check --no-input PyYAML==6.0.3",
+                        },
+                    ],
+                )
+            if kind == "tools":
+                self.assertEqual(rendered[last], "\n")
+                last += 1
+            rendered = rendered[:first] + rendered[last:]
         relay_start = rendered.index("  dispatch:\n")
         relay_end = rendered.index("  promote:\n", relay_start)
         canonical = (
@@ -64,12 +110,22 @@ class ProtectedPromotionAdoptionTests(unittest.TestCase):
         )
         self.assertEqual(self.job["environment"], "ansible-collection-release-prepare")
         self.assertEqual(self.workflow["permissions"], {"contents": "read"})
-        mint = self.job["steps"][1]
+        mint = next(step for step in self.job["steps"] if step.get("id") == "release-app")
         self.assertEqual(mint["uses"], "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1")
         self.assertEqual(mint["with"]["repositories"], "${{ github.event.repository.name }}")
         self.assertEqual(mint["with"]["permission-contents"], "read")
         self.assertEqual(mint["with"]["permission-pull-requests"], "write")
         self.assertNotIn("permission-actions", mint["with"])
+        self.assertEqual(self.job["permissions"], {"contents": "read", "actions": "read"})
+        source = next(
+            step for step in self.job["steps"] if step.get("name") == "Checkout adopted native normal proof source"
+        )
+        self.assertEqual(source["with"]["repository"], "lightning-it/.github")
+        self.assertEqual(source["with"]["ref"], "bb1a5df9f54c5f98547048297e7e367cc382543e")
+        self.assertFalse(source["with"]["persist-credentials"])
+        bindings = self.job["steps"][-1]["env"]
+        self.assertEqual(bindings["NATIVE_READ_TOKEN"], "${{ github.token }}")
+        self.assertEqual(bindings["REPOSITORY_ID"], "${{ github.repository_id }}")
 
     def test_relay_can_only_start_the_existing_protected_main_workflow(self) -> None:
         relay = self.workflow["jobs"]["dispatch"]

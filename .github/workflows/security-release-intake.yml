@@ -154,6 +154,19 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Select protected Security funding route before App access
+        id: security-route
+        env:
+          REQUEST_JSON: ${{ inputs.request_json }}
+        run: |
+          set -euo pipefail
+          mode="$(python3 scripts/security_premerge_proof.py route --root . --source "$GITHUB_SHA")"
+          if jq -e '.event == "mlx90-security-release-recovery"' <<<"$REQUEST_JSON" >/dev/null; then
+            test "$mode" = legacy
+          fi
+          echo "mode=$mode" >>"$GITHUB_OUTPUT"
+          git worktree add --detach "$RUNNER_TEMP/security-premerge-controller" "$GITHUB_SHA"
+
       - name: Revalidate live request and run before App token access
         id: request
         env:
@@ -656,6 +669,7 @@ jobs:
           DIFF_SHA256: ${{ steps.final.outputs.candidate_diff_sha256 }}
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
           REQUEST_EVENT: ${{ steps.final.outputs.request_event }}
+          REVIEW_ROUTE: ${{ steps.security-route.outputs.mode }}
         run: |
           set -euo pipefail
 
@@ -686,9 +700,22 @@ jobs:
             echo
             echo 'Native auto-merge may complete only after all protected current-head gates pass.'
           } >"$body"
+          emit_premerge=false
+          draft_arguments=()
+          if [ "$REQUEST_EVENT" = mlx90-security-release ]; then
+            if [ -z "$pr_url" ] || [ "$(jq -r '.[0].draft' <<<"$pulls")" = true ]; then
+              emit_premerge=true
+              draft_arguments=(--draft)
+              python3 "$RUNNER_TEMP/security-premerge-controller/scripts/security_premerge_proof.py" \
+                locator --kind intake >>"$body"
+            else
+              # Never add a fresh Common locator to an already ready/paid head.
+              test "$REVIEW_ROUTE" = legacy
+            fi
+          fi
           if [ -z "$pr_url" ]; then
             pr_url="$(gh pr create --repo "$GITHUB_REPOSITORY" \
-              --base main --head "$BRANCH" \
+              --base main --head "$BRANCH" "${draft_arguments[@]}" \
               --title "fix(security): ${EVIDENCE_ID}" --body-file "$body")"
           fi
           number="$(gh pr view "$pr_url" --repo "$GITHUB_REPOSITORY" \
@@ -707,7 +734,8 @@ jobs:
             --arg branch "$BRANCH" \
             --arg head "$HEAD_SHA" \
             --arg live_base "$live_base_sha" \
-            --arg repo "$GITHUB_REPOSITORY" '
+            --arg repo "$GITHUB_REPOSITORY" \
+            --argjson expected_draft "$emit_premerge" '
               .user.login == "lightning-it-release-automation[bot]"
               and .user.id == 307565056
               and .user.type == "Bot"
@@ -716,9 +744,12 @@ jobs:
               and .head.sha == $head
               and .base.ref == "main"
               and .base.sha == $live_base
-              and .draft == false
+              and .draft == $expected_draft
               and .state == "open"
             ' <<<"$live" >/dev/null
+          if [ "$emit_premerge" = false ] && [ "$REQUEST_EVENT" = mlx90-security-release ]; then
+            jq -r '.body // ""' <<<"$live" >"$body"
+          fi
           update="$RUNNER_TEMP/security-pr-update.json"
           jq -n \
             --arg title "fix(security): ${EVIDENCE_ID}" \
@@ -734,7 +765,8 @@ jobs:
             --arg head "$HEAD_SHA" \
             --arg live_base "$live_base_sha" \
             --arg repo "$GITHUB_REPOSITORY" \
-            --arg title "fix(security): ${EVIDENCE_ID}" '
+            --arg title "fix(security): ${EVIDENCE_ID}" \
+            --argjson expected_draft "$emit_premerge" '
               .user.login == "lightning-it-release-automation[bot]"
               and .user.id == 307565056
               and .user.type == "Bot"
@@ -744,13 +776,78 @@ jobs:
               and .base.ref == "main"
               and .base.sha == $live_base
               and .title == $title
-              and .draft == false
+              and .draft == $expected_draft
               and .state == "open"
             ' <<<"$live" >/dev/null
-          echo "number=$number" >>"$GITHUB_OUTPUT"
-          echo "url=$pr_url" >>"$GITHUB_OUTPUT"
+          printf '%s\n' "$live" >"$RUNNER_TEMP/security-premerge-pull.json"
+          {
+            echo "emit_premerge=$emit_premerge"
+            echo "number=$number"
+            echo "url=$pr_url"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Emit exact native Security intake data packet
+        if: steps.pull.outputs.emit_premerge == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_path="repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          gh api --method GET "$run_path" >"$RUNNER_TEMP/security-premerge-run.json"
+          gh api --method GET "${run_path}/attempts/${GITHUB_RUN_ATTEMPT}/jobs?per_page=100" \
+            >"$RUNNER_TEMP/security-premerge-jobs.json"
+          python3 "$RUNNER_TEMP/security-premerge-controller/scripts/security_premerge_proof.py" emit \
+            --kind intake --root . --source "$GITHUB_SHA" \
+            --pull "$RUNNER_TEMP/security-premerge-pull.json" --run "$RUNNER_TEMP/security-premerge-run.json" \
+            --jobs "$RUNNER_TEMP/security-premerge-jobs.json" \
+            --output "$RUNNER_TEMP/security-premerge-artifact/security-premerge-proof.json"
+
+      - name: Upload pre-merge Security intake producer data
+        if: steps.pull.outputs.emit_premerge == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: security-premerge-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/security-premerge-artifact/security-premerge-proof.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Ready fresh Security PR after native data upload
+        if: steps.pull.outputs.emit_premerge == 'true'
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          PR_NUMBER: ${{ steps.pull.outputs.number }}
+          BASE_SHA: ${{ needs.classify.outputs.base-sha }}
+          HEAD_SHA: ${{ steps.branch.outputs.head_sha }}
+          HEAD_REF: ${{ steps.final.outputs.branch }}
+          REVIEW_ROUTE: ${{ steps.security-route.outputs.mode }}
+        run: |
+          set -euo pipefail
+          verify_producer_pull() {
+            gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" |
+              jq -e --arg repo "$GITHUB_REPOSITORY" --arg base "$BASE_SHA" \
+                --arg head "$HEAD_SHA" --arg ref "$HEAD_REF" --argjson draft "$1" '
+                .state == "open" and .draft == $draft
+                and .base.ref == "main" and .base.sha == $base
+                and .base.repo.full_name == $repo and .head.repo.full_name == $repo
+                and .head.sha == $head and .head.ref == $ref
+                and .user.login == "lightning-it-release-automation[bot]"
+                and .user.id == 307565056 and .user.type == "Bot"
+                and has("auto_merge") and .auto_merge == null
+              ' >/dev/null
+          }
+          if [ "$REVIEW_ROUTE" = producer-only ]; then
+            verify_producer_pull true
+          else
+            test "$REVIEW_ROUTE" = legacy
+          fi
+          gh pr ready "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
+          if [ "$REVIEW_ROUTE" = producer-only ]; then
+            verify_producer_pull false
+            echo 'Native producer data is complete; PR remains open without auto-merge.'
+          fi
 
       - name: Enable and prove native MERGE auto-merge for exact current head
+        if: steps.security-route.outputs.mode == 'legacy'
         env:
           APP_TOKEN: ${{ steps.release-app.outputs.token }}
           BASE_SHA: ${{ needs.classify.outputs.base-sha }}

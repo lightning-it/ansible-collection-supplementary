@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - Security release finalization fetches the complete reviewed merge history before verifying its parents.
+  - ModuLix observation uses six fresh-token windows of 45 minutes, preserving the existing total validation budget
+    without exceeding an installation token's lifetime.

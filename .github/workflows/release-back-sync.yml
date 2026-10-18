@@ -55,6 +55,7 @@ permissions:
 
 concurrency:
   group: main-develop-transition-${{ github.repository }}
+  queue: max
   cancel-in-progress: false
 
 jobs:
@@ -71,6 +72,7 @@ jobs:
       security-release: ${{ steps.classify.outputs.security_release }}
       security-evidence-id: ${{ steps.classify.outputs.security_evidence_id }}
       security-version: ${{ steps.classify.outputs.security_version }}
+      normal-two-stage: ${{ steps.binding.outputs.normal_two_stage }}
     steps:
       - name: Checkout exact protected-main source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
@@ -98,6 +100,12 @@ jobs:
           git cat-file -e "${base_sha}^{commit}"
           git merge-base --is-ancestor "$base_sha" "$GITHUB_SHA"
           echo "base_sha=$base_sha" >>"$GITHUB_OUTPUT"
+          normal_two_stage=false
+          if jq -e '.schema_version == 3' "$receipt" >/dev/null; then
+            jq -e '.release_mode == "normal"' "$receipt" >/dev/null
+            normal_two_stage=true
+          fi
+          echo "normal_two_stage=$normal_two_stage" >>"$GITHUB_OUTPUT"
       - name: Checkout immutable pre-consumption Security binding
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
@@ -140,6 +148,7 @@ jobs:
        (needs.security-classification.outputs.security-release == 'true' &&
         github.actor == 'lightning-it-release-automation[bot]'))
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     environment:
       name: >-
         ${{ needs.security-classification.outputs.security-release == 'true' &&
@@ -183,6 +192,25 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Checkout adopted normal back-sync proof source
+        if: needs.security-classification.outputs.normal-two-stage == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          repository: lightning-it/.github
+          ref: bb1a5df9f54c5f98547048297e7e367cc382543e
+          path: back-sync-control-source
+          persist-credentials: false
+
+      - name: Set up normal publication proof Python
+        if: needs.security-classification.outputs.normal-two-stage == 'true'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: "3.11"
+
+      - name: Install normal publication proof parser
+        if: needs.security-classification.outputs.normal-two-stage == 'true'
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.3
+
       - name: Open or update release back-sync PR
         env:
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
@@ -195,6 +223,8 @@ jobs:
           SECURITY_RELEASE: ${{ needs.security-classification.outputs.security-release }}
           SECURITY_VERSION: ${{ needs.security-classification.outputs.security-version }}
           WORKFLOW_ACTOR: ${{ github.actor }}
+          NORMAL_TWO_STAGE: ${{ needs.security-classification.outputs.normal-two-stage }}
+          PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -euo pipefail
 
@@ -310,6 +340,133 @@ jobs:
             test "$SECURITY_RELEASE" = false
             test -z "$SECURITY_VERSION"
             test -z "$SECURITY_EVIDENCE_ID"
+          fi
+
+          if [ "$NORMAL_TWO_STAGE" = true ]; then
+            test "$SECURITY_RELEASE" = false
+            test "$REPO" = lightning-it/ansible-collection-supplementary
+            test "$GITHUB_REPOSITORY_ID" = 1103407173
+            test "$GITHUB_REF" = refs/heads/main
+            test "$release_sha" = "$GITHUB_SHA"
+            test "$(git rev-parse HEAD)" = "$release_sha"
+            jq -e '.schema_version == 3 and .release_mode == "normal"' \
+              changelogs/release-preparation.json >/dev/null
+            test "$(git config user.name)" = 'lightning-it-release-automation[bot]'
+            test "$(git config user.email)" = \
+              '307565056+lightning-it-release-automation[bot]@users.noreply.github.com'
+            develop_tip="$(git rev-parse 'origin/develop^{commit}')"
+            normal_tips_current() {
+              gh api "repos/${REPO}/branches/main" |
+                jq -e --arg sha "$release_sha" '.protected == true and .commit.sha == $sha' >/dev/null
+              gh api "repos/${REPO}/branches/develop" |
+                jq -e --arg sha "$develop_tip" '.protected == true and .commit.sha == $sha' >/dev/null
+              test "$(git ls-remote --tags origin "refs/tags/${tag}" | awk 'NR == 1 {print $1}')" = "$remote_tag"
+              if [ -n "${normal_release_id:-}" ]; then
+                gh api "repos/${REPO}/releases/tags/${tag}" |
+                  jq -e --arg tag "$tag" --argjson id "$normal_release_id" '
+                    .id == $id and .tag_name == $tag and .draft == false and .prerelease == false
+                    and (.published_at | type == "string" and length > 0)
+                  ' >/dev/null
+              fi
+            }
+            normal_tips_current
+            published="$(gh api "repos/${REPO}/releases/tags/${tag}")"
+            # The publisher uses --verify-tag without --target. Its actual
+            # target_commitish may be `develop`; the resolved immutable tag,
+            # not that creation hint, binds the release to current Main.
+            jq -e --arg tag "$tag" '
+              .tag_name == $tag and .draft == false and .prerelease == false
+              and (.id | type == "number" and . > 0 and floor == .)
+              and (.published_at | type == "string" and length > 0)
+            ' <<<"$published" >/dev/null
+            normal_release_id="$(jq -er .id <<<"$published")"
+            read -r -a normal_release_parents <<<"$(git rev-list --parents -n 1 "$release_sha")"
+            test "${#normal_release_parents[@]}" -eq 3
+            proof="$RUNNER_TEMP/normal-back-sync-publication-proof.json"
+            python scripts/normal_release_proof.py baseline \
+              --root "$GITHUB_WORKSPACE" --control-root "$GITHUB_WORKSPACE/back-sync-control-source" \
+              --repository "$REPO" --repository-id "$GITHUB_REPOSITORY_ID" \
+              --base "$release_sha" >"$proof"
+            test "$(jq -er .main_merge "$proof")" = "$release_sha"
+            test "$(jq -er .develop_merge "$proof")" = "${normal_release_parents[2]}"
+            git merge-base --is-ancestor "${normal_release_parents[2]}" "$develop_tip"
+            normal_tips_current
+            if git merge-base --is-ancestor "$release_sha" "$develop_tip"; then
+              echo 'Current published Main is already a Develop ancestor; no back-sync effect.'
+              exit 0
+            fi
+
+            branch="backmerge/ansible-collection-supplementary-${release_sha:0:12}-${develop_tip:0:12}-main"
+            branch_ref="refs/heads/${branch}"
+            title="chore(governance): record main ancestry before ${release_sha:0:12}"
+            body='Records the current published Main ancestry without changing the protected Develop tree.'
+            body+=$'\n\nThe independently selected Required Workflow owns acceptance. '
+            body+='No review request or approval is granted here.'
+            normal_history() {
+              gh api --method GET "repos/${REPO}/pulls" -f state=all -f base=develop \
+                -f "head=${GITHUB_REPOSITORY_OWNER}:${branch}" -f per_page=100
+            }
+            history="$(normal_history)"
+            test "$(jq length <<<"$history")" -le 1
+            jq -e 'all(.[]; .state == "open" and .user.login == "lightning-it-release-automation[bot]"
+              and .user.id == 307565056 and .user.type == "Bot")' <<<"$history" >/dev/null
+            git switch -C "$branch" "$develop_tip"
+            git merge --no-ff -X ours "$release_sha" -m "$title"
+            test "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "${develop_tip}^{tree}")"
+            pushed_sha="$(git rev-parse HEAD)"
+            remote_branch_sha="$(git ls-remote --heads origin "$branch_ref" | awk 'NR == 1 {print $1}')"
+            if [ -n "$remote_branch_sha" ]; then
+              [[ "$remote_branch_sha" =~ ^[0-9a-f]{40}$ ]]
+              git fetch --no-tags origin "$branch_ref"
+              test "$(git rev-parse FETCH_HEAD)" = "$remote_branch_sha"
+              git switch --detach "$remote_branch_sha"
+              pushed_sha="$remote_branch_sha"
+            fi
+            test "$(git show -s --format=%P "$pushed_sha")" = "$develop_tip $release_sha"
+            test "$(git rev-parse "${pushed_sha}^{tree}")" = "$(git rev-parse "${develop_tip}^{tree}")"
+            test "$(git show -s --format=%B "$pushed_sha")" = "$title"
+            app_identity='lightning-it-release-automation[bot] <'
+            app_identity+='307565056+lightning-it-release-automation[bot]@users.noreply.github.com>'
+            test "$(git show -s --format='%an <%ae>' "$pushed_sha")" = "$app_identity"
+            test "$(git show -s --format='%cn <%ce>' "$pushed_sha")" = "$app_identity"
+            normal_tips_current
+            if [ -z "$remote_branch_sha" ]; then
+              authenticated_push origin "HEAD:${branch_ref}"
+            fi
+            test "$(git ls-remote --heads origin "$branch_ref" | awk 'NR == 1 {print $1}')" = "$pushed_sha"
+
+            history="$(normal_history)"
+            test "$(jq length <<<"$history")" -le 1
+            if [ "$(jq length <<<"$history")" -eq 0 ]; then
+              normal_tips_current
+              gh pr create --repo "$REPO" --base develop --head "$branch" --draft \
+                --title "$title" --body "$body"
+              history="$(normal_history)"
+            fi
+            test "$(jq length <<<"$history")" -eq 1
+            number="$(jq -er '.[0].number | select(type == "number" and . > 0 and floor == .)' <<<"$history")"
+            normal_pull_current() {
+              gh api "repos/${REPO}/pulls/${number}" |
+                jq -e --arg repo "$REPO" --arg base "$develop_tip" --arg head "$pushed_sha" \
+                  --arg ref "$branch" --arg title "$title" --argjson number "$number" '
+                  select(.number == $number and .state == "open" and .merged == false
+                  and .base.ref == "develop" and .base.sha == $base and .base.repo.full_name == $repo
+                  and .base.repo.id == 1103407173 and .head.repo.id == 1103407173
+                  and .head.sha == $head and .head.ref == $ref and .head.repo.full_name == $repo
+                  and .user.login == "lightning-it-release-automation[bot]"
+                  and .user.id == 307565056 and .user.type == "Bot" and .title == $title
+                  and has("auto_merge") and .auto_merge == null)
+                '
+            }
+            owned_pull="$(normal_pull_current)"
+            if [ "$(jq -er '.draft | tostring' <<<"$owned_pull")" = true ]; then
+              normal_tips_current
+              gh pr ready "$number" --repo "$REPO"
+            fi
+            normal_tips_current
+            normal_pull_current | jq -e '.draft == false' >/dev/null
+            echo 'Exact unchanged-tree ancestry PR is Ready; independent native acceptance remains required.'
+            exit 0
           fi
 
           develop_galaxy="$RUNNER_TEMP/release-back-sync-develop-galaxy.yml"

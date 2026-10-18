@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    Query the final release validation interval before declaring the bounded
+    exact-revision observation window expired, retaining producer and attempt checks.
