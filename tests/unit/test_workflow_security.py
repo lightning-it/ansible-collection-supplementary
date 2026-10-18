@@ -1855,6 +1855,36 @@ printf '%s\\n' "$REQUIRE_FRAGMENT" >"$TEST_CAPTURE"
         self.assertNotIn("scripts/dispatch-transition-validation.py", workflow)
         self.assertNotIn("transition-noop", workflow)
 
+    def test_security_finalizer_publication_guards_allow_validated_release(self) -> None:
+        jobs = load_yaml(WORKFLOWS / "collection-publish.yml")["jobs"]
+        finalizer = jobs["publish-security-finalize"]
+        environment = finalizer["env"]
+        self.assertEqual("true", environment["SECURITY_RELEASE"])
+        self.assertEqual("true", environment["GALAXY_REQUIRED"])
+        steps = {step.get("name"): step for step in finalizer["steps"]}
+        for name in (
+            "Create or verify immutable tag with dedicated App",
+            "Create or verify GitHub Release and immutable assets",
+            "Publish or verify validated artifact on Ansible Galaxy",
+        ):
+            with self.subTest(step=name):
+                condition = steps[name].get("if", "'true' == 'true'")
+                # These publication guards use only string comparisons. Execute
+                # that boolean expression with the actual finalizer environment.
+                condition = re.sub(
+                    r"env\.([A-Z_]+)",
+                    lambda match: "'" + environment[match[1]] + "'",
+                    condition,
+                )
+                self.assertRegex(condition, r"^[a-z' =!&|()\s]+$")
+                result = subprocess.run(  # noqa: S603 -- repository-owned boolean guard, constrained above.
+                    ["bash", "-c", "[[ " + condition + " ]]"],
+                    check=False,
+                    capture_output=True,
+                    timeout=5,
+                )
+                self.assertEqual(0, result.returncode, result.stderr.decode())
+
     def test_publish_security_release_is_metadata_bound_and_dispatches_after_acceptance(self) -> None:
         workflow_path = WORKFLOWS / "collection-publish.yml"
         workflow_text = workflow_path.read_text(encoding="utf-8")

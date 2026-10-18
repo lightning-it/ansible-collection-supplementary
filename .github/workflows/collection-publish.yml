@@ -2883,7 +2883,6 @@ jobs:
         run: bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
 
       - name: Create or verify immutable tag with dedicated App
-        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
         env:
           APP_SLUG: ${{ steps.release-tag-token.outputs.app-slug }}
           GH_TOKEN: ${{ steps.release-tag-token.outputs.token }}
@@ -2966,7 +2965,6 @@ jobs:
           fi
 
       - name: Create or verify GitHub Release and immutable assets
-        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -3070,9 +3068,7 @@ jobs:
         run: bash scripts/verify-release-ci-run.sh "$RELEASE_SHA" "$CI_RUN_ID" "$CI_RUN_ATTEMPT"
 
       - name: Publish or verify validated artifact on Ansible Galaxy
-        if: >-
-          (env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true') &&
-          (env.GALAXY_REQUIRED == 'true')
+        if: env.GALAXY_REQUIRED == 'true'
         env:
           GALAXY_API_TOKEN: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
         run: |
