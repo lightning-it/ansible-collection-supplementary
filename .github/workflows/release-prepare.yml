@@ -240,7 +240,26 @@ jobs:
             'mlx90-security-release-prepare' ||
             'ansible-collection-release-prepare' }}
 
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
     steps:
+      - name: Checkout exact protected Main controller before App access
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select Security legacy funding or producer-only data path
+        id: security-route
+        if: needs.security-classification.outputs.security-release == 'true'
+        run: |
+          set -euo pipefail
+          mode="$(python scripts/security_premerge_proof.py route --root . --source "$GITHUB_SHA")"
+          echo "mode=$mode" >>"$GITHUB_OUTPUT"
+
       - name: Recheck normal protected tips before minting App credentials
         if: needs.security-classification.outputs.security-release == 'false'
         env:
@@ -280,13 +299,6 @@ jobs:
           echo "login=$login" >>"$GITHUB_OUTPUT"
           echo "email=${bot_id}+${login}@users.noreply.github.com" >>"$GITHUB_OUTPUT"
 
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-        with:
-          token: ${{ steps.release-app.outputs.token }}
-          fetch-depth: 0
-          persist-credentials: false
-
       - name: Setup Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
         with:
@@ -313,6 +325,7 @@ jobs:
           SECURITY_RELEASE: ${{ needs.security-classification.outputs.security-release }}
           SECURITY_VERSION: ${{ needs.security-classification.outputs.security-version }}
           NORMAL_CONTENT_SHA: ${{ needs.normal-readiness.outputs.content-sha }}
+          SECURITY_REVIEW_ROUTE: ${{ steps.security-route.outputs.mode }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
           WORKFLOW_EVENT: ${{ github.event_name }}
           WORKFLOW_ACTOR: ${{ github.actor }}
@@ -665,6 +678,17 @@ jobs:
             echo "::error::Multiple same-repository release PRs exist."
             exit 1
           fi
+          emit_premerge=false
+          if [ "$PREPARATION_MODE" = security ]; then
+            if [ "$owned_count" -eq 0 ] || [ "$(jq -r '.[0].draft' <<<"$owned_pulls")" = true ]; then
+              emit_premerge=true
+              python "$workflow_source/scripts/security_premerge_proof.py" locator --kind preparation >>"$body_file"
+            else
+              # Existing ready/paid heads never become retroactive Common candidates.
+              test "$SECURITY_REVIEW_ROUTE" = legacy
+              jq -r '.[0].body // ""' <<<"$owned_pulls" >"$body_file"
+            fi
+          fi
           if [ "$owned_count" -eq 0 ]; then
             gh pr create \
               --base "$TARGET_BRANCH" \
@@ -771,7 +795,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "Release v${VERSION}" \
             --body-file "$body_file"
-          if [ "$(jq -r '.[0].draft' <<< "$owned_pulls")" = true ]; then
+          if [ "$PREPARATION_MODE" = normal ] && [ "$(jq -r '.[0].draft' <<< "$owned_pulls")" = true ]; then
             gh pr ready "$existing" --repo "$GITHUB_REPOSITORY"
           fi
           owned_pull="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${existing}")"
@@ -779,9 +803,10 @@ jobs:
             --arg repo "$GITHUB_REPOSITORY" \
             --arg branch "$RELEASE_BRANCH" \
             --arg base "$TARGET_BRANCH" \
-            --arg sha "$pushed_sha" '
+            --arg sha "$pushed_sha" \
+            --argjson expected_draft "$emit_premerge" '
               .state == "open"
-              and .draft == false
+              and .draft == $expected_draft
               and .head.repo.full_name == $repo
               and .user.login == "lightning-it-release-automation[bot]"
               and .user.type == "Bot"
@@ -790,22 +815,68 @@ jobs:
               and .base.ref == $base
             ' <<<"$owned_pull" >/dev/null
           if [ "$PREPARATION_MODE" = security ]; then
-            gh workflow run release-bot-exact-head-review.yml \
-              -f bounded_mode=single \
-              --repo "$GITHUB_REPOSITORY" \
-              --ref "$(jq -r .base.ref <<<"$owned_pull")" \
-              -f "pr_number=${existing}" \
-              -f "base_ref=$(jq -r .base.ref <<<"$owned_pull")" \
-              -f "expected_base=$(jq -r .base.sha <<<"$owned_pull")" \
-              -f "expected_head=$(jq -r .head.sha <<<"$owned_pull")"
+            printf '%s\n' "$owned_pull" >"$RUNNER_TEMP/security-premerge-pull.json"
           fi
+          {
+            echo "number=$existing"
+            echo "head_sha=$pushed_sha"
+            echo "emit_premerge=$emit_premerge"
+          } >>"$GITHUB_OUTPUT"
 
-          if [ "$SECURITY_RELEASE" = true ]; then
-            test "$WORKFLOW_ACTOR" = 'lightning-it-release-automation[bot]'
-            test "$(jq -er '.[0].user.login' <<< "$owned_pulls")" = \
-              'lightning-it-release-automation[bot]'
-            test "$(jq -er '.[0].head.sha' <<< "$owned_pulls")" = "$pushed_sha"
-            gh pr merge "$existing" \
-              --repo "$GITHUB_REPOSITORY" \
-              --auto --merge --match-head-commit "$pushed_sha"
+      - name: Emit exact native Security preparation data packet
+        if: steps.prepare-release.outputs.emit_premerge == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_path="repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          gh api --method GET "$run_path" >"$RUNNER_TEMP/security-premerge-run.json"
+          gh api --method GET "${run_path}/attempts/${GITHUB_RUN_ATTEMPT}/jobs?per_page=100" \
+            >"$RUNNER_TEMP/security-premerge-jobs.json"
+          python "$RUNNER_TEMP/release-workflow-source/scripts/security_premerge_proof.py" emit \
+            --kind preparation --root "$GITHUB_WORKSPACE" --source "$GITHUB_SHA" \
+            --pull "$RUNNER_TEMP/security-premerge-pull.json" --run "$RUNNER_TEMP/security-premerge-run.json" \
+            --jobs "$RUNNER_TEMP/security-premerge-jobs.json" \
+            --output "$RUNNER_TEMP/security-premerge-artifact/security-premerge-proof.json"
+
+      - name: Upload pre-merge Security preparation producer data
+        if: steps.prepare-release.outputs.emit_premerge == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: security-premerge-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/security-premerge-artifact/security-premerge-proof.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Finalize Security readiness after native data upload
+        if: needs.security-classification.outputs.security-release == 'true'
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          PR_NUMBER: ${{ steps.prepare-release.outputs.number }}
+          HEAD_SHA: ${{ steps.prepare-release.outputs.head_sha }}
+          REVIEW_ROUTE: ${{ steps.security-route.outputs.mode }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTOR" = 'lightning-it-release-automation[bot]'
+          pull="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+          if [ "$(jq -er .draft <<<"$pull")" = true ]; then
+            gh pr ready "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
           fi
+          pull="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg base "$GITHUB_SHA" --arg head "$HEAD_SHA" '
+            .state == "open" and .draft == false
+            and .base.ref == "main" and .base.sha == $base and .head.sha == $head
+            and .head.repo.full_name == $repo and .user.login == "lightning-it-release-automation[bot]"
+            and .user.id == 307565056 and .user.type == "Bot"
+          ' <<<"$pull" >/dev/null
+          if [ "$REVIEW_ROUTE" = legacy ]; then
+            gh workflow run release-bot-exact-head-review.yml \
+              -f bounded_mode=single --repo "$GITHUB_REPOSITORY" --ref main \
+              -f "pr_number=$PR_NUMBER" -f base_ref=main \
+              -f "expected_base=$GITHUB_SHA" -f "expected_head=$HEAD_SHA"
+          else
+            test "$REVIEW_ROUTE" = producer-only
+            echo 'Native producer data is complete; Common admission and review remain independently required.'
+          fi
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --auto --merge --match-head-commit "$HEAD_SHA"
