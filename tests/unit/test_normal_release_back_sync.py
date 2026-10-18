@@ -264,7 +264,7 @@ else:
 
     def test_native_proof_rejection_stops_all_effects(self):
         self.state["proof_fail"] = True
-        result, _ = self.run_step()
+        result, _unused = self.run_step()
         self.assertNotEqual(0, result.returncode)
         self.assertEqual("", self.branches())
         self.assertIsNone(self.state["pull"])
@@ -275,7 +275,7 @@ else:
             self.state = copy.deepcopy(original)
             self.state[key] = True
             with self.subTest(key=key):
-                result, _ = self.run_step()
+                result, _unused = self.run_step()
                 self.assertNotEqual(0, result.returncode)
                 self.assertEqual("", self.branches())
                 self.assertIsNone(self.state["pull"])
@@ -287,14 +287,14 @@ else:
             ("GITHUB_REF", "refs/heads/develop"),
         ):
             with self.subTest(key=key):
-                result, _ = self.run_step(**{key: value})
+                result, _unused = self.run_step(**{key: value})
                 self.assertNotEqual(0, result.returncode)
                 self.assertEqual("", self.branches())
         release = self.release
         self.release = self.fixture.main_base
         self.make_tag()
         self.release = release
-        result, _ = self.run_step()
+        result, _unused = self.run_step()
         self.assertNotEqual(0, result.returncode)
         self.assertEqual("", self.branches())
         self.assertIsNone(self.state["pull"])
@@ -316,7 +316,7 @@ else:
             else:
                 self.state["unprotected"] = True
             with self.subTest(defect=defect):
-                result, _ = self.run_step()
+                result, _unused = self.run_step()
                 self.assertNotEqual(0, result.returncode)
                 self.assertEqual("", self.branches())
                 self.assertIsNone(self.state["pull"])
@@ -331,14 +331,14 @@ else:
         self.make_tag()
         self.state["main"] = self.release
         self.state["proof"]["main_merge"] = self.release
-        result, _ = self.run_step()
+        result, _unused = self.run_step()
         self.assertNotEqual(0, result.returncode)
         self.assertEqual("", self.branches())
         self.assertIsNone(self.state["pull"])
         self.develop = self.fixture.main_base
         self.state["develop"] = self.develop
         self.git("push", "-q", "--force", "origin", f"{self.develop}:refs/heads/develop")
-        result, _ = self.run_step()
+        result, _unused = self.run_step()
         self.assertNotEqual(0, result.returncode)
         self.assertEqual("", self.branches())
 
@@ -349,13 +349,13 @@ else:
         ):
             self.state["history"] = [{"user": user, "state": state}]
             with self.subTest(state=state):
-                result, _ = self.run_step()
+                result, _unused = self.run_step()
                 self.assertNotEqual(0, result.returncode)
                 self.assertEqual("", self.branches())
         self.state["history"] = [
             {"state": "open", "user": dict(zip(("login", "id", "type"), PROOF.APP, strict=True))}
         ] * 2
-        result, _ = self.run_step()
+        result, _unused = self.run_step()
         self.assertNotEqual(0, result.returncode)
         self.assertEqual("", self.branches())
 
@@ -414,7 +414,7 @@ class AdoptedBackSyncSourceContractTests(unittest.TestCase):
         fixture = NormalBackSyncTests("runTest")
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
-        result, _ = fixture.run_step()
+        result, _unused = fixture.run_step()
         self.assertEqual(0, result.returncode, result.stderr)
         previous = sys.modules.pop("workflow_control", None)
         old_subject = sys.modules.pop("workflow_subject", None)
@@ -432,7 +432,7 @@ class AdoptedBackSyncSourceContractTests(unittest.TestCase):
                 )
 
             pull = fixture.state["pull"]
-            api = type("ReadOnlyAPI", (), {"call": lambda _, path: {"object": {"sha": fixture.release}}})()
+            api = type("ReadOnlyAPI", (), {"call": lambda _unused, path: {"object": {"sha": fixture.release}}})()
             with (
                 patch.dict(os.environ, fixture.fixture.git_env, clear=True),
                 patch.object(workflow_subject, "fetch_objects", side_effect=local_objects),

@@ -4,6 +4,9 @@ No admission, review request, API write or approval is implemented here. Source
 independently authenticates completed native production and its own registry.
 """
 
+# Exact JSON field types deliberately distinguish booleans from integers.
+# pylint: disable=unidiomatic-typecheck
+
 from __future__ import annotations
 
 import argparse
@@ -50,7 +53,7 @@ def canonical(value):
 def parse(raw, label, limit=MAX_MATERIAL):
     require(0 < len(raw) <= limit, f"{label}-size")
     value = json.loads(
-        raw, object_pairs_hook=C.reject_duplicate_keys, parse_constant=lambda _: C.fail("nonfinite-json")
+        raw, object_pairs_hook=C.reject_duplicate_keys, parse_constant=lambda _unused: C.fail("nonfinite-json")
     )
     require(type(value) is dict, f"{label}-shape")
     return value
@@ -95,7 +98,7 @@ def json_blob(root, revision, path, *, document=False):
 
 
 def route(root, source):
-    policy, _ = json_blob(root, source, ".lit/workflow-control.json")
+    policy, _unused = json_blob(root, source, ".lit/workflow-control.json")
     require(
         policy.get("repository") == C.PRODUCER_REPOSITORY and policy.get("version") == 1, "protected-policy-identity"
     )
@@ -248,11 +251,11 @@ def emit(root, kind, source, pull, run, jobs, env, *, checked_at=None):
         ]
         require(len(receipt_paths) == 1, "intake-receipt-count")
         receipt_path = receipt_paths[0]
-        intake, _ = json_blob(root, head_sha, receipt_path, document=True)
+        intake, _unused = json_blob(root, head_sha, receipt_path, document=True)
         preparation = None
     else:
         receipt_path = "changelogs/release-preparation.json"
-        preparation, _ = json_blob(root, head_sha, receipt_path, document=True)
+        preparation, _unused = json_blob(root, head_sha, receipt_path, document=True)
         require(
             preparation.get("schema_version") == 2
             and preparation.get("release_mode") == "security"
@@ -260,7 +263,7 @@ def emit(root, kind, source, pull, run, jobs, env, *, checked_at=None):
             "security-preparation-receipt",
         )
         intake_path = f".lit/security-release-intakes/{preparation.get('next_version')}.json"
-        intake, _ = json_blob(root, source, intake_path, document=True)
+        intake, _unused = json_blob(root, source, intake_path, document=True)
     C.verify_intake_receipt(intake, checked_at=now)
     request, verified = intake["request"], intake["verified"]
     require(not C.is_recovery_request(request), "historical-recovery-not-admitted")
@@ -304,7 +307,7 @@ def emit(root, kind, source, pull, run, jobs, env, *, checked_at=None):
     require(
         C.sha256_bytes(metadata_raw) == request["metadataSha256"] == verified["metadataSha256"], "metadata-digest-drift"
     )
-    profiles, _ = json_blob(root, source, ".lit/security-release-profiles.json")
+    profiles, _unused = json_blob(root, source, ".lit/security-release-profiles.json")
     C.validate_profile_registry(profiles, request["acceptanceProfile"])
     materials = []
     seen = set()
@@ -323,7 +326,7 @@ def emit(root, kind, source, pull, run, jobs, env, *, checked_at=None):
         diff = GIT.candidate_diff_without_receipt(root, source, head_sha, receipt_path)
         require(C.sha256_bytes(diff) == request["candidateDiffSha256"], "intake-candidate-digest-drift")
         require(
-            sorted(path for _, path in GIT.changed_paths(root, source, head_sha) if path != receipt_path)
+            sorted(path for _unused, path in GIT.changed_paths(root, source, head_sha) if path != receipt_path)
             == verified["changedPaths"],
             "intake-material-paths-drift",
         )

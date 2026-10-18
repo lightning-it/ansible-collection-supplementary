@@ -38,7 +38,7 @@ class SecurityPremergeProofTests(unittest.TestCase):
         self.head = self.fixture._materialize_head()
 
     def context(self, kind):
-        _, workflow, job = EMIT.PRODUCERS[kind]
+        _unused, workflow, job = EMIT.PRODUCERS[kind]
         actor = dict(zip(("login", "id", "type"), EMIT.APP, strict=True))
         event = "workflow_dispatch" if kind == "intake" else "push"
         run = {
@@ -264,7 +264,7 @@ class SecurityPremergeProofTests(unittest.TestCase):
         }[kind]
         steps = yaml.safe_load((ROOT / ".github/workflows" / workflow_name).read_text())["jobs"][job]["steps"]
         start_index = next(i for i, step in enumerate(steps) if step["name"] == start)
-        pull, _, _, _ = self.context(kind)
+        pull, _unused, _unused, _unused = self.context(kind)
         if existing_ready:
             pull["draft"] = False
         path = self.root / "native-pull.json"
@@ -371,7 +371,7 @@ class SecurityPremergeProofTests(unittest.TestCase):
             for defect in ("auto", "missing-auto", "base", "head", "branch", "owner"):
                 for after_ready in (False, True):
                     with self.subTest(kind=kind, defect=defect, after_ready=after_ready):
-                        results, operations, _ = self.readiness(
+                        results, operations, _unused = self.readiness(
                             kind, "producer-only", defect=defect, after_ready=after_ready
                         )
                         self.assertNotEqual(0, results[-1].returncode)
@@ -381,7 +381,7 @@ class SecurityPremergeProofTests(unittest.TestCase):
     def test_actual_existing_ready_legacy_heads_still_request_auto_merge(self):
         for kind in ("intake", "preparation"):
             with self.subTest(kind=kind):
-                results, operations, _ = self.readiness(kind, "legacy", existing_ready=True)
+                results, operations, _unused = self.readiness(kind, "legacy", existing_ready=True)
                 self.assertTrue(results)
                 for result in results:
                     self.assertEqual(0, result.returncode, result.stderr)

@@ -402,7 +402,7 @@ def verify_preparation_receipt(
             raise VersionError("release preparation content base differs from protected develop")
         publication = receipt.get("publication")
         if (not isinstance(publication, dict) or set(publication) != {"github_release", "galaxy"}
-                or any(type(value) is not bool for value in publication.values())):
+                or any(type(value) is not bool for value in publication.values())):  # pylint: disable=unidiomatic-typecheck
             raise VersionError("release preparation publication policy is malformed")
 
     current = parse_stable_version(receipt.get("current_version"), label="receipt current version")

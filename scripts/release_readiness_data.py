@@ -53,7 +53,7 @@ def export(revision: str, destination: Path):
         if size > MAX_BYTES:
             raise ValueError("release data blob exceeds limit")
         selected.append((path, raw_oid, size))
-    if sum(path == "galaxy.yml" for path, _, _ in selected) != 1 or len(selected) > MAX_FRAGMENTS + 1:
+    if sum(path == "galaxy.yml" for path, _unused, _unused in selected) != 1 or len(selected) > MAX_FRAGMENTS + 1:
         raise ValueError("release metadata or fragment count invalid")
     destination.mkdir(mode=0o700)
     (destination / "changelogs/fragments").mkdir(parents=True, mode=0o700)
