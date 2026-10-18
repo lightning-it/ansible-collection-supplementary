@@ -225,7 +225,7 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
     fi
   fi
 
-  if [ "$is_release_promotion" = "true" ]; then
+  if [ "$is_release_promotion" = "true" ] || [ "$is_published_baseline_import" = "true" ]; then
     promotion_metadata_re="^(galaxy\\.yml|CHANGELOG\\.(md|rst)|"
     promotion_metadata_re+="changelogs/(changelog|\\.plugin-cache)\\.yaml)$"
     user_visible=""
@@ -244,7 +244,21 @@ bash scripts/wunder-devtools-ee.sh bash -lc '
     exit 0
   fi
 
-  if ! grep -Eq "^changelogs/fragments/[^/]+\\.ya?ml$" <<<"$changed"; then
+  has_eligible_fragment=false
+  while IFS= read -r fragment; do
+    if ! grep -Eq "^changelogs/fragments/[^/]+\\.ya?ml$" <<<"$fragment"; then
+      continue
+    fi
+    # Consumed published entries are deletions, never a new product-change note.
+    # The import proof has already bound every surviving fragment to the head.
+    if [ "$is_published_baseline_import" = "true" ] && \
+        { [ ! -f "$fragment" ] || [ -L "$fragment" ]; }; then
+      continue
+    fi
+    has_eligible_fragment=true
+    break
+  done <<<"$changed"
+  if [ "$has_eligible_fragment" != "true" ]; then
     echo "::error::User-visible collection changes require a changelog fragment under changelogs/fragments/."
     exit 1
   fi

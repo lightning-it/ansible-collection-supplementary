@@ -364,6 +364,36 @@ class PublishedBaselineImportTests(unittest.TestCase):
                 self.assertNotEqual(self.policy(**arguments).returncode, 0)
         self.assertEqual(self.policy(event="", author="", base="").returncode, 0)
 
+    def test_baseline_only_needs_no_fragment_but_product_changes_need_a_surviving_new_fragment(self) -> None:
+        (self.root / "changelogs/fragments/import-guard.yml").unlink()
+        (self.root / "scripts/ordinary-correction.py").unlink()
+        self.commit("Import only already published release metadata")
+        self.head = git(self.root, "rev-parse", "HEAD")
+        self.verify(check_worktree=True)
+        baseline_only = self.policy()
+        self.assertEqual(baseline_only.returncode, 0, baseline_only.stderr + baseline_only.stdout)
+
+        role = self.root / "roles/example/tasks"
+        role.mkdir(parents=True)
+        (role / "main.yml").write_text(
+            "---\n- name: An accompanying product change\n  ansible.builtin.debug:\n    msg: changed\n",
+            encoding="utf-8",
+        )
+        self.commit("Change product code without a new unreleased fragment")
+        self.head = git(self.root, "rev-parse", "HEAD")
+        self.verify(check_worktree=True)
+        missing_fragment = self.policy()
+        self.assertNotEqual(missing_fragment.returncode, 0)
+        self.assertIn("require a changelog fragment", missing_fragment.stderr + missing_fragment.stdout)
+
+        (self.root / "changelogs/fragments/new-product.yml").write_text(
+            "bugfixes: [New product change]\n", encoding="utf-8"
+        )
+        self.commit("Describe the new product change in its surviving fragment")
+        self.head = git(self.root, "rev-parse", "HEAD")
+        accepted = self.policy()
+        self.assertEqual(accepted.returncode, 0, accepted.stderr + accepted.stdout)
+
     def make_push(self) -> dict[str, object]:
         candidate = self.head
         tree = git(self.root, "rev-parse", f"{candidate}^{{tree}}")

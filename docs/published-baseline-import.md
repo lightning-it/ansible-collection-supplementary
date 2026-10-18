@@ -17,6 +17,10 @@ file modes/blob IDs are checked. Unconsumed Develop fragments must remain byte
 identical; new unreleased fragments may be added. The default verifier remains
 App-only. No release receipt or generated content is invented by this mode.
 
+Verified published metadata alone needs no new changelog entry. Any accompanying
+product change still requires a surviving new unreleased fragment; deleted
+fragments consumed by the published version cannot satisfy that requirement.
+
 The changelog guard runs this proof before label handling. Native events require
 the real same-repository personal PR to Develop; offline checks make no native
 identity assertion. After merge the existing CI associated-PR read must find
