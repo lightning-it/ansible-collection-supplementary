@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -292,6 +297,280 @@ class ArchiveTests(unittest.TestCase):
             ):
                 ARCHIVE.download_pair({"assets": bad}, REPO, self.root)
             process.assert_not_called()
+
+
+class CompletionTests(unittest.TestCase):
+    """Real bounded manifest/profile validation; only the crypto provider is offline."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.assets = self.root / "assets"
+        self.assets.mkdir()
+        self.context = ARCHIVE.completion_context(REPO, "1103407173", SHA, "1.0.1", True)
+        for name in ARCHIVE.completion_assets(self.context):
+            (self.assets / name).write_bytes((name + "\n").encode())
+        self.manifest = ARCHIVE.local_manifest(self.assets, ARCHIVE.completion_assets(self.context))
+        self.published = {
+            "id": 40,
+            "tag_name": "v1.0.1",
+            "draft": False,
+            "prerelease": False,
+            "published_at": "2026-10-18T00:00:00Z",
+            "assets": [
+                {
+                    "id": i + 1,
+                    "name": row["name"],
+                    "size": row["size"],
+                    "state": "uploaded",
+                    "digest": "sha256:" + row["sha256"],
+                }
+                for i, row in enumerate(self.manifest)
+            ],
+        }
+        self.directory = self.root / "completion"
+        self.directory.mkdir()
+        self.value = ARCHIVE.completion_document(self.published, self.context, self.manifest)
+        (self.directory / ARCHIVE.COMPLETION).write_bytes(ARCHIVE.canonical(self.value))
+        (self.directory / ARCHIVE.COMPLETION_BUNDLE).write_text("offline crypto fixture")
+        self.published["assets"] += [
+            {"id": 100 + i, "name": name, "size": (self.directory / name).stat().st_size, "state": "uploaded"}
+            for i, name in enumerate((ARCHIVE.COMPLETION, ARCHIVE.COMPLETION_BUNDLE))
+        ]
+
+    def verify(self):
+        with (
+            patch.object(ARCHIVE.shutil, "which", return_value="/usr/bin/gh"),
+            patch.object(ARCHIVE.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as command,
+        ):
+            result = ARCHIVE.verify_completion_files(self.directory, self.published, self.context)
+        self.assertIn("--source-digest", command.call_args.args[0])
+        self.assertEqual(SHA, command.call_args.args[0][-1])
+        return result
+
+    def test_complete_publication_has_no_dispatch_claim_and_exact_mandatory_assets(self):
+        self.assertEqual(self.value, self.verify())
+        self.assertEqual(39, len(self.manifest))
+        self.assertNotIn("back_sync", self.value)
+        self.assertNotIn("release_back_sync_dispatched", self.value["gates"])
+        self.assertTrue(all(type(gate) is bool and gate for gate in self.value["gates"].values()))
+
+    def test_missing_duplicate_foreign_or_changed_assets_deny_complete_signed_claim(self):
+        original = copy.deepcopy(self.published)
+        mutations = (
+            lambda v: v["assets"].pop(0),
+            lambda v: v["assets"].append(copy.deepcopy(v["assets"][0])),
+            lambda v: v["assets"][0].update(name="foreign.json"),
+            lambda v: v["assets"][0].update(size=0),
+            lambda v: v["assets"][0].update(size=True),
+            lambda v: v["assets"][0].update(id=True),
+            lambda v: v["assets"][0].update(state="new"),
+            lambda v: v["assets"][0].update(digest="sha256:" + "0" * 64),
+        )
+        for mutate in mutations:
+            self.published = copy.deepcopy(original)
+            mutate(self.published)
+            with self.subTest(mutation=mutate), self.assertRaises(ValueError):
+                self.verify()
+
+    def test_false_claims_or_different_binding_never_authorize_completion(self):
+        mutations = (
+            lambda v: v.update(schema_version=True),
+            lambda v: v.update(back_sync={"dispatch_accepted": True}),
+            lambda v: v["binding"].update(galaxy_required=False),
+            lambda v: v["binding"].update(galaxy_required=1),
+            lambda v: v["binding"].update(profile="generic-minor-manual/v1"),
+            lambda v: v["binding"].update(repository="lightning-it/foreign"),
+            lambda v: v["binding"].update(release=BASE),
+            lambda v: v["release"].update(id=True),
+            lambda v: v["gates"].update(github_release_install_smoke=False),
+            lambda v: v["gates"].update(github_release_install_smoke=1),
+            lambda v: v["assets"].pop(),
+        )
+        for mutate in mutations:
+            value = copy.deepcopy(self.value)
+            mutate(value)
+            (self.directory / ARCHIVE.COMPLETION).write_bytes(ARCHIVE.canonical(value))
+            with self.subTest(mutation=mutate), self.assertRaises(ValueError):
+                self.verify()
+
+    def test_bad_completion_signature_never_interprets_claim_or_reads_assets(self):
+        with (
+            patch.object(ARCHIVE.shutil, "which", return_value="/usr/bin/gh"),
+            patch.object(ARCHIVE.subprocess, "run", return_value=SimpleNamespace(returncode=1)),
+            patch.object(ARCHIVE, "verify_manifest") as manifest,
+            self.assertRaisesRegex(ValueError, "attestation-verification-failed"),
+        ):
+            ARCHIVE.verify_completion_files(self.directory, self.published, self.context)
+        manifest.assert_not_called()
+
+    def test_creation_reuses_original_pair_but_partial_pair_and_changed_local_bytes_close(self):
+        def download(_published, _repo, output, _limits):
+            for name in (ARCHIVE.COMPLETION, ARCHIVE.COMPLETION_BUNDLE):
+                (output / name).write_bytes((self.directory / name).read_bytes())
+
+        with (
+            patch.object(ARCHIVE, "read_release", return_value=self.published),
+            patch.object(ARCHIVE, "download_assets", side_effect=download),
+            patch.object(ARCHIVE, "verified_document", return_value=self.value),
+        ):
+            output = self.root / "reuse"
+            self.assertTrue(ARCHIVE.completion_prepare(self.assets, output, self.context))
+            for name in (ARCHIVE.COMPLETION, ARCHIVE.COMPLETION_BUNDLE):
+                self.assertEqual((self.directory / name).read_bytes(), (output / name).read_bytes())
+            (self.assets / self.manifest[0]["name"]).write_text("changed existing bytes")
+            with self.assertRaises(ValueError):
+                ARCHIVE.completion_prepare(self.assets, self.root / "changed", self.context)
+            self.published["assets"].pop()
+            with self.assertRaisesRegex(ValueError, "partial-pair"):
+                ARCHIVE.completion_prepare(self.assets, self.root / "partial", self.context)
+
+    def test_missing_metadata_digest_requires_actual_bounded_asset_bytes(self):
+        self.published["assets"][0]["digest"] = None
+        with patch.object(ARCHIVE, "download_assets") as download:
+            self.verify()
+        downloaded, repo, directory, limits = download.call_args.args
+        self.assertEqual(REPO, repo)
+        self.assertIsNone(directory)
+        self.assertEqual(self.manifest[0]["sha256"], downloaded["assets"][0]["expected_sha256"])
+        self.assertEqual(((self.manifest[0]["name"], self.manifest[0]["size"]),), limits)
+
+    def test_new_completion_creates_only_unsigned_bytes_after_exact_base_inventory(self):
+        self.published["assets"] = self.published["assets"][:-2]
+        with patch.object(ARCHIVE, "read_release", return_value=self.published):
+            output = self.root / "new"
+            self.assertFalse(ARCHIVE.completion_prepare(self.assets, output, self.context))
+        self.assertEqual({ARCHIVE.COMPLETION}, {item.name for item in output.iterdir()})
+        self.assertEqual(ARCHIVE.canonical(self.value), (output / ARCHIVE.COMPLETION).read_bytes())
+
+    def test_streamed_asset_fallback_hashes_real_bytes_and_rejects_mismatch_without_file_output(self):
+        row = self.manifest[0]
+        asset = self.published["assets"][0] | {"expected_sha256": row["sha256"]}
+        raw = (self.assets / row["name"]).read_bytes()
+        original = ARCHIVE.subprocess.Popen
+        for content, valid in ((raw, True), (b"x" * len(raw), False), (raw + b"x", False)):
+
+            def transport(_command, content=content, **kwargs):
+                return original([sys.executable, "-c", f"import sys; sys.stdout.buffer.write({content!r})"], **kwargs)
+
+            with (
+                self.subTest(valid=valid),
+                patch.object(ARCHIVE.shutil, "which", return_value="/usr/bin/gh"),
+                patch.object(ARCHIVE.subprocess, "Popen", side_effect=transport),
+            ):
+                if valid:
+                    ARCHIVE.download_assets({"assets": [asset]}, REPO, None, ((row["name"], row["size"]),))
+                else:
+                    with self.assertRaises(ValueError):
+                        ARCHIVE.download_assets({"assets": [asset]}, REPO, None, ((row["name"], row["size"]),))
+
+    def test_actual_publisher_assembly_matches_full_normal_mandatory_profile(self):
+        # Fixture source inventory follows the existing CI outputs, not the new
+        # completion allowlist. Execute the actual publisher assembly shell.
+        candidate = "lit-supplementary-1.0.1.tar.gz"
+        evidence = f"collection-evidence-{SHA}.tar.gz"
+        longterm = f"collection-release-evidence-{SHA}.tar.gz"
+        ci_names = {
+            evidence,
+            "evidence-manifest.json",
+            "sbom.cdx.json",
+            "provenance.json",
+            "role-coverage.yml",
+            "matrix-results.json",
+            "candidate.github-attestation.json",
+            "sbom.github-attestation.json",
+            "evidence.github-attestation.json",
+            "attestation-records.json",
+            candidate + ".sigstore.json",
+            "sbom.cdx.json.sigstore.json",
+            evidence + ".sigstore.json",
+            "vulnerability-report.json",
+            "trivy-vulnerability-report.json",
+            "secret-scan-summary.json",
+            "release-evidence.json",
+            "release-evidence.md",
+            "SHA256SUMS.sigstore.json",
+            "checksums.github-attestation.json",
+            "checksums-attestation-record.json",
+            "release-security-receipt.json",
+            "release-security-receipt.json.sigstore.json",
+            "release-security-receipt.github-attestation.json",
+            "release-security-receipt-attestation.json",
+        }
+        product = self.root / "product"
+
+        def write(relative, data=b"offline assembly fixture\n"):
+            path = product / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            return path
+
+        for name in ci_names:
+            write("incoming/evidence/release-assets/" + name)
+        ci_directory = product / "incoming/evidence/release-assets"
+        write(
+            "incoming/evidence/release-assets/SHA256SUMS",
+            b"".join(
+                f"{hashlib.sha256((ci_directory / name).read_bytes()).hexdigest()}  {name}\n".encode()
+                for name in sorted(ci_names - {"SHA256SUMS.sigstore.json"})
+            ),
+        )
+        raw = b"candidate exact bytes\n"
+        write("incoming/candidate/" + candidate, raw)
+        write("incoming/candidate/candidate-SHA256SUMS", f"{hashlib.sha256(raw).hexdigest()}  {candidate}\n".encode())
+        for name in ("vulnerability-report.json", "trivy-vulnerability-report.json", "secret-scan-summary.json"):
+            write("incoming/evidence/evidence/security/" + name)
+        for name in (candidate, evidence, "sbom.cdx.json", "SHA256SUMS", "release-security-receipt.json"):
+            write("dist/attestation-bundles/" + name + ".attestation.jsonl")
+        for name in (longterm, longterm + ".sha256"):
+            write("incoming/evidence/long-term/" + name)
+        workflow = yaml.safe_load((ROOT / ".github/workflows/collection-publish.yml").read_text())
+        steps = {step.get("name"): step for step in workflow["jobs"]["publish"]["steps"]}
+        environment = {**os.environ, "BASH_ENV": os.devnull, "CANDIDATE_NAME": candidate}
+        result = subprocess.run(  # noqa: S603 -- actual offline assembly fixture, no native command.
+            ["/bin/bash", "-c", steps["Assemble verified release attachments"]["run"]],
+            cwd=product,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        # The following existing steps append the original native pair and
+        # publisher checksum signature; they are not supplied by the receipt.
+        for name in (ARCHIVE.SNAPSHOT, ARCHIVE.BUNDLE, "SHA256SUMS", "SHA256SUMS.sigstore.json"):
+            write("dist/release/" + name)
+        self.assertEqual(
+            ARCHIVE.completion_assets(self.context), {p.name for p in (product / "dist/release").iterdir()}
+        )
+
+    def test_normal_completion_order_preserves_legacy_security_writer_and_has_no_dispatch_claim(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/collection-publish.yml").read_text())
+        steps = workflow["jobs"]["publish"]["steps"]
+        names = [step.get("name") for step in steps]
+        ordered = [
+            "Verify GitHub Release download, install, and smoke",
+            "Verify Galaxy version install and smoke",
+            "Prepare completed normal publication evidence",
+            "Attest completed normal publication",
+            "Publish and verify completed normal publication evidence",
+            "Mint exact back-sync dispatch App token",
+            "Trigger release back-sync after verified publication",
+            "Attach signed post-publication verification receipt",
+        ]
+        self.assertEqual(sorted(names.index(name) for name in ordered), [names.index(name) for name in ordered])
+        by_name = {step.get("name"): step for step in steps}
+        for name in ordered[2:5]:
+            self.assertIn("env.NORMAL_TWO_STAGE == 'true'", by_name[name]["if"])
+        self.assertIn("outputs.reused != 'true'", by_name[ordered[3]]["if"])
+        self.assertIn("env.NORMAL_TWO_STAGE != 'true'", by_name[ordered[-1]]["if"])
+        upload = by_name[ordered[4]]["run"]
+        self.assertEqual(1, upload.count("gh release upload"))
+        self.assertNotIn("--clobber", upload)
+        self.assertIn("--operation completion-verify", upload)
+        finalizer = workflow["jobs"]["publish-security-finalize"]["steps"]
+        self.assertFalse(any("completed normal publication" in step.get("name", "") for step in finalizer))
 
 
 if __name__ == "__main__":

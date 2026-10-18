@@ -23,6 +23,7 @@ SPEC = importlib.util.spec_from_file_location("normal_release_proof", ROOT / "sc
 PROOF = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PROOF)
 REPOSITORY = "lightning-it/ansible-collection-supplementary"
+REAL_VERIFY_COMPLETION = getattr(PROOF.archive, "verify_completion", None)
 
 
 class NativeControlPolicyContractTests(unittest.TestCase):
@@ -106,6 +107,10 @@ class NormalReleaseProofTests(unittest.TestCase):
             self.git_env.pop(variable, None)
         self.git("init", "--quiet")
         (self.root / "galaxy.yml").write_text("---\nnamespace: lit\nname: supplementary\nversion: 1.0.0\n")
+        (self.root / ".lit").mkdir()
+        (self.root / ".lit/repository.yml").write_text(
+            "publishing_targets: [github-release, ansible-galaxy]\ngalaxy_publish: true\n"
+        )
         for name, content in getattr(self, "extra_baseline", {}).items():
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -418,6 +423,49 @@ class NormalReleaseProofTests(unittest.TestCase):
             return previous(path)
 
         self.api.call.side_effect = read
+        # These tests isolate historical replay; completion crypto/manifest has
+        # its own actual reader tests. The interruption regression removes this seam.
+        if REAL_VERIFY_COMPLETION is not None:
+            completion_patch = patch.object(PROOF.archive, "verify_completion", return_value={"fixture": "completed"})
+            completion_patch.start()
+            self.addCleanup(completion_patch.stop)
+
+    def test_interrupted_pair_upload_denies_baseline_but_preserves_original_recovery_pair(self):
+        self.baseline_api(self.release)
+        original_pages = self.api.pages.side_effect
+        self.api.pages.side_effect = lambda path, key=None: (
+            [self.published_release] if path.endswith("/releases") else original_pages(path, key)
+        )
+        # Exactly the failure boundary in the native finding: authentic pair,
+        # but no mandatory publication assets or completion receipt.
+        self.published_release["assets"] = [
+            {"id": 70, "name": PROOF.archive.SNAPSHOT, "state": "uploaded", "size": 100},
+            {"id": 71, "name": PROOF.archive.BUNDLE, "state": "uploaded", "size": 100},
+        ]
+        if REAL_VERIFY_COMPLETION is None:
+            with self.assertRaises(ValueError):
+                PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", self.release)
+        else:
+            with patch.object(PROOF.archive, "verify_completion", side_effect=REAL_VERIFY_COMPLETION):
+                with self.assertRaisesRegex(ValueError, "completion-mandatory-assets"):
+                    PROOF.published_baseline(self.root, self.api, self.core, REPOSITORY, "1103407173", self.release)
+        self.core.artifact_record.side_effect = AssertionError("expired original artifact must not be downloaded")
+        directory = self.root / "recovery-original-pair"
+        result = PROOF.publication_archive(
+            self.root,
+            self.api,
+            self.core,
+            REPOSITORY,
+            "1103407173",
+            self.release,
+            self.main_base,
+            self.develop,
+            directory,
+        )
+        self.assertTrue(result["archive_reused"])
+        self.assertEqual(self.snapshot_bytes, (directory / PROOF.archive.SNAPSHOT).read_bytes())
+        self.assertEqual("unit-crypto-fixture", (directory / PROOF.archive.BUNDLE).read_text())
+        self.core.artifact_record.assert_not_called()
 
     def ordinary_main(self, previous_main, previous_develop, number):
         self.git("checkout", "--quiet", "--detach", previous_main)

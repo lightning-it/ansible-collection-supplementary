@@ -2162,6 +2162,55 @@ jobs:
           ANSIBLE_COLLECTIONS_PATH="$install_root" \
             ansible-playbook --syntax-check "$installed_playbook"
 
+      - name: Prepare completed normal publication evidence
+        if: env.NORMAL_TWO_STAGE == 'true'
+        id: normal-completion
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+        run: |
+          set -euo pipefail
+          test "$SECURITY_RELEASE" = false
+          reused="$(python scripts/normal_release_archive.py --operation completion-prepare \
+            --directory dist/release --output "$RUNNER_TEMP/normal-completion" \
+            --repository "$GITHUB_REPOSITORY" --repository-id "$REPOSITORY_ID" --release "$RELEASE_SHA" \
+            --version "$RELEASE_VERSION" --galaxy-required "$GALAXY_REQUIRED")"
+          echo "reused=$reused" >>"$GITHUB_OUTPUT"
+
+      - name: Attest completed normal publication
+        if: env.NORMAL_TWO_STAGE == 'true' && steps.normal-completion.outputs.reused != 'true'
+        id: attest-normal-completion
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ runner.temp }}/normal-completion/post-release-verification.json
+
+      - name: Publish and verify completed normal publication evidence
+        if: env.NORMAL_TWO_STAGE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          COMPLETION_REUSED: ${{ steps.normal-completion.outputs.reused }}
+          COMPLETION_BUNDLE: ${{ steps.attest-normal-completion.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          receipt="$RUNNER_TEMP/normal-completion/post-release-verification.json"
+          bundle="${receipt}.sigstore.json"
+          if [ "$COMPLETION_REUSED" != true ]; then
+            test -s "$COMPLETION_BUNDLE"
+            cp "$COMPLETION_BUNDLE" "$bundle"
+            identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/collection-publish.yml@refs/heads/main"
+            gh attestation verify "$receipt" --bundle "$bundle" --repo "$GITHUB_REPOSITORY" \
+              --cert-identity "$identity" --source-ref refs/heads/main --source-digest "$RELEASE_SHA"
+            # No clobber or retry: a partial/unknown upload requires actual readback.
+            gh release upload "$RELEASE_TAG" "$receipt" "$bundle" --repo "$GITHUB_REPOSITORY"
+          fi
+          python scripts/normal_release_archive.py --operation completion-verify \
+            --directory "$RUNNER_TEMP/normal-completion-readback" \
+            --repository "$GITHUB_REPOSITORY" --repository-id "$REPOSITORY_ID" --release "$RELEASE_SHA" \
+            --version "$RELEASE_VERSION" --galaxy-required "$GALAXY_REQUIRED"
+          cmp "$receipt" "$RUNNER_TEMP/normal-completion-readback/post-release-verification.json"
+          cmp "$bundle" "$RUNNER_TEMP/normal-completion-readback/post-release-verification.json.sigstore.json"
+
       - name: Mint exact back-sync dispatch App token
         if: >-
           (env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true') &&
@@ -2197,7 +2246,9 @@ jobs:
             -f security_evidence_id="$SECURITY_EVIDENCE_ID"
 
       - name: Attach signed post-publication verification receipt
-        if: env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true'
+        if: >-
+          (env.SECURITY_RELEASE != 'true' || env.GALAXY_REQUIRED != 'true') &&
+          env.NORMAL_TWO_STAGE != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

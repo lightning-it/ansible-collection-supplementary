@@ -403,7 +403,7 @@ def publish_snapshot(root, api, core, repository, repository_id, release, base, 
     return result
 
 
-def published_baseline(root, api, core, repository, repository_id, current_main, *, export_directory=None):
+def _archived_publication(root, api, core, repository, repository_id, current_main, *, export_directory=None):
     """Authenticate inherited schema3 state against an already-published ancestor.
 
     Only this existing annotated-tag/release boundary can enter historical proof;
@@ -488,6 +488,42 @@ def published_baseline(root, api, core, repository, repository_id, current_main,
     require(
         api.call(f"repos/{repository}/git/ref/heads/main")["object"]["sha"] == current_main, "protected-main-tip-drift"
     )
+    return result, published, ref, tag_object
+
+
+def published_baseline(root, api, core, repository, repository_id, current_main):
+    """Baseline advancement requires completed publication, never just pre-publication observations."""
+    result, published, ref, tag_object = _archived_publication(root, api, core, repository, repository_id, current_main)
+    release = result["main_merge"]
+    version = document(root, release)["next_version"]
+    parser = version_module()
+    policy = parser.yaml.load(  # noqa: S506 -- existing duplicate-key-rejecting SafeLoader.
+        git_contract.git_bytes(root, "show", f"{release}:.lit/repository.yml"), Loader=parser.UniqueKeyLoader
+    )
+    require(
+        type(policy) is dict
+        and type(policy.get("publishing_targets")) is list
+        and "github-release" in policy["publishing_targets"]
+        and type(policy.get("galaxy_publish")) is bool,
+        "completion-protected-publication-policy",
+    )
+    galaxy = policy["galaxy_publish"] and "ansible-galaxy" in policy["publishing_targets"]
+    context = archive.completion_context(repository, repository_id, release, version, galaxy)
+    with tempfile.TemporaryDirectory(prefix="normal-completion-") as temporary:
+        archive.verify_completion(published, context, Path(temporary))
+    require(
+        api.call(f"repos/{repository}/git/ref/tags/{context['tag']}") == ref
+        and api.call(f"repos/{repository}/git/tags/{ref['object']['sha']}") == tag_object,
+        "published-baseline-tag-drift",
+    )
+    require(
+        archive.release_state(api.call(f"repos/{repository}/releases/tags/{context['tag']}"))
+        == archive.release_state(published),
+        "published-baseline-release-drift",
+    )
+    require(
+        api.call(f"repos/{repository}/git/ref/heads/main")["object"]["sha"] == current_main, "protected-main-tip-drift"
+    )
     return result
 
 
@@ -506,7 +542,9 @@ def publication_archive(root, api, core, repository, repository_id, release, bas
     if matches:
         # No repair or replacement of a partial/foreign existing pair. Its
         # original signature is retained byte for byte, even after Actions expire.
-        result = published_baseline(root, api, core, repository, repository_id, release, export_directory=directory)
+        result, _published, _ref, _tag = _archived_publication(
+            root, api, core, repository, repository_id, release, export_directory=directory
+        )
         require(result["main_merge"] == release, "publication-existing-release-drift")
         return result | {"archive_reused": True}
     result = publish_snapshot(

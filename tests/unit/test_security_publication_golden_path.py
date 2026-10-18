@@ -533,7 +533,22 @@ clock.write_text(str(int(clock.read_text()) + int(sys.argv[1])))
         self.assertEqual("${{ needs.publish.outputs.request-id }}", receipt["env"]["REQUEST_ID"])
         self.assertEqual("${{ needs.publish.outputs.controller-sha }}", receipt["env"]["CONTROLLER_SHA"])
 
-        deferred_names = self.step_names[self.step_names.index("Finalize immutable release attachments and notes") :]
+        completion_names = [
+            "Prepare completed normal publication evidence",
+            "Attest completed normal publication",
+            "Publish and verify completed normal publication evidence",
+        ]
+        for name in completion_names:
+            self.assertIn("env.NORMAL_TWO_STAGE == 'true'", self.steps[name]["if"])
+            self.assertNotIn(name, self.finalize_names)
+        self.assertIn(
+            "env.NORMAL_TWO_STAGE != 'true'", self.steps["Attach signed post-publication verification receipt"]["if"]
+        )
+        deferred_names = [
+            name
+            for name in self.step_names[self.step_names.index("Finalize immutable release attachments and notes") :]
+            if name not in completion_names
+        ]
         final_names = self.finalize_names[
             self.finalize_names.index("Finalize immutable release attachments and notes") :
         ]
