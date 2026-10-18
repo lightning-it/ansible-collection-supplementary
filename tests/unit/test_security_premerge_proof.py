@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -79,6 +80,7 @@ class SecurityPremergeProofTests(unittest.TestCase):
             "number": 111,
             "state": "open",
             "draft": True,
+            "auto_merge": None,
             "body": EMIT.locator(kind, 222, 1),
             "user": actor,
             "base": {"ref": "main", "sha": self.source, "repo": {"full_name": EMIT.C.PRODUCER_REPOSITORY}},
@@ -190,6 +192,8 @@ class SecurityPremergeProofTests(unittest.TestCase):
             ("fork", lambda p, r, j, e: p["head"]["repo"].__setitem__("full_name", "other/repo")),
             ("duplicate-locator", lambda p, r, j, e: p.__setitem__("body", p["body"] * 2)),
             ("ready-old-head", lambda p, r, j, e: p.__setitem__("draft", False)),
+            ("auto-merge-enabled", lambda p, r, j, e: p.__setitem__("auto_merge", {"merge_method": "merge"})),
+            ("auto-merge-unknown", lambda p, r, j, e: p.pop("auto_merge")),
             ("run-source", lambda p, r, j, e: r.__setitem__("head_sha", "a" * 40)),
             ("attempt", lambda p, r, j, e: e.__setitem__("GITHUB_RUN_ATTEMPT", "2")),
             ("actor", lambda p, r, j, e: e.__setitem__("GITHUB_ACTOR", "litroc")),
@@ -249,49 +253,139 @@ class SecurityPremergeProofTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "unknown-security-profile"):
                         EMIT.route(self.root, source)
 
-    def test_real_finalization_step_withdraws_only_legacy_dispatch(self):
-        workflow = yaml.safe_load((ROOT / ".github/workflows/release-prepare.yml").read_text())
-        step = next(
-            step
-            for step in workflow["jobs"]["prepare"]["steps"]
-            if step["name"] == "Finalize Security readiness after native data upload"
-        )
-        pull, _, _, _ = self.context("preparation")
-        pull["draft"] = False
+    def readiness(self, kind, route, *, defect=None, after_ready=False, existing_ready=False):
+        workflow_name, job, start = {
+            "intake": (
+                "security-release-intake.yml",
+                "materialize",
+                "Ready fresh Security PR after native data upload",
+            ),
+            "preparation": ("release-prepare.yml", "prepare", "Finalize Security readiness after native data upload"),
+        }[kind]
+        steps = yaml.safe_load((ROOT / ".github/workflows" / workflow_name).read_text())["jobs"][job]["steps"]
+        start_index = next(i for i, step in enumerate(steps) if step["name"] == start)
+        pull, _, _, _ = self.context(kind)
+        if existing_ready:
+            pull["draft"] = False
         path = self.root / "native-pull.json"
         path.write_text(json.dumps(pull))
+        changed = copy.deepcopy(pull)
+        if defect == "auto":
+            changed["auto_merge"] = {"merge_method": "merge"}
+        elif defect == "missing-auto":
+            changed.pop("auto_merge")
+        elif defect == "base":
+            changed["base"]["sha"] = "a" * 40
+        elif defect == "head":
+            changed["head"]["sha"] = "b" * 40
+        elif defect == "branch":
+            changed["head"]["ref"] = "release/vwrong"
+        elif defect == "owner":
+            changed["user"]["id"] = 1
+        if not after_ready:
+            path.write_text(json.dumps(changed))
+        changed["draft"] = False
+        readback = self.root / "readback-pull.json"
+        readback.write_text(json.dumps(changed))
+        calls = self.root / "native-calls"
+        calls.write_text("")
         executable = shutil.which("bash")
         assert executable
         stub = r"""gh() {
           printf '%s\n' "$*" >>"$NATIVE_CALLS"
-          if [ "$1" = api ]; then cat "$PULL_FILE"; fi
+          if [ "$1" = api ]; then cat "$PULL_FILE";
+          elif [ "$1 $2" = 'pr ready' ]; then cp "$READBACK_FILE" "$PULL_FILE";
+          elif [ "$1 $2" = 'pr merge' ]; then
+            jq '.auto_merge={merge_method:"merge",enabled_by:.user}' "$PULL_FILE" >"$PULL_FILE.next"
+            mv "$PULL_FILE.next" "$PULL_FILE"
+          fi
+        }
+        git() {
+          case "$*" in *'rev-parse origin/main') printf '%s\n' "$BASE_SHA" ;; esac
         }
         """
-        for route in ("legacy", "producer-only"):
-            with self.subTest(route=route):
-                calls = self.root / f"{route}-native-calls"
-                result = subprocess.run(  # noqa: S603 -- actual protected shell, read/write-free native stub.
-                    [executable, "-c", stub + step["run"]],
-                    cwd=self.root,
-                    env={
-                        **os.environ,
-                        "REVIEW_ROUTE": route,
-                        "GITHUB_ACTOR": EMIT.APP[0],
-                        "GITHUB_REPOSITORY": EMIT.C.PRODUCER_REPOSITORY,
-                        "GITHUB_SHA": self.source,
-                        "HEAD_SHA": self.head,
-                        "PR_NUMBER": "111",
-                        "PULL_FILE": str(path),
-                        "NATIVE_CALLS": str(calls),
-                    },
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                )
-                self.assertEqual(0, result.returncode, result.stderr)
-                operations = calls.read_text().splitlines()
-                dispatches = [item for item in operations if item.startswith("workflow run ")]
-                self.assertEqual(1 if route == "legacy" else 0, len(dispatches))
+        outputs = {
+            "steps.pull.outputs.emit_premerge": "false" if existing_ready else "true",
+            "steps.security-route.outputs.mode": route,
+            "needs.security-classification.outputs.security-release": "true",
+        }
+        results = []
+        for step in steps[start_index:]:
+            condition = re.fullmatch(r"([\w.-]+) == '([^']+)'", step["if"])
+            self.assertIsNotNone(condition, "The harness must understand every actual readiness condition")
+            if outputs[condition[1]] != condition[2]:
+                continue
+            result = subprocess.run(  # noqa: S603 -- actual protected shell, isolated native stubs.
+                [executable, "-c", stub + step["run"]],
+                cwd=self.root,
+                env={
+                    **os.environ,
+                    "REVIEW_ROUTE": route,
+                    "GITHUB_ACTOR": EMIT.APP[0],
+                    "GITHUB_REPOSITORY": EMIT.C.PRODUCER_REPOSITORY,
+                    "GITHUB_SHA": self.source,
+                    "BASE_SHA": self.source,
+                    "HEAD_SHA": self.head,
+                    "HEAD_REF": pull["head"]["ref"],
+                    "PR_NUMBER": "111",
+                    "PR_URL": "https://github.com/lightning-it/ansible-collection-supplementary/pull/111",
+                    "REQUEST_EVENT": "mlx90-security-release",
+                    "SECURITY_VERSION": FIXTURE.VERSION,
+                    "APP_TOKEN": "fixture-only",
+                    "PULL_FILE": str(path),
+                    "READBACK_FILE": str(readback),
+                    "NATIVE_CALLS": str(calls),
+                },
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            results.append(result)
+            if result.returncode:
+                break
+        return results, calls.read_text().splitlines(), json.loads(path.read_text())
+
+    def test_actual_readiness_paths_keep_legacy_review_and_merge_but_producer_only_has_neither(self):
+        for kind in ("intake", "preparation"):
+            for route in ("legacy", "producer-only"):
+                with self.subTest(kind=kind, route=route):
+                    results, operations, pull = self.readiness(kind, route)
+                    self.assertTrue(results)
+                    for result in results:
+                        self.assertEqual(0, result.returncode, result.stderr)
+                    self.assertFalse(pull["draft"])
+                    self.assertEqual(1, sum(item.startswith("pr ready ") for item in operations))
+                    self.assertEqual(
+                        1 if route == "legacy" and kind == "preparation" else 0,
+                        sum(item.startswith("workflow run release-bot-exact-head-review.yml ") for item in operations),
+                    )
+                    self.assertEqual(
+                        1 if route == "legacy" else 0, sum("--auto --merge" in item for item in operations)
+                    )
+                    if route == "producer-only":
+                        self.assertIsNone(pull["auto_merge"])
+
+    def test_actual_producer_readiness_rejects_auto_merge_and_subject_drift_before_and_after_ready(self):
+        for kind in ("intake", "preparation"):
+            for defect in ("auto", "missing-auto", "base", "head", "branch", "owner"):
+                for after_ready in (False, True):
+                    with self.subTest(kind=kind, defect=defect, after_ready=after_ready):
+                        results, operations, _ = self.readiness(
+                            kind, "producer-only", defect=defect, after_ready=after_ready
+                        )
+                        self.assertNotEqual(0, results[-1].returncode)
+                        self.assertFalse(any(item.startswith(("workflow run ", "pr merge ")) for item in operations))
+                        self.assertEqual(int(after_ready), sum(item.startswith("pr ready ") for item in operations))
+
+    def test_actual_existing_ready_legacy_heads_still_request_auto_merge(self):
+        for kind in ("intake", "preparation"):
+            with self.subTest(kind=kind):
+                results, operations, _ = self.readiness(kind, "legacy", existing_ready=True)
+                self.assertTrue(results)
+                for result in results:
+                    self.assertEqual(0, result.returncode, result.stderr)
+                self.assertFalse(any(item.startswith("pr ready ") for item in operations))
                 self.assertEqual(1, sum("--auto --merge" in item for item in operations))
 
     def test_preparation_duplicate_or_false_material_digest_is_rejected(self):

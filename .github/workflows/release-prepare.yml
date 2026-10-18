@@ -855,10 +855,24 @@ jobs:
           PR_NUMBER: ${{ steps.prepare-release.outputs.number }}
           HEAD_SHA: ${{ steps.prepare-release.outputs.head_sha }}
           REVIEW_ROUTE: ${{ steps.security-route.outputs.mode }}
+          SECURITY_VERSION: ${{ needs.security-classification.outputs.security-version }}
         run: |
           set -euo pipefail
           test "$GITHUB_ACTOR" = 'lightning-it-release-automation[bot]'
           pull="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+          if [ "$REVIEW_ROUTE" = producer-only ]; then
+            jq -e --arg repo "$GITHUB_REPOSITORY" --arg base "$GITHUB_SHA" \
+              --arg head "$HEAD_SHA" --arg ref "release/v${SECURITY_VERSION}" '
+              .state == "open" and .draft == true
+              and .base.ref == "main" and .base.sha == $base and .base.repo.full_name == $repo
+              and .head.sha == $head and .head.ref == $ref and .head.repo.full_name == $repo
+              and .user.login == "lightning-it-release-automation[bot]"
+              and .user.id == 307565056 and .user.type == "Bot"
+              and has("auto_merge") and .auto_merge == null
+            ' <<<"$pull" >/dev/null
+          else
+            test "$REVIEW_ROUTE" = legacy
+          fi
           if [ "$(jq -er .draft <<<"$pull")" = true ]; then
             gh pr ready "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
           fi
@@ -874,9 +888,13 @@ jobs:
               -f bounded_mode=single --repo "$GITHUB_REPOSITORY" --ref main \
               -f "pr_number=$PR_NUMBER" -f base_ref=main \
               -f "expected_base=$GITHUB_SHA" -f "expected_head=$HEAD_SHA"
+            gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --auto --merge --match-head-commit "$HEAD_SHA"
           else
             test "$REVIEW_ROUTE" = producer-only
-            echo 'Native producer data is complete; Common admission and review remain independently required.'
+            jq -e --arg repo "$GITHUB_REPOSITORY" --arg ref "release/v${SECURITY_VERSION}" '
+              .base.repo.full_name == $repo and .head.ref == $ref
+              and has("auto_merge") and .auto_merge == null
+            ' <<<"$pull" >/dev/null
+            echo 'Native producer data is complete; PR remains open without auto-merge.'
           fi
-          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
-            --auto --merge --match-head-commit "$HEAD_SHA"

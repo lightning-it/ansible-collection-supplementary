@@ -195,6 +195,8 @@ def emit(root, kind, source, pull, run, jobs, env, *, checked_at=None):
     require(
         pull.get("state") == "open"
         and pull.get("draft") is True
+        and "auto_merge" in pull
+        and pull["auto_merge"] is None
         and type(pull.get("number")) is int
         and pull["number"] > 0,
         "fresh-draft-producer-pull-required",

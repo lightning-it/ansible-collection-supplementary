@@ -816,11 +816,38 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
           PR_NUMBER: ${{ steps.pull.outputs.number }}
+          BASE_SHA: ${{ needs.classify.outputs.base-sha }}
+          HEAD_SHA: ${{ steps.branch.outputs.head_sha }}
+          HEAD_REF: ${{ steps.final.outputs.branch }}
+          REVIEW_ROUTE: ${{ steps.security-route.outputs.mode }}
         run: |
           set -euo pipefail
+          verify_producer_pull() {
+            gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" |
+              jq -e --arg repo "$GITHUB_REPOSITORY" --arg base "$BASE_SHA" \
+                --arg head "$HEAD_SHA" --arg ref "$HEAD_REF" --argjson draft "$1" '
+                .state == "open" and .draft == $draft
+                and .base.ref == "main" and .base.sha == $base
+                and .base.repo.full_name == $repo and .head.repo.full_name == $repo
+                and .head.sha == $head and .head.ref == $ref
+                and .user.login == "lightning-it-release-automation[bot]"
+                and .user.id == 307565056 and .user.type == "Bot"
+                and has("auto_merge") and .auto_merge == null
+              ' >/dev/null
+          }
+          if [ "$REVIEW_ROUTE" = producer-only ]; then
+            verify_producer_pull true
+          else
+            test "$REVIEW_ROUTE" = legacy
+          fi
           gh pr ready "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
+          if [ "$REVIEW_ROUTE" = producer-only ]; then
+            verify_producer_pull false
+            echo 'Native producer data is complete; PR remains open without auto-merge.'
+          fi
 
       - name: Enable and prove native MERGE auto-merge for exact current head
+        if: steps.security-route.outputs.mode == 'legacy'
         env:
           APP_TOKEN: ${{ steps.release-app.outputs.token }}
           BASE_SHA: ${{ needs.classify.outputs.base-sha }}
