@@ -66,3 +66,10 @@ MIT
 ## Author
 
 Lightning IT
+
+`nginx_deploy_host_network: true` permits a host-network Pod only with empty port bindings and empty attached networks. It requires `nginx_deploy_manage_default_site: false` and caller-managed NGINX server configuration with explicit listen addresses; the role-managed wildcard default site is refused in host-network mode. The default remains false with the existing port publication contract.
+
+Before switching an existing deployment to host networking, review and retire its
+previous default-site file. The role refuses both the configured default path and
+`conf.d/default.conf` (including linked files) before deployment, in apply and check
+mode. It never implicitly deletes caller-owned configuration.

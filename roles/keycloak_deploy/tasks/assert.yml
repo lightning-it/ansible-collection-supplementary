@@ -190,6 +190,18 @@
       - keycloak_deploy_generated_db_password_length | int >= 16
       - keycloak_deploy_generated_admin_password_length | int >= 16
       - keycloak_deploy_env_extra is mapping
+      - keycloak_deploy_trust_ca_certificate is string
+      - keycloak_deploy_trust_ca_sha256 is string
+      - >-
+        keycloak_deploy_trust_ca_certificate | length == 0 or (
+          keycloak_deploy_trust_ca_certificate is search('-----BEGIN CERTIFICATE-----')
+          and keycloak_deploy_trust_ca_certificate | regex_findall('-----BEGIN CERTIFICATE-----') | length == 1
+          and keycloak_deploy_trust_ca_certificate | regex_findall('-----END CERTIFICATE-----') | length == 1
+          and keycloak_deploy_trust_ca_certificate is search('-----END CERTIFICATE-----')
+          and 'PRIVATE KEY' not in keycloak_deploy_trust_ca_certificate
+          and keycloak_deploy_trust_ca_sha256 is match('^(?:[a-f0-9]{2}:){31}[a-f0-9]{2}$')
+          and 'KC_TRUSTSTORE_PATHS' not in keycloak_deploy_env_extra
+        )
       - >-
         keycloak_deploy_env_extra.keys()
         | select(

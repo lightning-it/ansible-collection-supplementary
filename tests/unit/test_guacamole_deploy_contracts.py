@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import http.server
 import os
 import shutil
@@ -34,6 +35,29 @@ class _HealthyHandler(http.server.BaseHTTPRequestHandler):
 
 
 class GuacamoleDeployContractTests(unittest.TestCase):
+    def test_schema_init_directory_is_writable_by_pinned_image_user(self) -> None:
+        tasks = yaml.safe_load(TASKS.read_text(encoding="utf-8"))
+        task = next(item for item in tasks if item["name"] == "Create Guacamole persistent directories")
+        directory = next(item for item in task["loop"] if item["path"].endswith("/postgres-init"))
+        self.assertEqual((directory["owner"], directory["group"], directory["mode"]), ("1001", "1001", "0755"))
+
+    def test_rollback_does_not_stop_removed_failed_unit(self) -> None:
+        tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
+        transaction = next(
+            item for item in tasks if item["name"] == "Cut over to native Guacamole Quadlet with rollback"
+        )
+        quiescence = next(
+            item
+            for item in transaction["rescue"]
+            if item["name"] == "Prove failed native Guacamole quiescence before file restoration"
+        )
+        stop = next(
+            item
+            for item in quiescence["block"]
+            if item["name"] == "Stop the exact failed native Guacamole unit before file restoration"
+        )
+        self.assertIn("== 'active'", stop["when"])
+
     def test_connection_contract_validation_redacts_inventory_credentials(self) -> None:
         asserts = ASSERTS.read_text(encoding="utf-8")
         connection_contract = asserts.split("- name: Validate declared Guacamole connection contracts", 1)[1]
@@ -88,7 +112,9 @@ class GuacamoleDeployContractTests(unittest.TestCase):
 
     def test_quadlet_interface_rejects_type_path_and_directive_injection(self) -> None:
         tasks = yaml.safe_load(ASSERTS.read_text(encoding="utf-8"))
-        contract = "\n".join(tasks[0]["ansible.builtin.assert"]["that"])
+        contract = "\n".join(
+            clause for task in tasks for clause in task.get("ansible.builtin.assert", {}).get("that", [])
+        )
 
         for value in (
             "guacamole_deploy_systemd_unit_name",
@@ -163,7 +189,7 @@ class GuacamoleDeployContractTests(unittest.TestCase):
                     ),
                     encoding="utf-8",
                 )
-                result = subprocess.run(  # noqa: S603
+                result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                     [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                     env={
                         **os.environ,
@@ -742,7 +768,7 @@ esac
                 "PATH": f"{fake_bin}:{os.environ['PATH']}",
             }
             legacy_unit.chmod(0o666)
-            insecure_result = subprocess.run(  # noqa: S603
+            insecure_result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                 [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                 env=environment,
                 capture_output=True,
@@ -758,7 +784,7 @@ esac
             legacy_unit.chmod(0o644)
             log.unlink(missing_ok=True)
             try:
-                result = subprocess.run(  # noqa: S603
+                result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                     [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                     env=environment,
                     capture_output=True,
@@ -829,7 +855,7 @@ esac
             (state / f"{native_state}.enabled").write_text("generated", encoding="utf-8")
             log.unlink(missing_ok=True)
 
-            restore_failure_result = subprocess.run(  # noqa: S603
+            restore_failure_result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                 [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                 env=environment,
                 capture_output=True,
@@ -905,7 +931,7 @@ esac
                     ),
                     encoding="utf-8",
                 )
-                result = subprocess.run(  # noqa: S603
+                result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                     [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                     env={
                         **os.environ,
@@ -966,7 +992,7 @@ esac
                 f"[defaults]\nremote_tmp={temporary_path / 'remote'}\n",
                 encoding="utf-8",
             )
-            result = subprocess.run(  # noqa: S603
+            result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                 [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                 env={
                     **os.environ,
@@ -995,6 +1021,75 @@ esac
         self.assertIn("guacamole_deploy_native_systemd_active.stdout | trim != 'failed'", contract)
         self.assertIn("guacamole_deploy_systemd_scope == 'system'", ASSERTS.read_text(encoding="utf-8"))
         self.assertIn("guacamole_deploy_quadlet_dir == '/etc/containers/systemd'", ASSERTS.read_text(encoding="utf-8"))
+
+    def test_stale_failed_unit_reset_requires_absent_runtime_and_loaded_unit(self) -> None:
+        tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
+        task_map = {task["name"]: task for task in tasks}
+        reset = task_map["Reset only an absent failed Guacamole unit left by an earlier rollback"]
+        self.assertEqual(
+            reset["ansible.builtin.command"]["argv"][:2],
+            ["systemctl", "reset-failed"],
+        )
+        contract = "\n".join(reset["when"])
+        for required in (
+            "guacamole_deploy_native_systemd_active.stdout | trim == 'failed'",
+            "guacamole_deploy_native_load_state.stdout | trim == 'not-found'",
+            "guacamole_deploy_native_systemd_enabled.stdout | trim == 'not-found'",
+            "guacamole_deploy_native_fragment_path.stdout | trim == ''",
+            "guacamole_deploy_native_drop_in_paths.stdout | trim == ''",
+            "not (guacamole_deploy_native_quadlet_before_recovery.stat.exists",
+            "guacamole_deploy_pod_before_recovery.rc == 1",
+        ):
+            self.assertIn(required, contract)
+        self.assertIn(
+            "guacamole_deploy_native_systemd_active.stdout | trim != 'failed'",
+            "\n".join(task_map["Refuse unknown Guacamole lifecycle states"]["ansible.builtin.assert"]["that"]),
+        )
+
+    def test_breakglass_hash_uses_exact_bytes_without_ansible_newline(self) -> None:
+        tasks = yaml.safe_load(TASKS.read_text(encoding="utf-8"))
+        command = next(
+            task["ansible.builtin.command"]
+            for task in tasks
+            if task["name"] == "Derive the Guacamole break-glass password hash"
+        )
+        executable = shutil.which("ansible-playbook")
+        self.assertIsNotNone(executable, "Pinned Devtools Ansible is required")
+        with tempfile.TemporaryDirectory(prefix="guacamole-exact-hash-") as temporary:
+            work = Path(temporary)
+            playbook = work / "hash.yml"
+            playbook.write_text(
+                yaml.safe_dump(
+                    [
+                        {
+                            "hosts": "localhost",
+                            "gather_facts": False,
+                            "vars": {
+                                "guacamole_deploy_secrets": {
+                                    "breakglass_password": "fixture-password",
+                                    "breakglass_salt": "fixture-salt",
+                                }
+                            },
+                            "tasks": [
+                                {"ansible.builtin.command": command, "register": "digest"},
+                                {"ansible.builtin.debug": {"var": "digest.stdout"}},
+                            ],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture
+                [executable, "-i", "localhost,", "-c", "local", str(playbook)],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+                env={**os.environ, "ANSIBLE_LOCAL_TEMP": str(work / "ansible")},
+            )
+        expected = hashlib.sha256(b"fixture-password" + b"fixture-salt".hex().upper().encode("ascii")).hexdigest()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(expected, result.stdout)
 
     def test_clean_first_install_accepts_inactive_not_found_legacy_unit(self) -> None:
         tasks = yaml.safe_load(SYSTEMD_TASKS.read_text(encoding="utf-8"))
@@ -1033,7 +1128,7 @@ esac
             )
             config = temporary_path / "ansible.cfg"
             config.write_text("[defaults]\nstdout_callback=default\n", encoding="utf-8")
-            result = subprocess.run(  # noqa: S603
+            result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                 [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                 env={
                     **os.environ,
@@ -1118,7 +1213,7 @@ esac
             )
             config = temporary_path / "ansible.cfg"
             config.write_text("[defaults]\nstdout_callback=default\n", encoding="utf-8")
-            result = subprocess.run(  # noqa: S603
+            result = subprocess.run(  # noqa: S603 - execute only the controlled local Ansible fixture  # noqa: S603
                 [executable, "-i", "localhost,", "-c", "local", str(playbook)],
                 env={
                     **os.environ,

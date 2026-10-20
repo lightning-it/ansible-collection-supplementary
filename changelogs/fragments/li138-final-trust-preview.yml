@@ -1,0 +1,13 @@
+---
+bugfixes:
+  - >-
+    keycloak_deploy binds the pinned issuer CA digest into the manifest so CA rotations
+    restart the generated JVM truststore.
+  - >-
+    vault_secret_bundle checks existing SSH keypairs in RAM and previews missing pairs
+    without plaintext files or generation in check mode.
+minor_changes:
+  - vault_secret_bundle - support persisted SSH keypairs with correspondence verification.
+  - keycloak_cac - add opt-in bounded default-role cleanup with a reusable reconciliation module.
+  - hetzner_object_storage - provide reusable S3 freshness and owned abort-lifecycle reconciliation modules.
+  - vault_connection_credentials - resolve exact declared username and tier credentials from Vault.

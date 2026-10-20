@@ -1,0 +1,3 @@
+---
+minor_changes:
+  - nginx_deploy supports explicit host-network Quadlets without conflicting port publications or attached bridges.

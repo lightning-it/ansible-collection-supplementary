@@ -1,0 +1,305 @@
+---
+# Runs only inside the scenario-owned Keycloak instance, never a configured live realm.
+- name: Initialize independent default-role cleanup observations
+  ansible.builtin.set_fact:
+    keycloak_cleanup_probe_realm: >-
+      molecule-cleanup-{{ lookup('ansible.builtin.password', '/dev/null',
+                                length=12, chars=['ascii_lowercase', 'digits']) }}
+    keycloak_cleanup_probe_created: false
+    keycloak_cleanup_probe_checks:
+      default_off: false
+      check_mode: false
+      refusal: false
+      apply_and_readback: false
+      idempotence: false
+      definitions_preserved: false
+      isolated_cleanup: false
+
+- name: Exercise the real optional cleanup role against a disposable realm
+  vars:
+    keycloak_cac_url: "{{ keycloak_cleanup_probe_url }}"
+    keycloak_cac_realm: master
+    keycloak_cac_admin_user: admin
+    keycloak_cac_admin_password: "{{ keycloak_cleanup_probe_password }}"
+    keycloak_cac_default_role_cleanup:
+      - realm: "{{ keycloak_cleanup_probe_realm }}"
+        require_empty_realm: true
+        allowed_removals:
+          - {name: offline_access}
+          - {name: uma_authorization}
+          - {name: manage-account, client_id: account}
+          - {name: manage-account-links, client_id: account}
+          - {name: view-profile, client_id: account}
+    keycloak_cleanup_probe_headers:
+      Authorization: "Bearer {{ keycloak_cleanup_probe_token.json.access_token }}"
+    keycloak_cleanup_probe_prefix: >-
+      {{ keycloak_cleanup_probe_url }}/admin/realms/{{ keycloak_cleanup_probe_realm }}
+    keycloak_cleanup_probe_composites_url: >-
+      {{ keycloak_cleanup_probe_prefix }}/roles/default-roles-{{ keycloak_cleanup_probe_realm }}/composites
+  block:
+    - name: Authenticate the existing scenario administrator
+      ansible.builtin.uri:
+        url: "{{ keycloak_cleanup_probe_url }}/realms/master/protocol/openid-connect/token"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: admin-cli
+          username: admin
+          password: "{{ keycloak_cleanup_probe_password }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_cleanup_probe_token
+      changed_when: false
+      no_log: true
+
+    - name: Require the uniquely owned test realm to be absent
+      ansible.builtin.uri:
+        url: "{{ keycloak_cleanup_probe_prefix }}"
+        headers: "{{ keycloak_cleanup_probe_headers }}"
+        status_code: 404
+      changed_when: false
+      no_log: true
+
+    - name: Create the isolated realm with real stock default composites
+      ansible.builtin.uri:
+        url: "{{ keycloak_cleanup_probe_url }}/admin/realms"
+        headers: "{{ keycloak_cleanup_probe_headers }}"
+        method: POST
+        body_format: json
+        body:
+          realm: "{{ keycloak_cleanup_probe_realm }}"
+          enabled: true
+        status_code: 201
+      no_log: true
+
+    - name: Mark successful creation as cleanup authority
+      ansible.builtin.set_fact:
+        keycloak_cleanup_probe_created: true
+
+    - name: Observe the actual initial composite set
+      ansible.builtin.uri:
+        url: "{{ keycloak_cleanup_probe_composites_url }}"
+        headers: "{{ keycloak_cleanup_probe_headers }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_cleanup_probe_initial
+      changed_when: false
+      no_log: true
+
+    - name: Exercise the cleanup catalog without enabling deletion
+      ansible.builtin.include_role:
+        name: lit.supplementary.keycloak_cac
+        tasks_from: cac_22_default_role_cleanup.yml
+      vars:
+        keycloak_cac_default_role_cleanup_enabled: false
+
+    - name: Observe unchanged defaults after the default-off role
+      ansible.builtin.uri:
+        url: "{{ keycloak_cleanup_probe_composites_url }}"
+        headers: "{{ keycloak_cleanup_probe_headers }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_cleanup_probe_disabled
+      changed_when: false
+      no_log: true
+
+    - name: Preview cleanup through the real role in check mode
+      ansible.builtin.include_role:
+        name: lit.supplementary.keycloak_cac
+        tasks_from: cac_22_default_role_cleanup.yml
+        apply:
+          check_mode: true
+      vars:
+        keycloak_cac_default_role_cleanup_enabled: true
+
+    - name: Capture the module-reported preview drift
+      ansible.builtin.set_fact:
+        keycloak_cleanup_probe_preview: "{{ keycloak_cac_default_cleanup_reconciliation }}"
+      no_log: true
+
+    - name: Observe unchanged defaults after the check-mode preview
+      ansible.builtin.uri:
+        url: "{{ keycloak_cleanup_probe_composites_url }}"
+        headers: "{{ keycloak_cleanup_probe_headers }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_cleanup_probe_checked
+      changed_when: false
+      no_log: true
+
+    - name: Require refusal of a genuinely incomplete allowlist
+      block:
+        - name: Attempt removal while actual composites are not allowlisted
+          ansible.builtin.include_role:
+            name: lit.supplementary.keycloak_cac
+            tasks_from: cac_22_default_role_cleanup.yml
+          vars:
+            keycloak_cac_default_role_cleanup_enabled: true
+            keycloak_cac_default_role_cleanup:
+              - realm: "{{ keycloak_cleanup_probe_realm }}"
+                require_empty_realm: true
+                allowed_removals:
+                  - {name: offline_access}
+      rescue:
+        - name: Record the expected module refusal without exposing authentication
+          ansible.builtin.set_fact:
+            keycloak_cleanup_probe_refused: >-
+              {{ (ansible_failed_result.results | default([]) | map(attribute='msg') | list)
+                 == ['Keycloak default role contains a non-allowlisted composite'] }}
+          no_log: true
+
+    - name: Observe that refusal did not remove any composite
+      ansible.builtin.uri:
+        url: "{{ keycloak_cleanup_probe_composites_url }}"
+        headers: "{{ keycloak_cleanup_probe_headers }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_cleanup_probe_denied
+      changed_when: false
+      no_log: true
+
+    - name: Remove exactly the observed allowlisted children through the real role
+      ansible.builtin.include_role:
+        name: lit.supplementary.keycloak_cac
+        tasks_from: cac_22_default_role_cleanup.yml
+      vars:
+        keycloak_cac_default_role_cleanup_enabled: true
+
+    - name: Capture actual first-pass removal results
+      ansible.builtin.set_fact:
+        keycloak_cleanup_probe_applied: "{{ keycloak_cac_default_cleanup_reconciliation }}"
+      no_log: true
+
+    - name: Reapply the same cleanup without desired-state drift
+      ansible.builtin.include_role:
+        name: lit.supplementary.keycloak_cac
+        tasks_from: cac_22_default_role_cleanup.yml
+      vars:
+        keycloak_cac_default_role_cleanup_enabled: true
+
+    - name: Independently read the empty effective default role
+      ansible.builtin.uri:
+        url: "{{ keycloak_cleanup_probe_composites_url }}"
+        headers: "{{ keycloak_cleanup_probe_headers }}"
+        status_code: 200
+        return_content: true
+      register: keycloak_cleanup_probe_final
+      changed_when: false
+      no_log: true
+
+    - name: Independently read each preserved role definition
+      ansible.builtin.uri:
+        url: "{{ keycloak_cleanup_probe_prefix }}/roles-by-id/{{ item.id }}"
+        headers: "{{ keycloak_cleanup_probe_headers }}"
+        status_code: 200
+        return_content: true
+      loop: "{{ keycloak_cleanup_probe_initial.json }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: keycloak_cleanup_probe_definitions
+      changed_when: false
+      no_log: true
+
+    - name: Derive checks from actual API and role observations
+      ansible.builtin.set_fact:
+        keycloak_cleanup_probe_checks:
+          default_off: >-
+            {{ keycloak_cleanup_probe_initial.json | length >= 3 and
+               keycloak_cleanup_probe_initial.json | length <= 5 and
+               keycloak_cleanup_probe_disabled.json | sort(attribute='id') ==
+               keycloak_cleanup_probe_initial.json | sort(attribute='id') }}
+          check_mode: >-
+            {{ keycloak_cleanup_probe_preview.changed | bool and
+               keycloak_cleanup_probe_preview.results[0].removed | length ==
+               keycloak_cleanup_probe_initial.json | length and
+               keycloak_cleanup_probe_checked.json | sort(attribute='id') ==
+               keycloak_cleanup_probe_initial.json | sort(attribute='id') }}
+          refusal: >-
+            {{ keycloak_cleanup_probe_refused | default(false) | bool and
+               keycloak_cleanup_probe_denied.json | sort(attribute='id') ==
+               keycloak_cleanup_probe_initial.json | sort(attribute='id') }}
+          apply_and_readback: >-
+            {{ keycloak_cleanup_probe_applied.changed | bool and
+               keycloak_cleanup_probe_applied.results[0].removed | length ==
+               keycloak_cleanup_probe_initial.json | length and
+               keycloak_cleanup_probe_final.json == [] }}
+          idempotence: >-
+            {{ not keycloak_cac_default_cleanup_reconciliation.changed | bool and
+               keycloak_cac_default_cleanup_reconciliation.results[0].removed == [] }}
+          definitions_preserved: >-
+            {{ keycloak_cleanup_probe_definitions.results | length ==
+               keycloak_cleanup_probe_initial.json | length and
+               keycloak_cleanup_probe_definitions.results | map(attribute='status') | unique | list == [200] }}
+          isolated_cleanup: false
+      no_log: true
+  always:
+    - name: Delete only the realm successfully created by this test
+      ansible.builtin.uri:
+        url: "{{ keycloak_cleanup_probe_prefix }}"
+        headers: "{{ keycloak_cleanup_probe_headers }}"
+        method: DELETE
+        status_code: 204
+      when: keycloak_cleanup_probe_created | bool
+      no_log: true
+
+    - name: Independently verify disposable realm removal
+      ansible.builtin.uri:
+        url: "{{ keycloak_cleanup_probe_prefix }}"
+        headers: "{{ keycloak_cleanup_probe_headers }}"
+        status_code: 404
+      register: keycloak_cleanup_probe_deleted
+      when: keycloak_cleanup_probe_created | bool
+      changed_when: false
+      no_log: true
+
+    - name: Record actual cleanup and discard secret-bearing module results
+      ansible.builtin.set_fact:
+        keycloak_cleanup_probe_checks: >-
+          {{ keycloak_cleanup_probe_checks | combine({
+              'isolated_cleanup': keycloak_cleanup_probe_deleted.status | default(0) == 404}) }}
+        keycloak_cleanup_probe_token: {}
+        keycloak_cac_default_cleanup_reconciliation: {}
+        keycloak_cleanup_probe_preview: {}
+        keycloak_cleanup_probe_applied: {}
+      no_log: true
+
+    - name: Create the independent cleanup report directory
+      ansible.builtin.file:
+        path: "{{ keycloak_cleanup_probe_junit_dir }}"
+        state: directory
+        mode: "0750"
+      delegate_to: localhost
+      become: false
+
+    - name: Write observed cleanup JUnit results on success or failure
+      delegate_to: localhost
+      become: false
+      ansible.builtin.copy:
+        dest: "{{ keycloak_cleanup_probe_junit_dir }}/{{ keycloak_cleanup_probe_scenario }}-default-cleanup.xml"
+        mode: "0640"
+        content: |-
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuite name="{{ keycloak_cleanup_probe_scenario }}-default-cleanup" tests="7"
+            failures="{{ 7 - (keycloak_cleanup_probe_checks.values() | select('equalto', true) | list | length) }}"
+            errors="0" skipped="0">
+            <properties>
+              <property name="role" value="keycloak_cac"/>
+              <property name="scenario" value="{{ keycloak_cleanup_probe_scenario }}"/>
+              <property name="commit_sha" value="{{ lookup('env', 'QUALITY_SOURCE_SHA')
+                | default(lookup('env', 'GITHUB_SHA'), true) | default('unknown', true) }}"/>
+            </properties>
+          {% for check, passed in keycloak_cleanup_probe_checks.items() %}
+            <testcase classname="keycloak.default-cleanup" name="{{ check }}" role="keycloak_cac">
+          {% if not passed %}
+              <failure type="CleanupContract" message="independent {{ check }} observation failed"/>
+          {% endif %}
+            </testcase>
+          {% endfor %}
+          </testsuite>
+
+- name: Require every independently observed cleanup contract
+  ansible.builtin.assert:
+    that:
+      - keycloak_cleanup_probe_checks.values() | select('equalto', false) | list | length == 0
+    fail_msg: "Real Keycloak default-role cleanup acceptance failed; see its independent JUnit report."

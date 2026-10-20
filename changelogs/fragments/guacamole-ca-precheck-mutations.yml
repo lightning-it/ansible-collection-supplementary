@@ -1,0 +1,5 @@
+---
+bugfixes:
+  - >-
+    guacamole_deploy - Validate both pinned public CAs for fingerprint, CA constraints and current validity
+    before installing packages or creating persistent directories.

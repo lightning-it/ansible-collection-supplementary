@@ -1,0 +1,24 @@
+---
+- name: Inspect the supplied Guacamole public CA
+  community.crypto.x509_certificate_info:
+    content: "{{ guacamole_deploy_java_ca_certificate }}"
+    valid_at:
+      now: "+0s"
+  delegate_to: localhost
+  become: false
+  register: guacamole_deploy_java_ca_info
+
+- name: Require the exact reviewed Guacamole CA fingerprint
+  ansible.builtin.assert:
+    that:
+      - guacamole_deploy_java_ca_certificate | regex_findall('-----BEGIN CERTIFICATE-----') | length == 1
+      - guacamole_deploy_java_ca_certificate | regex_findall('-----END CERTIFICATE-----') | length == 1
+      - guacamole_deploy_java_ca_info.fingerprints.sha256 == guacamole_deploy_java_ca_sha256
+      - "'CA:TRUE' in guacamole_deploy_java_ca_info.basic_constraints"
+      - >-
+        guacamole_deploy_java_ca_info.key_usage is none
+        or 'Certificate Sign' in guacamole_deploy_java_ca_info.key_usage
+      - not guacamole_deploy_java_ca_info.expired
+      - guacamole_deploy_java_ca_info.valid_at.now
+    fail_msg: Guacamole Java trust requires the exact unexpired reviewed CA certificate.
+    quiet: true

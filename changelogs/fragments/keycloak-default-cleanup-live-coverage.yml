@@ -1,0 +1,15 @@
+---
+minor_changes:
+  - >-
+    keycloak_cac - exercise default-role cleanup through the real role in each
+    Keycloak profile using an isolated disposable realm, independent API
+    readback, check-mode, refusal, idempotence and preserved-role checks.
+bugfixes:
+  - keycloak_cac - bind the independent default-role cleanup JUnit report to the selected tested source commit.
+  - >-
+    collection validation - preserve explicitly selected SSH-fixture collection
+    paths when Ansible defaults were initialized in a different test context.
+  - >-
+    keycloak_cac - write the independent cleanup JUnit report on the controller
+    that owns its artifact directory, including when the tested service runs
+    on a remote Molecule host.

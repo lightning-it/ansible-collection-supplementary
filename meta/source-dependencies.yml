@@ -135,7 +135,7 @@ collections:
     requirement: "10.1.1"
     source: "galaxy.yml"
   - name: "community.crypto"
-    requirement: ">=3.2.2,<4.0.0"
+    requirement: "3.5.0"
     source: "galaxy.yml"
   - name: "community.general"
     requirement: ">=11.4.9,<12.0.0"

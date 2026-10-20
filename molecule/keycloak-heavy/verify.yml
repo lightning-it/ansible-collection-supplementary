@@ -18,6 +18,15 @@
     keycloak_heavy_junit_dir: "{{ lookup('env', 'KEYCLOAK_JUNIT_DIR') | default('artifacts/junit', true) }}"
     keycloak_heavy_ldap_ca: /srv/keycloak-heavy/ldap/tls/ca.crt
   tasks:
+    - name: Verify optional default-role cleanup against an isolated real realm
+      ansible.builtin.import_tasks: ../shared/keycloak/default-role-cleanup.yml
+      vars:
+        keycloak_cleanup_probe_url: http://127.0.0.1:28080
+        keycloak_cleanup_probe_password: "{{ keycloak_heavy_admin_password }}"
+        keycloak_cleanup_probe_scenario: keycloak-heavy
+        keycloak_cleanup_probe_junit_dir: >-
+          {{ keycloak_heavy_junit_dir }}
+
     - name: Verify Keycloak management health
       ansible.builtin.uri:
         url: "http://127.0.0.1:29000/health/{{ item }}"

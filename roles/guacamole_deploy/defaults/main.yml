@@ -18,6 +18,14 @@ guacamole_deploy_network_ipv4: ""
 # preserving only explicitly declared direct destinations such as loopback.
 guacamole_deploy_proxy_url: ""
 guacamole_deploy_no_proxy: []
+# Optional public CA, pinned by its DER SHA-256 fingerprint. The init container
+# extends the image's default Java truststore; TLS/hostname checks stay enabled.
+guacamole_deploy_java_ca_certificate: ""
+guacamole_deploy_java_ca_sha256: ""
+guacamole_deploy_guacd_ca_certificate: ""
+guacamole_deploy_guacd_ca_sha256: ""
+guacamole_deploy_guacd_stock_ca_bundle: /etc/ssl/certs/ca-certificates.crt
+guacamole_deploy_host_aliases: []
 guacamole_deploy_base_dir: "/srv/guacamole"
 guacamole_deploy_db_name: "guacamole"
 guacamole_deploy_db_user: "guacamole"
@@ -33,6 +41,8 @@ guacamole_deploy_oidc_redirect_uri: ""
 # "email". Preserve that upstream identity mapping unless explicitly migrated.
 guacamole_deploy_oidc_username_claim_type: "email"
 guacamole_deploy_oidc_groups_claim_type: "groups"
+# Preserve the upstream request unless the consumer explicitly restricts claims.
+guacamole_deploy_oidc_scope: "openid email profile"
 guacamole_deploy_oidc_group_connections: []
 guacamole_deploy_api_session_timeout_minutes: 60
 guacamole_deploy_health_url: "http://{{ guacamole_deploy_host_ip }}:{{ guacamole_deploy_port }}/guacamole/"
