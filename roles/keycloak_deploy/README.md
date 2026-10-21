@@ -119,7 +119,9 @@ All three runtimes are rendered as Kubernetes YAML and owned exclusively by
 `lit.foundational.podman_systemd` through `.kube` units. The caller supplies
 Podman, a genuinely non-root account and home, automatic user-systemd startup,
 writable persistent directories, TLS material and privileged-port permission.
-This path does not prepare the operating system.
+This path does not prepare the operating system. On SELinux-enforcing hosts,
+prepared bind paths must have `container_file_t` labels: existing bind mounts
+are not relabeled by [Podman kube play](https://docs.podman.io/en/stable/markdown/podman-kube-play.1.html).
 
 Credentials come from encrypted caller inputs and appear only in owner-readable
 runtime manifests rendered with `no_log` and disabled diffs. PostgreSQL credentials

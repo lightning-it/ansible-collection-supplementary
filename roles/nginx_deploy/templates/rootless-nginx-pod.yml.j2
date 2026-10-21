@@ -25,14 +25,11 @@ spec:
       hostPath:
         path: {{ nginx_deploy_host_conf_file | to_json }}
         type: File
-      selinuxRelabel: true
     - name: certificate
       hostPath:
         path: {{ nginx_deploy_rootless_tls_cert | to_json }}
         type: File
-      selinuxRelabel: true
     - name: private-key
       hostPath:
         path: {{ nginx_deploy_rootless_tls_key | to_json }}
         type: File
-      selinuxRelabel: true
