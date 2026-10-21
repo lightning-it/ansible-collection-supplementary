@@ -22,7 +22,11 @@
       - keycloak_deploy_rootless_home is match('^/')
       - keycloak_deploy_host_data_dir is match('^/')
       - keycloak_deploy_postgres_data_dir is match('^/')
+      - keycloak_deploy_rootless_network is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+      - keycloak_deploy_run_user_uid | int > 0
       - keycloak_deploy_port | int == 8080
+      - keycloak_deploy_management_port | int > 0
+      - keycloak_deploy_management_port | int <= 65535
     quiet: true
   no_log: true
   tags: always
@@ -57,7 +61,26 @@
   loop_control:
     label: "{{ item.item }}"
 
-- name: Deploy rootless services as the application account
+- name: Require a genuinely unprivileged runtime account
+  ansible.builtin.assert:
+    that: keycloak_deploy_rootless_uid | int > 0
+    quiet: true
+
+- name: Locate incompatible legacy rootless container units
+  ansible.builtin.stat:
+    path: "{{ keycloak_deploy_rootless_quadlet_dir }}/{{ item }}.container"
+  loop: [keycloak, postgres]
+  register: keycloak_deploy_rootless_legacy
+
+- name: Require an exclusive kube lifecycle owner
+  ansible.builtin.assert:
+    that: not item.stat.exists
+    fail_msg: Existing experimental container units require a separately planned transition before kube deployment.
+  loop: "{{ keycloak_deploy_rootless_legacy.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Deploy rootless services through the shared kube lifecycle
   become: true
   become_user: "{{ keycloak_deploy_rootless_user }}"
   environment:
@@ -71,75 +94,34 @@
       ansible.builtin.command:
         argv: [systemctl, --user, show-environment]
       changed_when: false
+      no_log: true
 
     - name: Create private Quadlet configuration directory
       ansible.builtin.file:
         path: "{{ keycloak_deploy_rootless_quadlet_dir }}"
         state: directory
-        mode: '0700'
+        mode: '0755'
 
-    - name: Render runtime credential files
+    - name: Render the private network definition
       ansible.builtin.template:
-        src: "{{ item }}-environment.j2"
-        dest: "{{ keycloak_deploy_config_dir }}/{{ item }}.env"
+        src: rootless-keycloak-private.network.j2
+        dest: "{{ keycloak_deploy_rootless_quadlet_dir }}/{{ keycloak_deploy_rootless_network }}.network"
         mode: '0600'
-      loop: [rootless-postgres, rootless-keycloak]
-      register: keycloak_deploy_rootless_credentials
-      no_log: true
-
-    - name: Render private network and service Quadlets
-      ansible.builtin.template:
-        src: "{{ item }}.j2"
-        dest: "{{ keycloak_deploy_rootless_quadlet_dir }}/{{ item | regex_replace('^rootless-', '') }}"
-        mode: '0600'
-      loop: [rootless-keycloak-private.network, rootless-postgres.container, rootless-keycloak.container]
-      register: keycloak_deploy_rootless_units
-
-    - name: Start or reconcile PostgreSQL
-      ansible.builtin.systemd_service:
-        scope: user
-        name: postgres.service
-        daemon_reload: "{{ keycloak_deploy_rootless_units.changed }}"
-        state: >-
-          {{ 'restarted'
-             if (keycloak_deploy_rootless_credentials.changed or keycloak_deploy_rootless_units.changed)
-             else 'started' }}
-
-    - name: Wait for PostgreSQL readiness inside its container
-      ansible.builtin.command:
-        argv:
-          - podman
-          - exec
-          - postgres
-          - pg_isready
-          - -U
-          - "{{ keycloak_deploy_db_user }}"
-          - -d
-          - "{{ keycloak_deploy_db_name }}"
-      register: keycloak_deploy_rootless_pg_ready
-      until: keycloak_deploy_rootless_pg_ready.rc == 0
-      retries: 30
-      delay: 2
-      changed_when: false
       when: not ansible_check_mode
 
-    - name: Start or reconcile Keycloak
-      ansible.builtin.systemd_service:
-        scope: user
-        name: keycloak.service
-        state: >-
-          {{ 'restarted'
-             if (keycloak_deploy_rootless_credentials.changed or keycloak_deploy_rootless_units.changed)
-             else 'started' }}
+    - name: Render private PostgreSQL and Keycloak Kubernetes manifests
+      ansible.builtin.template:
+        src: "rootless-{{ item }}-pod.yml.j2"
+        dest: "{{ keycloak_deploy_config_dir }}/{{ item }}-rootless-pod.yml"
+        mode: '0600'
+      loop: [postgres, keycloak]
+      no_log: true
+      diff: false
 
-    - name: Wait for rootless Keycloak readiness on the host-only management endpoint
-      ansible.builtin.uri:
-        url: http://127.0.0.1:9000/health/ready
-        status_code: 200
-      register: keycloak_deploy_rootless_ready
-      until: keycloak_deploy_rootless_ready.status | default(0) == 200
-      retries: 60
-      delay: 5
-      when:
-        - not ansible_check_mode
-        - keycloak_deploy_rootless_publish_management | bool
+    - name: Reconcile the managed PostgreSQL kube runtime
+      ansible.builtin.include_tasks: rootless-postgres.yml
+      when: not ansible_check_mode
+
+    - name: Reconcile the Keycloak kube runtime
+      ansible.builtin.include_tasks: rootless-keycloak.yml
+      when: not ansible_check_mode

@@ -1,0 +1,131 @@
+---
+- name: Allocate a private candidate directory
+  ansible.builtin.tempfile:
+    state: directory
+    path: "{{ nginx_deploy_host_conf_file | dirname }}"
+    prefix: .nginx-candidate-
+  register: nginx_deploy_rootless_candidate
+  changed_when: false
+
+- name: Stage validate and apply the reverse proxy candidate
+  block:
+    - name: Render the candidate reverse proxy configuration
+      ansible.builtin.template:
+        src: rootless-nginx.conf.j2
+        dest: "{{ nginx_deploy_rootless_candidate.path }}/nginx.conf"
+        mode: '0600'
+      changed_when: false
+
+    - name: Render the candidate Kubernetes manifest
+      ansible.builtin.template:
+        src: rootless-nginx-pod.yml.j2
+        dest: "{{ nginx_deploy_rootless_candidate.path }}/nginx-pod.yml"
+        mode: '0600'
+      changed_when: false
+
+    - name: Validate the candidate on the actual private network without publishing ports
+      ansible.builtin.command:
+        argv:
+          - podman
+          - run
+          - --rm
+          - --network
+          - "{{ nginx_deploy_rootless_network }}"
+          - -v
+          - "{{ nginx_deploy_rootless_candidate.path }}/nginx.conf:/etc/nginx/nginx.conf:ro,z"
+          - -v
+          - "{{ nginx_deploy_rootless_tls_cert }}:/etc/nginx/tls/server.crt:ro,z"
+          - -v
+          - "{{ nginx_deploy_rootless_tls_key }}:/etc/nginx/tls/server.key:ro,z"
+          - "{{ nginx_deploy_image }}"
+          - nginx
+          - -t
+      changed_when: false
+
+    - name: Fingerprint the configuration manifest and TLS contents
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: true
+        checksum_algorithm: sha256
+      loop:
+        - "{{ nginx_deploy_rootless_candidate.path }}/nginx.conf"
+        - "{{ nginx_deploy_rootless_candidate.path }}/nginx-pod.yml"
+        - "{{ nginx_deploy_rootless_tls_cert }}"
+        - "{{ nginx_deploy_rootless_tls_key }}"
+      register: nginx_deploy_rootless_inputs
+      no_log: true
+
+    - name: Bind the desired runtime to the complete input identity
+      ansible.builtin.set_fact:
+        nginx_deploy_rootless_desired_identity: >-
+          {{ nginx_deploy_rootless_inputs.results | map(attribute='stat.checksum')
+             | join(':') | hash('sha256') }}
+      no_log: true
+
+    - name: Locate the last successful application identity
+      ansible.builtin.stat:
+        path: "{{ nginx_deploy_host_conf_file | dirname }}/.nginx-last-applied"
+      register: nginx_deploy_rootless_state
+
+    - name: Read the last successful application identity
+      ansible.builtin.slurp:
+        src: "{{ nginx_deploy_host_conf_file | dirname }}/.nginx-last-applied"
+      register: nginx_deploy_rootless_applied
+      when: nginx_deploy_rootless_state.stat.exists
+      no_log: true
+
+    - name: Install the validated reverse proxy configuration
+      ansible.builtin.copy:
+        src: "{{ nginx_deploy_rootless_candidate.path }}/nginx.conf"
+        dest: "{{ nginx_deploy_host_conf_file }}"
+        remote_src: true
+        mode: '0640'
+
+    - name: Install the validated Kubernetes manifest
+      ansible.builtin.copy:
+        src: "{{ nginx_deploy_rootless_candidate.path }}/nginx-pod.yml"
+        dest: "{{ nginx_deploy_host_conf_file | dirname }}/nginx-rootless-pod.yml"
+        remote_src: true
+        mode: '0600'
+
+    - name: Reconcile Nginx exclusively through shared User Quadlets
+      ansible.builtin.include_role:
+        name: lit.foundational.podman_systemd
+      vars:
+        podman_systemd_action: >-
+          {{ 'started'
+              if ((nginx_deploy_rootless_applied.content | default('') | b64decode | trim)
+                  == nginx_deploy_rootless_desired_identity)
+              else 'restarted' }}
+        podman_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name }}"
+        podman_systemd_description: Rootless Nginx TLS edge
+        podman_systemd_manifest_path: "{{ nginx_deploy_host_conf_file | dirname }}/nginx-rootless-pod.yml"
+        podman_systemd_scope: user
+        podman_systemd_quadlet_dir: "{{ nginx_deploy_rootless_home }}/.config/containers/systemd"
+        podman_systemd_install_wanted_by: default.target
+        podman_systemd_enabled: true
+        podman_systemd_after: "{{ nginx_deploy_rootless_after }}"
+        podman_systemd_wants: "{{ nginx_deploy_rootless_after }}"
+        podman_systemd_networks:
+          - "{{ nginx_deploy_rootless_network }}.network:ip={{ nginx_deploy_rootless_ip }}"
+
+    - name: Wait for the TLS edge listener
+      ansible.builtin.wait_for:
+        host: "{{ '127.0.0.1' if nginx_deploy_host_ip == '0.0.0.0' else nginx_deploy_host_ip }}"
+        port: "{{ nginx_deploy_tls_host_port }}"
+        timeout: 60
+      changed_when: false
+
+    - name: Record only the successfully reconciled input identity
+      ansible.builtin.copy:
+        content: "{{ nginx_deploy_rootless_desired_identity }}\n"
+        dest: "{{ nginx_deploy_host_conf_file | dirname }}/.nginx-last-applied"
+        mode: '0600'
+      no_log: true
+      diff: false
+  always:
+    - name: Remove the private candidate directory
+      ansible.builtin.file:
+        path: "{{ nginx_deploy_rootless_candidate.path }}"
+        state: absent
+      changed_when: false

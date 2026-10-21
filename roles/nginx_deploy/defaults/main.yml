@@ -106,3 +106,6 @@ nginx_deploy_rootless_ip: 10.89.50.30
 nginx_deploy_rootless_upstream: http://10.89.50.10:8080
 nginx_deploy_rootless_tls_cert: ""
 nginx_deploy_rootless_tls_key: ""
+nginx_deploy_rootless_after:
+  - network-online.target
+  - keycloak-pod.service

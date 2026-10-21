@@ -18,7 +18,22 @@
     key: "{{ nginx_deploy_rootless_user }}"
   tags: always
 
-- name: Deploy Nginx under the rootless service account
+- name: Require an unprivileged Nginx runtime account
+  ansible.builtin.assert:
+    that: ansible_facts.getent_passwd[nginx_deploy_rootless_user][1] | int > 0
+    quiet: true
+
+- name: Locate an incompatible legacy Nginx container unit
+  ansible.builtin.stat:
+    path: "{{ nginx_deploy_rootless_home }}/.config/containers/systemd/nginx.container"
+  register: nginx_deploy_rootless_legacy
+
+- name: Require exclusive kube ownership of Nginx
+  ansible.builtin.assert:
+    that: not nginx_deploy_rootless_legacy.stat.exists
+    fail_msg: Existing experimental container units require a separately planned transition before kube deployment.
+
+- name: Deploy Nginx through the shared User Quadlet lifecycle
   become: true
   become_user: "{{ nginx_deploy_rootless_user }}"
   environment:
@@ -28,48 +43,20 @@
     - not nginx_deploy_skip_runtime | bool
     - not nginx_deploy_skip_deploy | bool
   block:
-    - name: Render the TLS reverse proxy configuration
+    - name: Predict reverse proxy configuration changes
       ansible.builtin.template:
         src: rootless-nginx.conf.j2
         dest: "{{ nginx_deploy_host_conf_file }}"
         mode: '0640'
-      register: nginx_deploy_rootless_config
+      when: ansible_check_mode
 
-    - name: Render the Nginx User Quadlet
+    - name: Predict Kubernetes manifest changes
       ansible.builtin.template:
-        src: rootless-nginx.container.j2
-        dest: "{{ nginx_deploy_rootless_home }}/.config/containers/systemd/nginx.container"
+        src: rootless-nginx-pod.yml.j2
+        dest: "{{ nginx_deploy_host_conf_file | dirname }}/nginx-rootless-pod.yml"
         mode: '0600'
-      register: nginx_deploy_rootless_unit
+      when: ansible_check_mode
 
-    - name: Validate candidate Nginx configuration
-      ansible.builtin.command:
-        argv:
-          - podman
-          - run
-          - --rm
-          - --network
-          - none
-          - -v
-          - "{{ nginx_deploy_host_conf_file }}:/etc/nginx/nginx.conf:ro,Z"
-          - -v
-          - "{{ nginx_deploy_rootless_tls_cert }}:/etc/nginx/tls/server.crt:ro,Z"
-          - -v
-          - "{{ nginx_deploy_rootless_tls_key }}:/etc/nginx/tls/server.key:ro,Z"
-          - "{{ nginx_deploy_image }}"
-          - nginx
-          - -t
-      changed_when: false
-      when:
-        - not ansible_check_mode
-        - nginx_deploy_rootless_config.changed or nginx_deploy_rootless_unit.changed
-
-    - name: Start or reconcile rootless Nginx
-      ansible.builtin.systemd_service:
-        scope: user
-        name: nginx.service
-        daemon_reload: "{{ nginx_deploy_rootless_unit.changed }}"
-        state: >-
-          {{ 'restarted'
-             if (nginx_deploy_rootless_config.changed or nginx_deploy_rootless_unit.changed)
-             else 'started' }}
+    - name: Validate and reconcile the actual reverse proxy runtime
+      ansible.builtin.include_tasks: rootless-reconcile.yml
+      when: not ansible_check_mode

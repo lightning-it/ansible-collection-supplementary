@@ -115,25 +115,35 @@ avoids `keycloak.service` collisions. Missing systemd fails prechecks.
 ### Rootless user scope (experimental)
 
 Set `keycloak_deploy_systemd_scope: user` explicitly to use native User Quadlets.
-The caller supplies Podman, the non-root application account and its home,
-user-systemd startup without login, writable persistent directories, and any
-privileged-port allowance. This mode does not install packages or prepare the OS.
-It is a separate experimental path; existing system-scope platform and test
-claims do not establish rootless production support.
+All three runtimes are rendered as Kubernetes YAML and owned exclusively by
+`lit.foundational.podman_systemd` through `.kube` units. The caller supplies
+Podman, a genuinely non-root account and home, automatic user-systemd startup,
+writable persistent directories, TLS material and privileged-port permission.
+This path does not prepare the operating system.
 
-Runtime credentials are supplied by the caller from encrypted inventory and
-rendered as owner-only environment files required by Podman. They are not
-controller-generated secrets and must not be logged or committed. Existing
-PostgreSQL data must retain its matching database credentials. No database
-migration, downgrade, or backup/restore is implied by a deployment rerun.
+Credentials come from encrypted caller inputs and appear only in owner-readable
+runtime manifests rendered with `no_log` and disabled diffs. PostgreSQL credentials
+must continue to match an existing database. No database migration or downgrade
+is implied. Old experimental `.container` units are rejected rather than silently
+creating a second lifecycle owner.
 
-One application stack per account is currently supported: unit/container names
-are `keycloak`, `postgres`, and `nginx`, with the `keycloak-private.network`
-Quadlet. The runtime network name and private addresses are configurable.
-Keycloak/PostgreSQL have no public listener; optional management is loopback-only.
-NGINX terminates TLS and replaces forwarded headers. The configured trusted
-proxy address must match NGINX's private address. TLS files and trust are
-caller-owned. Rootless mode currently supports the xforwarded header contract.
+The private network name and addresses are configurable. PostgreSQL and the
+Keycloak application endpoint have no host publication; optional management uses
+the configured host port on loopback, with container port 9000. Keycloak maps the
+host account to its configured image UID through Podman's keep-id annotation.
+Only xforwarded proxy headers are currently supported.
+
+Nginx candidates are validated on the actual private network before installation.
+The last successfully applied configuration, manifest and TLS checksums decide
+whether the shared lifecycle must recreate the runtime. Failed validation retains
+the prior installed configuration; failed reconciliation retains pending state.
+Same-path TLS renewal is detected by content and recreates the bind mounts.
+`nginx_deploy_rootless_after` defines user-unit boot ordering for the edge.
+Check mode predicts manifests/configuration but does not reconcile services.
+
+Existing system-scope platform/profile claims do not establish rootless production
+support. Rootless remains experimental; the caller owns PKI, trust and backup/
+restore planning. Container names follow Podman's kube pod/container naming.
 
 ## Dependencies
 
