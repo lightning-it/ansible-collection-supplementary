@@ -1,0 +1,75 @@
+---
+- name: Validate rootless Nginx configuration
+  ansible.builtin.assert:
+    that:
+      - nginx_deploy_rootless_user != 'root'
+      - nginx_deploy_server_name is match('^[A-Za-z0-9.-]+$')
+      - nginx_deploy_rootless_upstream is match('^http://[A-Za-z0-9.:-]+$')
+      - nginx_deploy_manage_systemd | bool
+      - nginx_deploy_systemd_enabled | bool
+      - nginx_deploy_rootless_tls_cert is match('^/')
+      - nginx_deploy_rootless_tls_key is match('^/')
+    quiet: true
+  tags: always
+
+- name: Resolve prepared Nginx service account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ nginx_deploy_rootless_user }}"
+  tags: always
+
+- name: Deploy Nginx under the rootless service account
+  become: true
+  become_user: "{{ nginx_deploy_rootless_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts.getent_passwd[nginx_deploy_rootless_user][1] }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts.getent_passwd[nginx_deploy_rootless_user][1] }}/bus"
+  when:
+    - not nginx_deploy_skip_runtime | bool
+    - not nginx_deploy_skip_deploy | bool
+  block:
+    - name: Render the TLS reverse proxy configuration
+      ansible.builtin.template:
+        src: rootless-nginx.conf.j2
+        dest: "{{ nginx_deploy_host_conf_file }}"
+        mode: '0640'
+      register: nginx_deploy_rootless_config
+
+    - name: Render the Nginx User Quadlet
+      ansible.builtin.template:
+        src: rootless-nginx.container.j2
+        dest: "{{ nginx_deploy_rootless_home }}/.config/containers/systemd/nginx.container"
+        mode: '0600'
+      register: nginx_deploy_rootless_unit
+
+    - name: Validate candidate Nginx configuration
+      ansible.builtin.command:
+        argv:
+          - podman
+          - run
+          - --rm
+          - --network
+          - none
+          - -v
+          - "{{ nginx_deploy_host_conf_file }}:/etc/nginx/nginx.conf:ro,Z"
+          - -v
+          - "{{ nginx_deploy_rootless_tls_cert }}:/etc/nginx/tls/server.crt:ro,Z"
+          - -v
+          - "{{ nginx_deploy_rootless_tls_key }}:/etc/nginx/tls/server.key:ro,Z"
+          - "{{ nginx_deploy_image }}"
+          - nginx
+          - -t
+      changed_when: false
+      when:
+        - not ansible_check_mode
+        - nginx_deploy_rootless_config.changed or nginx_deploy_rootless_unit.changed
+
+    - name: Start or reconcile rootless Nginx
+      ansible.builtin.systemd_service:
+        scope: user
+        name: nginx.service
+        daemon_reload: "{{ nginx_deploy_rootless_unit.changed }}"
+        state: >-
+          {{ 'restarted'
+             if (nginx_deploy_rootless_config.changed or nginx_deploy_rootless_unit.changed)
+             else 'started' }}

@@ -1,0 +1,145 @@
+---
+- name: Validate rootless Keycloak configuration
+  ansible.builtin.assert:
+    that:
+      - keycloak_deploy_systemd_scope == 'user'
+      - keycloak_deploy_manage_postgres | bool
+      - keycloak_deploy_hostname is match('^https://[A-Za-z0-9.-]+(:[0-9]+)?/?$')
+      - keycloak_deploy_db_name is match('^[A-Za-z0-9_]+$')
+      - keycloak_deploy_db_user is match('^[A-Za-z0-9_]+$')
+      - keycloak_deploy_admin_user is match('^[A-Za-z0-9_.@-]+$')
+      - keycloak_deploy_manage_systemd | bool
+      - keycloak_deploy_systemd_enabled | bool
+      - keycloak_deploy_proxy_headers == 'xforwarded'
+      - keycloak_deploy_proxy_trusted_addresses | length > 0
+      - not keycloak_deploy_generate_secrets | bool
+      - not keycloak_deploy_store_generated_secrets | bool
+      - keycloak_deploy_db_password | length >= 16
+      - keycloak_deploy_admin_password | length >= 16
+      - keycloak_deploy_admin_password is not search('[\r\n]')
+      - keycloak_deploy_db_password is not search('[\r\n]')
+      - keycloak_deploy_rootless_user != 'root'
+      - keycloak_deploy_rootless_home is match('^/')
+      - keycloak_deploy_host_data_dir is match('^/')
+      - keycloak_deploy_postgres_data_dir is match('^/')
+      - keycloak_deploy_port | int == 8080
+    quiet: true
+  no_log: true
+  tags: always
+
+- name: Resolve the prepared rootless account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ keycloak_deploy_rootless_user }}"
+  tags: always
+
+- name: Record rootless runtime directory
+  ansible.builtin.set_fact:
+    keycloak_deploy_rootless_uid: "{{ ansible_facts.getent_passwd[keycloak_deploy_rootless_user][1] }}"
+    keycloak_deploy_rootless_quadlet_dir: "{{ keycloak_deploy_rootless_home }}/.config/containers/systemd"
+  tags: always
+
+- name: Verify prepared persistent directories
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ keycloak_deploy_host_data_dir }}"
+    - "{{ keycloak_deploy_postgres_data_dir }}"
+    - "{{ keycloak_deploy_config_dir }}"
+  register: keycloak_deploy_rootless_paths
+
+- name: Require host preparation before rootless deployment
+  ansible.builtin.assert:
+    that:
+      - item.stat.isdir | default(false)
+    fail_msg: Prepare the service account and persistent paths before deployment.
+  loop: "{{ keycloak_deploy_rootless_paths.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Deploy rootless services as the application account
+  become: true
+  become_user: "{{ keycloak_deploy_rootless_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ keycloak_deploy_rootless_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ keycloak_deploy_rootless_uid }}/bus"
+  when:
+    - not keycloak_deploy_skip_runtime | bool
+    - not keycloak_deploy_skip_deploy | bool
+  block:
+    - name: Require an available rootless user manager
+      ansible.builtin.command:
+        argv: [systemctl, --user, show-environment]
+      changed_when: false
+
+    - name: Create private Quadlet configuration directory
+      ansible.builtin.file:
+        path: "{{ keycloak_deploy_rootless_quadlet_dir }}"
+        state: directory
+        mode: '0700'
+
+    - name: Render runtime credential files
+      ansible.builtin.template:
+        src: "{{ item }}-environment.j2"
+        dest: "{{ keycloak_deploy_config_dir }}/{{ item }}.env"
+        mode: '0600'
+      loop: [rootless-postgres, rootless-keycloak]
+      register: keycloak_deploy_rootless_credentials
+      no_log: true
+
+    - name: Render private network and service Quadlets
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: "{{ keycloak_deploy_rootless_quadlet_dir }}/{{ item | regex_replace('^rootless-', '') }}"
+        mode: '0600'
+      loop: [rootless-keycloak-private.network, rootless-postgres.container, rootless-keycloak.container]
+      register: keycloak_deploy_rootless_units
+
+    - name: Start or reconcile PostgreSQL
+      ansible.builtin.systemd_service:
+        scope: user
+        name: postgres.service
+        daemon_reload: "{{ keycloak_deploy_rootless_units.changed }}"
+        state: >-
+          {{ 'restarted'
+             if (keycloak_deploy_rootless_credentials.changed or keycloak_deploy_rootless_units.changed)
+             else 'started' }}
+
+    - name: Wait for PostgreSQL readiness inside its container
+      ansible.builtin.command:
+        argv:
+          - podman
+          - exec
+          - postgres
+          - pg_isready
+          - -U
+          - "{{ keycloak_deploy_db_user }}"
+          - -d
+          - "{{ keycloak_deploy_db_name }}"
+      register: keycloak_deploy_rootless_pg_ready
+      until: keycloak_deploy_rootless_pg_ready.rc == 0
+      retries: 30
+      delay: 2
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Start or reconcile Keycloak
+      ansible.builtin.systemd_service:
+        scope: user
+        name: keycloak.service
+        state: >-
+          {{ 'restarted'
+             if (keycloak_deploy_rootless_credentials.changed or keycloak_deploy_rootless_units.changed)
+             else 'started' }}
+
+    - name: Wait for rootless Keycloak readiness on the host-only management endpoint
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9000/health/ready
+        status_code: 200
+      register: keycloak_deploy_rootless_ready
+      until: keycloak_deploy_rootless_ready.status | default(0) == 200
+      retries: 60
+      delay: 5
+      when:
+        - not ansible_check_mode
+        - keycloak_deploy_rootless_publish_management | bool

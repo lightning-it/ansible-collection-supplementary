@@ -112,6 +112,29 @@ Both verify the active database endpoint before health acceptance. Quadlet
 takeover disables only the exact legacy unit; its `<pod-name>-pod.service` name
 avoids `keycloak.service` collisions. Missing systemd fails prechecks.
 
+### Rootless user scope (experimental)
+
+Set `keycloak_deploy_systemd_scope: user` explicitly to use native User Quadlets.
+The caller supplies Podman, the non-root application account and its home,
+user-systemd startup without login, writable persistent directories, and any
+privileged-port allowance. This mode does not install packages or prepare the OS.
+It is a separate experimental path; existing system-scope platform and test
+claims do not establish rootless production support.
+
+Runtime credentials are supplied by the caller from encrypted inventory and
+rendered as owner-only environment files required by Podman. They are not
+controller-generated secrets and must not be logged or committed. Existing
+PostgreSQL data must retain its matching database credentials. No database
+migration, downgrade, or backup/restore is implied by a deployment rerun.
+
+One application stack per account is currently supported: unit/container names
+are `keycloak`, `postgres`, and `nginx`, with the `keycloak-private.network`
+Quadlet. The runtime network name and private addresses are configurable.
+Keycloak/PostgreSQL have no public listener; optional management is loopback-only.
+NGINX terminates TLS and replaces forwarded headers. The configured trusted
+proxy address must match NGINX's private address. TLS files and trust are
+caller-owned. Rootless mode currently supports the xforwarded header contract.
+
 ## Dependencies
 
 Runtime composition uses `lit.supplementary.postgres_deploy` when PostgreSQL is

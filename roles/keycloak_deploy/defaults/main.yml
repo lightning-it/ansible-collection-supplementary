@@ -196,3 +196,12 @@ keycloak_deploy_systemd_description: "Keycloak container service"
 keycloak_deploy_systemd_scope: system
 keycloak_deploy_quadlet_dir: /etc/containers/systemd
 keycloak_deploy_systemd_enabled: true
+
+# Experimental rootless native Quadlet deployment. Host preparation is external.
+keycloak_deploy_rootless_user: container
+keycloak_deploy_rootless_home: /home/container
+keycloak_deploy_rootless_network: keycloak-private
+keycloak_deploy_rootless_network_subnet: 10.89.50.0/24
+keycloak_deploy_rootless_keycloak_ip: 10.89.50.10
+keycloak_deploy_rootless_postgres_ip: 10.89.50.20
+keycloak_deploy_rootless_publish_management: true
