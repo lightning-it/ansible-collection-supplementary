@@ -15,7 +15,7 @@ spec:
         runAsUser: {{ keycloak_deploy_run_user_uid | int }}
         runAsGroup: {{ keycloak_deploy_run_user_gid | int }}
         runAsNonRoot: true
-{% if keycloak_deploy_rootless_publish_management %}
+{% if keycloak_deploy_rootless_publish_management | bool %}
       ports:
         - containerPort: 9000
           hostPort: {{ keycloak_deploy_management_port }}

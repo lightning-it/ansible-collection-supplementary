@@ -18,6 +18,7 @@ class RootlessEdgeTemplates(unittest.TestCase):
             autoescape=select_autoescape(default=False, default_for_string=False),
         )
         environment.filters["to_json"] = json.dumps
+        environment.filters["bool"] = lambda value: str(value).lower() in {"true", "yes", "on", "1"}
         return environment.from_string(source).render(**values)
 
     def keycloak(self, enabled, port=19000):
@@ -53,6 +54,8 @@ class RootlessEdgeTemplates(unittest.TestCase):
             manifest["metadata"]["annotations"]["io.podman.annotations.userns"], "keep-id:uid=1000,gid=1000"
         )
         self.assertNotIn("ports", self.keycloak(False)["spec"]["containers"][0])
+        self.assertNotIn("ports", self.keycloak("false")["spec"]["containers"][0])
+        self.assertIn("ports", self.keycloak("true")["spec"]["containers"][0])
         self.assertEqual(self.keycloak(True, 9000)["spec"]["containers"][0]["ports"][0]["hostPort"], 9000)
 
     def test_postgres_has_no_host_listener(self):

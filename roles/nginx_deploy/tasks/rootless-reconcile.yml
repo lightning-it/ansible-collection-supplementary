@@ -74,12 +74,43 @@
       when: nginx_deploy_rootless_state.stat.exists
       no_log: true
 
+    - name: Fingerprint the installed configuration and manifest for drift
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: true
+        checksum_algorithm: sha256
+      loop:
+        - "{{ nginx_deploy_host_conf_file }}"
+        - "{{ nginx_deploy_host_conf_file | dirname }}/nginx-rootless-pod.yml"
+      register: nginx_deploy_rootless_installed
+      no_log: true
+
+    - name: Decide whether the runtime generation needs reconciliation
+      ansible.builtin.set_fact:
+        nginx_deploy_rootless_restart_required: >-
+          {{ (nginx_deploy_rootless_applied.content | default('') | b64decode | trim)
+                != nginx_deploy_rootless_desired_identity
+             or (nginx_deploy_rootless_installed.results[0].stat.checksum | default(''))
+                != nginx_deploy_rootless_inputs.results[0].stat.checksum
+             or (nginx_deploy_rootless_installed.results[1].stat.checksum | default(''))
+                != nginx_deploy_rootless_inputs.results[1].stat.checksum
+             or (nginx_deploy_rootless_installed.results[0].stat.mode | default('')) != '0640'
+             or (nginx_deploy_rootless_installed.results[1].stat.mode | default('')) != '0600' }}
+      no_log: true
+
+    - name: Mark reconciliation pending before installing changed runtime inputs
+      ansible.builtin.file:
+        path: "{{ nginx_deploy_host_conf_file | dirname }}/.nginx-last-applied"
+        state: absent
+      when: nginx_deploy_rootless_restart_required | bool
+
     - name: Install the validated reverse proxy configuration
       ansible.builtin.copy:
         src: "{{ nginx_deploy_rootless_candidate.path }}/nginx.conf"
         dest: "{{ nginx_deploy_host_conf_file }}"
         remote_src: true
         mode: '0640'
+      register: nginx_deploy_rootless_config_copy
 
     - name: Install the validated Kubernetes manifest
       ansible.builtin.copy:
@@ -87,16 +118,31 @@
         dest: "{{ nginx_deploy_host_conf_file | dirname }}/nginx-rootless-pod.yml"
         remote_src: true
         mode: '0600'
+      register: nginx_deploy_rootless_manifest_copy
+
+    - name: Bind installed repairs to the pending runtime generation
+      ansible.builtin.set_fact:
+        nginx_deploy_rootless_restart_required: >-
+          {{ nginx_deploy_rootless_restart_required | bool
+             or nginx_deploy_rootless_config_copy.changed
+             or nginx_deploy_rootless_manifest_copy.changed }}
+
+    - name: Retain pending reconciliation if a copied input requires replacement
+      ansible.builtin.file:
+        path: "{{ nginx_deploy_host_conf_file | dirname }}/.nginx-last-applied"
+        state: absent
+      when: nginx_deploy_rootless_restart_required | bool
 
     - name: Reconcile Nginx exclusively through shared User Quadlets
       ansible.builtin.include_role:
         name: lit.foundational.podman_systemd
       vars:
         podman_systemd_action: >-
-          {{ 'started'
-              if ((nginx_deploy_rootless_applied.content | default('') | b64decode | trim)
-                  == nginx_deploy_rootless_desired_identity)
-              else 'restarted' }}
+          {{ 'restarted'
+              if (nginx_deploy_rootless_restart_required | bool
+                  or nginx_deploy_rootless_config_copy.changed
+                  or nginx_deploy_rootless_manifest_copy.changed)
+              else 'started' }}
         podman_systemd_unit_name: "{{ nginx_deploy_systemd_unit_name }}"
         podman_systemd_description: Rootless Nginx TLS edge
         podman_systemd_manifest_path: "{{ nginx_deploy_host_conf_file | dirname }}/nginx-rootless-pod.yml"

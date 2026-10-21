@@ -19,6 +19,15 @@
   when: keycloak_deploy_rootless_postgres_state.stat.exists
   no_log: true
 
+- name: Mark the postgres generation pending before runtime replacement
+  ansible.builtin.file:
+    path: "{{ keycloak_deploy_config_dir }}/.postgres-last-applied"
+    state: absent
+  when: >-
+    (keycloak_deploy_rootless_postgres_applied.content | default('') | b64decode | trim)
+    != keycloak_deploy_rootless_postgres_manifest.stat.checksum
+  no_log: true
+
 - name: Reconcile postgres exclusively through shared User Quadlets
   ansible.builtin.include_role:
     name: lit.foundational.podman_systemd
