@@ -109,14 +109,27 @@
         mode: '0600'
       when: not ansible_check_mode
 
-    - name: Render private PostgreSQL and Keycloak Kubernetes manifests
-      ansible.builtin.template:
-        src: "rootless-{{ item }}-pod.yml.j2"
-        dest: "{{ keycloak_deploy_config_dir }}/{{ item }}-rootless-pod.yml"
-        mode: '0600'
-      loop: [postgres, keycloak]
-      no_log: true
-      diff: false
+    - name: Render manifests and retain pending work after any managed-file repair
+      block:
+        - name: Render private PostgreSQL and Keycloak Kubernetes manifests
+          ansible.builtin.template:
+            src: "rootless-{{ item }}-pod.yml.j2"
+            dest: "{{ keycloak_deploy_config_dir }}/{{ item }}-rootless-pod.yml"
+            mode: '0600'
+          loop: [postgres, keycloak]
+          register: keycloak_deploy_rootless_rendered_manifests
+          no_log: true
+          diff: false
+      always:
+        - name: Invalidate applied identities for repaired Kubernetes manifests
+          ansible.builtin.file:
+            path: "{{ keycloak_deploy_config_dir }}/.{{ item.item }}-last-applied"
+            state: absent
+          loop: >-
+            {{ keycloak_deploy_rootless_rendered_manifests.results | default([])
+               | selectattr('changed', 'defined') | selectattr('changed') | list }}
+          no_log: true
+          when: not ansible_check_mode
 
     - name: Reconcile the managed PostgreSQL kube runtime
       ansible.builtin.include_tasks: rootless-postgres.yml
