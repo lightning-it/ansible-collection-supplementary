@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 from ansible.plugins.filter.core import regex_replace
-from jinja2 import Environment, StrictUndefined
+from jinja2 import Environment, StrictUndefined, select_autoescape
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -13,7 +13,9 @@ ROOT = Path(__file__).resolve().parents[2]
 class RootlessApiComposition(unittest.TestCase):
     def test_dependent_roles_inherit_scope_aware_api_and_explicit_override(self):
         defaults = yaml.safe_load((ROOT / "roles/keycloak_deploy/defaults/main.yml").read_text())
-        environment = Environment(undefined=StrictUndefined, autoescape=False)
+        environment = Environment(
+            undefined=StrictUndefined, autoescape=select_autoescape(default=False, default_for_string=False)
+        )
         environment.filters["regex_replace"] = regex_replace
         for scope, override, expected in (
             ("user", "", "https://sso.example.invalid:9443"),
