@@ -84,6 +84,12 @@ class RootlessEdgeTemplates(unittest.TestCase):
             nginx_deploy_rootless_upstream="http://keycloak:8080",
             nginx_deploy_tls_host_port=443,
         )
+        boundary = yaml.safe_load((ROOT / "roles/nginx_config/defaults/main.yml").read_text())[
+            "nginx_config_proxy_required_directives"
+        ]
+        for directive in boundary:
+            self.assertIn(directive + ";", rendered)
+        self.assertNotIn("$host;", rendered)
         self.assertIn("proxy_set_header X-Forwarded-For $remote_addr;", rendered)
         self.assertNotIn("$proxy_add_x_forwarded_for", rendered)
         self.assertIn('proxy_set_header Forwarded "";', rendered)
