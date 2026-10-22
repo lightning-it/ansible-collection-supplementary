@@ -215,3 +215,5 @@ change. A coordinated network migration is outside this experimental path.
 The experimental user-scope path requires a canonical IPv4 network with distinct usable static member addresses and rejects nonempty `keycloak_deploy_env_extra`; additional environment settings are not silently ignored.
 
 User scope supports the standard `start` command, no extra startup arguments and the root context path. Non-default startup, database vendor/port, container mount paths, host networking or native migration settings are rejected before managed writes. Its derived API URL uses the configured HTTPS hostname; an explicit API URL still takes precedence. System-scope URL derivation is unchanged.
+
+User scope requires the PostgreSQL service name derived from its pod (`<postgres-pod>-pod`). Unsupported `keycloak_deploy_postgres_systemd_unit_name` overrides are rejected before managed writes, preserving the shared lifecycle owner and Keycloak dependencies. Renaming an existing stateful service requires a separate planned transition.

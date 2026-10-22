@@ -41,6 +41,7 @@ class RootlessApiComposition(unittest.TestCase):
         rootless = yaml.safe_load((ROOT / "roles/keycloak_deploy/tasks/rootless.yml").read_text())
         initial = rootless[0]["ansible.builtin.assert"]["that"]
         for guard in (
+            "keycloak_deploy_postgres_systemd_unit_name == keycloak_deploy_postgres_pod_name ~ '-pod'",
             "keycloak_deploy_start_command == 'start'",
             "keycloak_deploy_extra_start_args | length == 0",
             "keycloak_deploy_http_relative_path == ''",
