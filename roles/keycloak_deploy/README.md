@@ -207,3 +207,7 @@ Lightning IT
 Run the three scenarios documented in
 [`docs/testing/keycloak.md`](../../docs/testing/keycloak.md). No external service
 credential is required; use ephemeral test credentials only.
+
+Existing rootless networks must match the declared subnet exactly. The role
+inspects that network before writing managed files and rejects a live subnet
+change. A coordinated network migration is outside this experimental path.

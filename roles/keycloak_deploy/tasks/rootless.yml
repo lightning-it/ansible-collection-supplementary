@@ -96,6 +96,36 @@
       changed_when: false
       no_log: true
 
+    - name: Determine whether the private rootless network already exists
+      ansible.builtin.command:
+        argv: [podman, network, exists, "{{ keycloak_deploy_rootless_network }}"]
+      register: keycloak_deploy_rootless_network_exists
+      changed_when: false
+      failed_when: keycloak_deploy_rootless_network_exists.rc not in [0, 1]
+      check_mode: false
+
+    - name: Inspect the existing private rootless network
+      ansible.builtin.command:
+        argv: [podman, network, inspect, "{{ keycloak_deploy_rootless_network }}"]
+      register: keycloak_deploy_rootless_existing_network
+      changed_when: false
+      check_mode: false
+      when: keycloak_deploy_rootless_network_exists.rc == 0
+      no_log: true
+
+    - name: Require the existing private subnet to match the declared subnet
+      ansible.builtin.assert:
+        that:
+          - (keycloak_deploy_rootless_existing_network.stdout | from_json) | length == 1
+          - >-
+            ((keycloak_deploy_rootless_existing_network.stdout | from_json)[0].subnets
+             | map(attribute='subnet') | list) == [keycloak_deploy_rootless_network_subnet]
+        fail_msg: >-
+          The existing private Podman network has a different subnet.
+          Plan a coordinated migration before changing the declared network.
+        quiet: true
+      when: keycloak_deploy_rootless_network_exists.rc == 0
+
     - name: Create private Quadlet configuration directory
       ansible.builtin.file:
         path: "{{ keycloak_deploy_rootless_quadlet_dir }}"
