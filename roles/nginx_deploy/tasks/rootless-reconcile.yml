@@ -37,9 +37,14 @@
           - "{{ nginx_deploy_rootless_tls_cert }}:/etc/nginx/tls/server.crt:ro,z"
           - -v
           - "{{ nginx_deploy_rootless_tls_key }}:/etc/nginx/tls/server.key:ro,z"
+          - --entrypoint
+          - /bin/sh
           - "{{ nginx_deploy_image }}"
-          - nginx
-          - -t
+          - -ec
+          - 'nginx -t; exec getent ahostsv4 "$1"'
+          - rootless-upstream-validation
+          - "{{ nginx_deploy_rootless_upstream | urlsplit('hostname') }}"
+      register: nginx_deploy_rootless_resolution
       changed_when: false
 
     - name: Fingerprint the configuration manifest and TLS contents
@@ -58,7 +63,8 @@
     - name: Bind the desired runtime to the complete input identity
       ansible.builtin.set_fact:
         nginx_deploy_rootless_desired_identity: >-
-          {{ nginx_deploy_rootless_inputs.results | map(attribute='stat.checksum')
+          {{ ((nginx_deploy_rootless_inputs.results | map(attribute='stat.checksum') | list)
+                + (nginx_deploy_rootless_resolution.stdout | lit.supplementary.rootless_upstream_addresses))
              | join(':') | hash('sha256') }}
       no_log: true
 

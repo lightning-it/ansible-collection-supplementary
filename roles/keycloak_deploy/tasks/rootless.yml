@@ -3,6 +3,10 @@
   ansible.builtin.assert:
     that:
       - keycloak_deploy_systemd_scope == 'user'
+      - keycloak_deploy_env_extra | length == 0
+      - >-
+        keycloak_deploy_rootless_network_subnet | lit.supplementary.rootless_network_valid(
+          [keycloak_deploy_rootless_keycloak_ip, keycloak_deploy_rootless_postgres_ip])
       - keycloak_deploy_manage_postgres | bool
       - keycloak_deploy_hostname is match('^https://[A-Za-z0-9.-]+(:[0-9]+)?/?$')
       - keycloak_deploy_db_name is match('^[A-Za-z0-9_]+$')

@@ -211,3 +211,5 @@ credential is required; use ephemeral test credentials only.
 Existing rootless networks must match the declared subnet exactly. The role
 inspects that network before writing managed files and rejects a live subnet
 change. A coordinated network migration is outside this experimental path.
+
+The experimental user-scope path requires a canonical IPv4 network with distinct usable static member addresses and rejects nonempty `keycloak_deploy_env_extra`; additional environment settings are not silently ignored.
