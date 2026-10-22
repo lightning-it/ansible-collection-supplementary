@@ -42,6 +42,16 @@ class RootlessEdgeInputs(unittest.TestCase):
         keycloak = (ROOT / "roles/keycloak_deploy/tasks/rootless.yml").read_text()
         self.assertIn("keycloak_deploy_env_extra | length == 0", keycloak.split("- name: Resolve")[0])
         self.assertIn("lit.supplementary.rootless_network_valid", keycloak.split("- name: Resolve")[0])
+        guards = (ROOT / "roles/nginx_deploy/tasks/rootless.yml").read_text().split("- name: Resolve")[0]
+        for setting in (
+            "not nginx_deploy_skip_config | bool",
+            "not nginx_deploy_skip_validate | bool",
+            "nginx_deploy_config_test | bool",
+            "nginx_deploy_manage_default_site | bool",
+            "nginx_deploy_default_server_extra_directives | length == 0",
+            "nginx_deploy_http_extra_directives | length == 0",
+        ):
+            self.assertIn(setting, guards)
         nginx = (ROOT / "roles/nginx_deploy/tasks/rootless-reconcile.yml").read_text()
         self.assertIn("nginx_deploy_rootless_resolution.stdout | lit.supplementary.rootless_upstream_addresses", nginx)
         self.assertLess(nginx.index("getent ahostsv4"), nginx.index("Record only the successfully"))

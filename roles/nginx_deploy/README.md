@@ -103,3 +103,5 @@ MIT
 Lightning IT
 
 User-scope candidate validation requires `/bin/sh` and `getent ahostsv4` in the Nginx image. It resolves the upstream on the actual private network and binds the sorted IPv4 address set to the applied identity, so an unchanged hostname moving to a different address forces reconciliation.
+
+The experimental user-scope edge owns and validates its complete generated configuration. It rejects skipped configuration/validation, disabled configuration tests, disabled default-site management and unsupported extra HTTP/server directives before managed writes. Runtime-only reconciliation of caller-managed proxy rules is not supported by this profile.

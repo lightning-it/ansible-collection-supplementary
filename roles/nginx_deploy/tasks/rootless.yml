@@ -3,6 +3,12 @@
   ansible.builtin.assert:
     that:
       - nginx_deploy_rootless_user != 'root'
+      - not nginx_deploy_skip_config | bool
+      - not nginx_deploy_skip_validate | bool
+      - nginx_deploy_config_test | bool
+      - nginx_deploy_manage_default_site | bool
+      - nginx_deploy_default_server_extra_directives | length == 0
+      - nginx_deploy_http_extra_directives | length == 0
       - nginx_deploy_server_name is match('^[A-Za-z0-9.-]+$')
       - nginx_deploy_rootless_upstream is match('^http://[A-Za-z0-9.:-]+$')
       - nginx_deploy_manage_systemd | bool
