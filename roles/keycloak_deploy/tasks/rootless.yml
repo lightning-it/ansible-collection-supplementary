@@ -4,6 +4,17 @@
     that:
       - keycloak_deploy_systemd_scope == 'user'
       - keycloak_deploy_env_extra | length == 0
+      - keycloak_deploy_start_command == 'start'
+      - keycloak_deploy_extra_start_args | length == 0
+      - keycloak_deploy_http_relative_path == ''
+      - keycloak_deploy_db_vendor == 'postgres'
+      - keycloak_deploy_db_port | int == 5432
+      - keycloak_deploy_postgres_container_port | int == 5432
+      - keycloak_deploy_container_data_dir == '/opt/keycloak/data'
+      - keycloak_deploy_container_postgres_data_dir == '/var/lib/postgresql/data'
+      - not keycloak_deploy_host_network | bool
+      - not keycloak_deploy_postgres_host_network | bool
+      - not keycloak_deploy_native_network_migration | bool
       - >-
         keycloak_deploy_rootless_network_subnet | lit.supplementary.rootless_network_valid(
           [keycloak_deploy_rootless_keycloak_ip, keycloak_deploy_rootless_postgres_ip])

@@ -55,6 +55,8 @@ keycloak_deploy_api_url_effective: >-
   {{
     keycloak_deploy_api_url
       if (keycloak_deploy_api_url | default('', true) | length > 0)
+      else (keycloak_deploy_hostname | regex_replace('/+$', ''))
+        if keycloak_deploy_systemd_scope == 'user'
       else (
         keycloak_deploy_api_scheme ~ '://' ~
         keycloak_deploy_host_ip ~ ':' ~

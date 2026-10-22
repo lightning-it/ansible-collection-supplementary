@@ -213,3 +213,5 @@ inspects that network before writing managed files and rejects a live subnet
 change. A coordinated network migration is outside this experimental path.
 
 The experimental user-scope path requires a canonical IPv4 network with distinct usable static member addresses and rejects nonempty `keycloak_deploy_env_extra`; additional environment settings are not silently ignored.
+
+User scope supports the standard `start` command, no extra startup arguments and the root context path. Non-default startup, database vendor/port, container mount paths, host networking or native migration settings are rejected before managed writes. Its derived API URL uses the configured HTTPS hostname; an explicit API URL still takes precedence. System-scope URL derivation is unchanged.
